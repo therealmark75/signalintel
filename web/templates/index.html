@@ -282,6 +282,7 @@
     <div class="section-header" style="margin-bottom:20px;padding-top:4px;">
         <div class="section-title">Today's Top 10 Signals —</div>
     </div>
+    {% set TIER_SHORT = {'STRONG_BUY':'Very Strong','BUY':'Strong','STRONG_HOLD':'Stable','HOLD':'Neutral','WEAK_HOLD':'Soft','SELL':'Bearish','STRONG_SELL':'Very Bearish'} %}
     <div class="top10-grid">
         <div class="top10-section buy">
             <h3>▲ Top 5 Strong Signals</h3>
@@ -291,7 +292,7 @@
                     <div class="top10-rank">#{{ loop.index }}</div>
                     <div class="top10-ticker">{{ s.ticker }}</div>
                     <div class="top10-info">
-                        <div><span class="rating rating-{{ s.rating }}">{{ s.rating }}</span></div>
+                        <div><span class="rating rating-{{ s.rating }}">{{ TIER_SHORT.get(s.rating, s.rating) }}</span></div>
                         <div class="top10-reason">{{ s.reason or 'Strong momentum' }}</div>
                     </div>
                     <div class="top10-score" style="color:var(--accent2)">{{ "%.1f"|format(s.composite_score) }}</div>
@@ -308,7 +309,7 @@
                     <div class="top10-rank">#{{ loop.index }}</div>
                     <div class="top10-ticker" style="color:var(--danger)">{{ s.ticker }}</div>
                     <div class="top10-info">
-                        <div><span class="rating rating-{{ s.rating }}">{{ s.rating }}</span></div>
+                        <div><span class="rating rating-{{ s.rating }}">{{ TIER_SHORT.get(s.rating, s.rating) }}</span></div>
                         <div class="top10-reason">{{ s.reason or 'Multi-factor SHORT signal' }}</div>
                     </div>
                     <div class="top10-score" style="color:var(--danger)">{{ "%.1f"|format(s.composite_score) }}</div>
@@ -441,6 +442,7 @@ const ago = (ts) => {
 };
 const scoreC = (s) => s>=70?'score-hi':s>=55?'score-mid':s>=45?'score-lo':'score-bad';
 const barC   = (s) => s>=70?'#00ff88':s>=55?'#00d4ff':s>=45?'#ff9500':'#ff3b5c';
+const TIER_SHORT = {STRONG_BUY:'Very Strong',BUY:'Strong',STRONG_HOLD:'Stable',HOLD:'Neutral',WEAK_HOLD:'Soft',SELL:'Bearish',STRONG_SELL:'Very Bearish'};
 
 function scoreBar(val) {
     if(val==null) return '<span style="color:var(--muted2)">-</span>';
@@ -694,7 +696,7 @@ function renderSignalTable(signals, page) {
             : '<span style="color:var(--muted)">-</span>';
         return `<tr>
             <td><span class="ticker-cell" onclick="openTicker('${s.ticker}')">${s.ticker}</span></td>
-            <td><span class="rating rating-${s.rating}">${s.rating}</span></td>
+            <td><span class="rating rating-${s.rating}">${TIER_SHORT[s.rating]||s.rating}</span></td>
             <td>${sectorCell}</td>
             <td>${scoreBar(s.composite_score)}</td>
             <td><span class="${scoreC(s.momentum_score)}" style="font-family:var(--mono);font-size:12px">${fmt(s.momentum_score)}</span></td>
@@ -826,7 +828,7 @@ function renderSectorTable(signals) {
     const rows = signals.map(s => `<tr>
         <td><span class="ticker-cell" onclick="openTicker('${s.ticker}')">${s.ticker}</span></td>
         <td style="color:var(--muted2);font-size:12px">${s.industry||'-'}</td>
-        <td><span class="rating rating-${s.rating}">${s.rating}</span></td>
+        <td><span class="rating rating-${s.rating}">${TIER_SHORT[s.rating]||s.rating}</span></td>
         <td>${scoreBar(s.composite_score)}</td>
         <td><span class="${scoreC(s.momentum_score)}" style="font-family:var(--mono);font-size:12px">${fmt(s.momentum_score)}</span></td>
         <td><span class="${scoreC(s.quality_score)}" style="font-family:var(--mono);font-size:12px">${fmt(s.quality_score)}</span></td>
