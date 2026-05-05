@@ -524,7 +524,7 @@ async function loadPage() {
                     if (ss == null) return '';
                     const modStr = mod != null ? (mod >= 0 ? '+' : '') + fmt(mod, 1) : '';
                     const ssC = ss >= 70 ? 'hi' : ss >= 40 ? 'mid' : 'bad';
-                    return `<div class="score-item" data-tip="Sector relative strength based on 7-day performance of the sector ETF (XLK for Technology, XLF for Financial, etc). Top-performing sectors boost composite score; lagging sectors apply a drag. Weight: ±7.5% max."><div class="score-item-label">Sector <span style="font-size:9px;cursor:help" title="Sector relative strength based on 7-day ETF performance, scaled 0-100. Score 50 = neutral. Modifier applies ±7.5% max adjustment to composite score.">(?)​</span></div><div class="score-item-value ${ssC}">${fmt(ss,0)}${modStr ? ` <span style="font-size:10px;color:${mod>=0?'#00ff88':'#ff3b5c'}">(${modStr})</span>` : ''}</div></div>`;
+                    return `<div class="score-item" data-tip="Sector relative strength based on 7-day performance of the sector ETF (XLK for Technology, XLF for Financial, etc). Top-performing sectors boost composite score; lagging sectors apply a drag. Weight: ±7.5% max."><div class="score-item-label">Sector</div><div class="score-item-value ${ssC}">${fmt(ss,0)}${modStr ? ` <span style="font-size:10px;color:${mod>=0?'#00ff88':'#ff3b5c'}">(${modStr})</span>` : ''}</div></div>`;
                 })()}
             </div>
         </div>
@@ -564,6 +564,10 @@ async function loadPage() {
                 <div class="radar-dim">
                     <div class="radar-dim-name"><div class="radar-dim-dot" style="background:#ff6b35"></div>Value</div>
                     <div class="radar-dim-score hi" id="rd-value">-</div>
+                </div>
+                <div class="radar-dim">
+                    <div class="radar-dim-name"><div class="radar-dim-dot" style="background:#fbbf24"></div>Sector</div>
+                    <div class="radar-dim-score hi" id="rd-sector">-</div>
                 </div>
             </div>
         </div>
@@ -926,8 +930,9 @@ async function loadEventFeed() {
 
 function initRadarChart(s, lr) {
     const legalMap = {NONE:100, MINOR:80, CLASS_ACTION:55, SEC_INVESTIGATION:35, SEC_ENFORCEMENT:15, CRIMINAL:5};
-    const legalScore = legalMap[lr.risk_level] ?? 80;
-    const valueScore = Math.max(0, Math.min(100, 50 + (s.target_upside || 0) * 1.5));
+    const legalScore  = legalMap[lr.risk_level] ?? 80;
+    const valueScore  = Math.max(0, Math.min(100, 50 + (s.target_upside || 0) * 1.5));
+    const sectorScore = s.sector_strength_score != null ? s.sector_strength_score : 50;
     const mom  = s.momentum_score  || 0;
     const qual = s.quality_score   || 0;
     const ins  = s.insider_score   || 0;
@@ -948,6 +953,8 @@ function initRadarChart(s, lr) {
     document.getElementById('rd-legal').style.color     = lr.risk_color || '#94a3b8';
     document.getElementById('rd-value').textContent     = fmtS(Math.round(valueScore * 10) / 10);
     document.getElementById('rd-value').style.color     = scoreColor(valueScore);
+    document.getElementById('rd-sector').textContent    = fmtS(sectorScore);
+    document.getElementById('rd-sector').style.color   = scoreColor(sectorScore);
 
     const centerEl = document.getElementById('radar-center-num');
     centerEl.textContent = s.composite_score ? s.composite_score.toFixed(1) : '-';
@@ -956,7 +963,7 @@ function initRadarChart(s, lr) {
     const ctx = document.getElementById('radar-chart');
     if (!ctx) return;
 
-    const data = [mom, qual, ins, rev, legalScore, valueScore];
+    const data = [mom, qual, ins, rev, legalScore, valueScore, sectorScore];
     const gradient = ctx.getContext('2d');
 
     const fillGrad = gradient.createLinearGradient(0, 0, 0, 280);
@@ -966,14 +973,14 @@ function initRadarChart(s, lr) {
     new Chart(ctx, {
         type: 'radar',
         data: {
-            labels: ['Momentum', 'Quality', 'Insider', 'Reversion', 'Legal', 'Value'],
+            labels: ['Momentum', 'Quality', 'Insider', 'Reversion', 'Legal', 'Value', 'Sector'],
             datasets: [{
                 data,
                 fill: true,
                 backgroundColor: fillGrad,
                 borderColor: 'rgba(0,212,255,0.85)',
                 borderWidth: 2,
-                pointBackgroundColor: ['#00d4ff','#00ff88','#af52de','#facc15','#ff9500','#ff6b35'],
+                pointBackgroundColor: ['#00d4ff','#00ff88','#af52de','#facc15','#ff9500','#ff6b35','#fbbf24'],
                 pointBorderColor: '#080c14',
                 pointBorderWidth: 2,
                 pointRadius: 5,

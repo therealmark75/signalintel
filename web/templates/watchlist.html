@@ -94,6 +94,7 @@
                 <th data-tip="Stock symbol">Ticker</th>
                 <th data-tip="SignalIntel 7-tier signal rating">Rating</th>
                 <th data-tip="Composite score 0–100 combining Momentum, Quality, Insider, Reversion and Legal signals">Score</th>
+                <th data-tip="Sector relative strength score 0-100 based on the ticker's sector ETF 7-day performance.">Sector</th>
                 <th data-tip="Momentum score — measures price trend strength and direction">Mom</th>
                 <th data-tip="Quality score — fundamentals including P/E, EPS growth and return on equity">Qual</th>
                 <th data-tip="Insider score — based on recent insider buying and selling activity">Insider</th>
@@ -118,6 +119,7 @@
                 <td class="score {% if item.composite_score and item.composite_score >= 70 %}hi{% elif item.composite_score and item.composite_score >= 55 %}mid{% elif item.composite_score and item.composite_score >= 45 %}lo{% else %}bad{% endif %}">
                     {{ '%.1f'|format(item.composite_score) if item.composite_score else '-' }}
                 </td>
+                <td class="score" style="{% if item.sector_strength_score is not none and item.sector_strength_score >= 80 %}color:var(--accent){% elif item.sector_strength_score is not none and item.sector_strength_score <= 20 %}color:var(--danger){% endif %}">{{ item.sector_strength_score | round | int if item.sector_strength_score is not none else '-' }}</td>
                 <td class="score">{{ '%.1f'|format(item.momentum_score) if item.momentum_score else '-' }}</td>
                 <td class="score">{{ '%.1f'|format(item.quality_score) if item.quality_score else '-' }}</td>
                 <td class="score">{{ '%.1f'|format(item.insider_score) if item.insider_score else '-' }}</td>

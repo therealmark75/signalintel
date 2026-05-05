@@ -298,12 +298,13 @@ tr:hover td{background:rgba(245,158,11,0.025);cursor:pointer;}
                         <th onclick="sortBy('rel_volume')">Rel Vol<span class="arr" id="arr-rel_volume"></span></th>
                         <th onclick="sortBy('rsi_14')">RSI<span class="arr" id="arr-rsi_14"></span></th>
                         <th onclick="sortBy('composite_score')">Score<span class="arr" id="arr-composite_score"></span></th>
+                        <th onclick="sortBy('sector_strength_score')" title="Sector relative strength score 0-100 based on the ticker's sector ETF 7-day performance.">Sector<span class="arr" id="arr-sector_strength_score"></span></th>
                         <th onclick="sortBy('rating')">Rating<span class="arr" id="arr-rating"></span></th>
                         <th onclick="sortBy('target_upside')" title="% upside/downside to 12-month target">12M Upside<span class="arr" id="arr-target_upside"></span></th>
                     </tr>
                 </thead>
                 <tbody id="results-body">
-                    <tr class="loading-row"><td colspan="11">Loading penny stocks…</td></tr>
+                    <tr class="loading-row"><td colspan="12">Loading penny stocks…</td></tr>
                 </tbody>
             </table>
         </div>
@@ -618,6 +619,7 @@ function renderTable(rows) {
             <td>${fmtRelvol(r.rel_volume)}</td>
             <td>${fmtRsi(r.rsi_14)}</td>
             <td>${scoreBar(r.composite_score)}</td>
+            <td style="font-family:var(--mono);color:${r.sector_strength_score >= 80 ? '#00d4ff' : r.sector_strength_score <= 20 ? '#ff3b5c' : 'inherit'}">${r.sector_strength_score != null ? Math.round(r.sector_strength_score) : '-'}</td>
             <td><span class="rating-pill ${ratingClass(r.rating)}">${(r.rating||'').replace(/_/g,' ')}</span></td>
             <td>${fmtUpside(r.target_upside)}</td>
         </tr>
