@@ -26,7 +26,7 @@ header{position:sticky;top:0;z-index:100;background:rgba(8,12,20,0.95);backdrop-
         <span class="nav-user">{{ user.username if user else '' }}</span>
         <div class="nav-sep"></div>
         <a href="/" class="nav-link{{ ' active' if request.path == '/' else '' }}">Dashboard</a>
-        <a href="/ratings" class="nav-link{{ ' active' if request.path == '/ratings' else '' }}">Rating Tiers</a>
+        <a href="/ratings" class="nav-link{{ ' active' if request.path == '/ratings' else '' }}">Signal Tiers</a>
         <a href="/screener" class="nav-link{{ ' active' if request.path == '/screener' else '' }}">Screener</a>
         <a href="/earnings" class="nav-link{{ ' active' if request.path == '/earnings' else '' }}">Earnings</a>
         <a href="/dividends" class="nav-link{{ ' active' if request.path == '/dividends' else '' }}">Dividends</a>
