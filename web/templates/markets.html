@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>SignalIntel — Markets</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<!-- Lightweight Charts (tabs 1-3 only; crypto uses TradingView) -->
+<script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
 <style>
 :root{--bg:#080c14;--surface:#0d1520;--surface2:#111d2e;--border:#1a2d45;
     --accent:#00d4ff;--accent2:#00ff88;--warning:#ff9500;--danger:#ff3b5c;
@@ -62,9 +64,22 @@ main{padding:20px 24px;max-width:1700px;margin:0 auto;}
 .chart-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;
     overflow:hidden;transition:border-color 0.15s;}
 .chart-card:hover{border-color:rgba(0,212,255,0.3);}
+
+/* ── LC card elements ────────────────────────────────────────────────── */
 .card-label{font-family:var(--mono);font-size:10px;text-transform:uppercase;
-    letter-spacing:1px;color:var(--muted2);padding:10px 12px 4px;
+    letter-spacing:1px;color:var(--muted2);padding:10px 12px 2px;
     white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.card-price-row{display:flex;align-items:baseline;gap:8px;padding:0 12px 6px;}
+.card-price-val{font-family:var(--mono);font-size:14px;font-weight:700;color:var(--text);}
+.card-chg{font-family:var(--mono);font-size:11px;}
+.card-chg.up{color:#00ff88;}
+.card-chg.dn{color:#ff3b5c;}
+.card-chg.neu{color:var(--muted);}
+.card-chart{width:100%;height:160px;position:relative;}
+.card-no-data{height:160px;display:flex;align-items:center;justify-content:center;
+    color:var(--muted);font-family:var(--mono);font-size:10px;}
+
+/* ── TradingView card elements (crypto tab) ──────────────────────────── */
 .tradingview-widget-container{display:block;}
 .tradingview-widget-container__widget{min-height:180px;}
 </style>
@@ -75,7 +90,6 @@ main{padding:20px 24px;max-width:1700px;margin:0 auto;}
 <!-- ── Market Sessions Bar ──────────────────────────────────────────────── -->
 <div class="sessions-bar">
     <div class="sessions-inner" id="sessions-inner">
-        <!-- populated by loadSessions() -->
         <div style="font-family:var(--mono);font-size:10px;color:var(--muted);">Loading sessions…</div>
     </div>
 </div>
@@ -96,7 +110,8 @@ main{padding:20px 24px;max-width:1700px;margin:0 auto;}
 </main>
 
 <script>
-// Symbol lists passed from Flask/Jinja2
+// ── Symbol data from Flask ────────────────────────────────────────────────
+// LC tabs use {label, yf}; TV crypto tab uses {label, symbol}
 const TAB_DATA = {
     indices:    {{ indices    | tojson }},
     sectors:    {{ sectors    | tojson }},
@@ -104,50 +119,134 @@ const TAB_DATA = {
     crypto:     {{ crypto     | tojson }},
 };
 
-// Widget config (applied to every mini chart)
-const WIDGET_CFG = {
-    width:       '100%',
-    height:      200,
-    locale:      'en',
-    dateRange:   '3M',
-    colorTheme:  'dark',
-    isTransparent: true,
-    autosize:    false,
-    largeChartUrl: '',
-    chartOnly:   false,
-    noTimeScale: false,
+// Tabs 1-3 use Lightweight Charts; tab 4 (crypto) uses TradingView
+const LC_TABS = new Set(['indices', 'sectors', 'currencies']);
+
+// ── TradingView config (crypto only) ────────────────────────────────────
+const TV_CFG = {
+    width:'100%', height:200, locale:'en', dateRange:'3M',
+    colorTheme:'dark', isTransparent:true, autosize:false,
+    largeChartUrl:'', chartOnly:false, noTimeScale:false,
 };
 
-// ── Lazy widget init ──────────────────────────────────────────────────────
-function initGrid(tabId) {
+// ── Lightweight Charts helpers ────────────────────────────────────────────
+function fmtPrice(v) {
+    if (v == null) return '—';
+    if (v >= 10000) return v.toLocaleString('en', {maximumFractionDigits: 0});
+    if (v >= 100)   return v.toLocaleString('en', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+    if (v < 1)      return v.toFixed(4);
+    return v.toFixed(2);
+}
+
+async function fetchAndRenderLC(yf, chartDiv, priceRow) {
+    let d;
+    try {
+        const r = await fetch('/api/markets/' + encodeURIComponent(yf));
+        d = await r.json();
+    } catch (_) { d = null; }
+
+    if (!d || !d.data || d.data.length < 2) {
+        chartDiv.innerHTML = '<div class="card-no-data">No data available</div>';
+        return;
+    }
+
+    const isUp  = d.change_pct >= 0;
+    const sign  = isUp ? '+' : '';
+    const cls   = isUp ? 'up' : 'dn';
+    const lc    = isUp ? '#00ff88' : '#ff3b5c';
+    const topC  = isUp ? 'rgba(0,255,136,0.12)' : 'rgba(255,59,92,0.12)';
+
+    priceRow.innerHTML =
+        `<span class="card-price-val">${fmtPrice(d.latest)}</span>` +
+        `<span class="card-chg ${cls}">${sign}${d.change_pct.toFixed(2)}%</span>`;
+
+    const chart = LightweightCharts.createChart(chartDiv, {
+        autoSize:   true,
+        height:     160,
+        layout:     { background:{type:'solid',color:'transparent'}, textColor:'#8aa4bf', fontSize:10 },
+        grid:       { vertLines:{visible:false}, horzLines:{color:'rgba(26,45,69,0.35)'} },
+        rightPriceScale: { visible:false },
+        leftPriceScale:  { visible:false },
+        timeScale:  { visible:false, borderVisible:false },
+        crosshair:  { mode:LightweightCharts.CrosshairMode.Normal,
+                      vertLine:{visible:true,  color:'rgba(0,212,255,0.3)', width:1, style:3},
+                      horzLine:{visible:false} },
+        handleScroll: false,
+        handleScale:  false,
+    });
+
+    const series = chart.addAreaSeries({
+        lineColor:        lc,
+        topColor:         topC,
+        bottomColor:      'transparent',
+        lineWidth:        2,
+        priceLineVisible: false,
+        lastValueVisible: false,
+        crosshairMarkerVisible: true,
+        crosshairMarkerRadius:  4,
+        crosshairMarkerBorderColor: lc,
+        crosshairMarkerBackgroundColor: lc,
+    });
+
+    series.setData(d.data);
+    chart.timeScale().fitContent();
+}
+
+function initLcGrid(tabId) {
+    const grid = document.getElementById('grid-' + tabId);
+    if (!grid || grid.dataset.inited) return;
+    grid.dataset.inited = '1';
+
+    TAB_DATA[tabId].forEach(({label, yf}) => {
+        const card = document.createElement('div');
+        card.className = 'chart-card';
+
+        const lbl = document.createElement('div');
+        lbl.className = 'card-label';
+        lbl.textContent = label;
+
+        const priceRow = document.createElement('div');
+        priceRow.className = 'card-price-row';
+        priceRow.innerHTML = '<span class="card-price-val" style="color:var(--muted)">—</span>';
+
+        const chartDiv = document.createElement('div');
+        chartDiv.className = 'card-chart';
+
+        card.appendChild(lbl);
+        card.appendChild(priceRow);
+        card.appendChild(chartDiv);
+        grid.appendChild(card);
+
+        fetchAndRenderLC(yf, chartDiv, priceRow);
+    });
+}
+
+// ── TradingView grid (crypto tab) ─────────────────────────────────────────
+function initTvGrid(tabId) {
     const grid = document.getElementById('grid-' + tabId);
     if (!grid || grid.dataset.inited) return;
     grid.dataset.inited = '1';
 
     TAB_DATA[tabId].forEach(({label, symbol}) => {
-        // Card wrapper
         const card = document.createElement('div');
         card.className = 'chart-card';
 
-        // Label
         const lbl = document.createElement('div');
         lbl.className = 'card-label';
         lbl.textContent = label;
         card.appendChild(lbl);
 
-        // TradingView widget container
         const tvContainer = document.createElement('div');
         tvContainer.className = 'tradingview-widget-container';
         const tvWidget = document.createElement('div');
         tvWidget.className = 'tradingview-widget-container__widget';
         tvContainer.appendChild(tvWidget);
 
-        // Embed script — TradingView reads textContent as JSON config
         const script = document.createElement('script');
-        script.type = 'text/javascript';
-        script.src = 'https://s3.tradingview.com/external-embedding/embed-widget-mini-symbol-overview.js';
+        script.type  = 'text/javascript';
+        script.src   = 'https://s3.tradingview.com/external-embedding/embed-widget-mini-symbol-overview.js';
         script.async = true;
-        script.text = JSON.stringify({...WIDGET_CFG, symbol});
+        script.text  = JSON.stringify({...TV_CFG, symbol});
         tvContainer.appendChild(script);
 
         card.appendChild(tvContainer);
@@ -156,6 +255,11 @@ function initGrid(tabId) {
 }
 
 // ── Tab switching ─────────────────────────────────────────────────────────
+function initGrid(tabId) {
+    if (LC_TABS.has(tabId)) initLcGrid(tabId);
+    else                     initTvGrid(tabId);
+}
+
 function switchTab(tabId) {
     document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
     document.querySelectorAll('.mkt-tab').forEach(b => b.classList.remove('active'));
@@ -187,7 +291,7 @@ async function loadSessions() {
 }
 
 // ── Boot ─────────────────────────────────────────────────────────────────
-initGrid('indices');   // first tab loads immediately
+initGrid('indices');
 loadSessions();
 setInterval(loadSessions, 60000);
 </script>

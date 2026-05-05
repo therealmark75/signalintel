@@ -632,6 +632,21 @@ def main():
             id="economic_calendar", name="FMP Economic Calendar 06:30",
         )
 
+        # Market history (indices, sectors, currencies) — daily 07:00
+        def job_market_history():
+            try:
+                from scrapers.markets_scraper import scrape_markets
+                n = scrape_markets(DATABASE_PATH)
+                logger.info(f"[JOB] Market history: {n} rows upserted")
+            except Exception as e:
+                logger.error(f"[JOB] Market history error: {e}")
+
+        scheduler.add_job(
+            job_market_history,
+            CronTrigger(hour=7, minute=0, day_of_week="mon-fri"),
+            id="market_history", name="Market History 07:00",
+        )
+
         logger.info("Scheduled jobs:")
         for job in scheduler.get_jobs():
             logger.info(f"  {job.name}")

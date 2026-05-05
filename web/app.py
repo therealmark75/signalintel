@@ -65,6 +65,25 @@ def _init_penny_tables():
     conn.close()
 _init_penny_tables()
 
+
+def _init_market_tables():
+    conn = get_connection(DATABASE_PATH)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS market_history (
+            symbol  TEXT NOT NULL,
+            date    TEXT NOT NULL,
+            open    REAL,
+            high    REAL,
+            low     REAL,
+            close   REAL,
+            volume  REAL,
+            PRIMARY KEY (symbol, date)
+        )
+    """)
+    conn.commit()
+    conn.close()
+_init_market_tables()
+
 from config.settings import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
 
 def _send_telegram(msg):
@@ -793,6 +812,36 @@ def markets_page():
 def api_market_sessions():
     from utils.market_sessions import get_all_sessions
     return jsonify(get_all_sessions())
+
+
+@app.route("/api/markets/<path:symbol>")
+@login_required
+def api_market_symbol(symbol):
+    rows = db_query(
+        "SELECT date, close FROM market_history WHERE symbol = ? ORDER BY date ASC",
+        (symbol,),
+    )
+    if not rows:
+        return jsonify({"symbol": symbol, "data": [], "latest": None,
+                        "prev_close": None, "change_pct": 0}), 200
+
+    data = [{"time": r["date"], "value": r["close"]}
+            for r in rows if r["close"] is not None]
+    if not data:
+        return jsonify({"symbol": symbol, "data": [], "latest": None,
+                        "prev_close": None, "change_pct": 0}), 200
+
+    latest    = data[-1]["value"]
+    prev_close = data[-2]["value"] if len(data) >= 2 else latest
+    change_pct = ((latest - prev_close) / prev_close * 100) if prev_close else 0
+
+    return jsonify({
+        "symbol":     symbol,
+        "data":       data,
+        "latest":     latest,
+        "prev_close": prev_close,
+        "change_pct": round(change_pct, 2),
+    })
 
 
 @app.route("/screener")
