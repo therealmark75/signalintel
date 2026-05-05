@@ -19,14 +19,14 @@ These invariants must hold after every scoring run. Any change to scoring logic 
 
 | Label | Penalty | Effect on Score |
 |---|---|---|
-| None | 2 | +2 pts bonus |
+| None | 0 | no impact |
 | Minor | -5 | -5 pts penalty |
 | Moderate | -15 | -15 pts penalty |
 | High | -25 | -25 pts penalty |
 | Critical | -40 | -40 pts penalty |
 | Extreme | -60 | -60 pts penalty |
 
-**Note:** `None` penalty=2 is a positive bonus, not a penalty. UI must not display it as a negative number.
+**Note:** `None` carries zero score impact. UI must not display a penalty line for None-classified tickers. Display as "None ✓".
 
 ---
 
@@ -125,5 +125,150 @@ Hover `data-tip` or `title` attributes on heading labels are sufficient for tool
 | target_price coverage | 10,000+ | 11,092 | ✅ |
 | legally_clean theme count | 7,000+ | 7,961 | ✅ |
 | Dashboard sort preserves filter | Yes | Fixed (Item 14) | ✅ |
-| Penny screener Top Rated preset | STRONG_BUY/BUY, score≥70 | Fixed (Item 10) | ✅ |
+| Penny screener Top Rated preset | STRONG_BUY/BUY, score≥60 | Fixed (Item 10) | ✅ |
 | Legal None display | "None ✓" no penalty | Fixed (Item 12) | ✅ |
+
+---
+
+# PROCESS INVARIANTS — Rules for Future Development Sessions
+
+These rules govern HOW we build SignalIntel. They apply to every Claude Code session, every feature prompt, and every commit going forward. Derived from real issues encountered during the 2026-05-05 stabilisation session.
+
+---
+
+## P1 — Audit All Surfaces When Adding or Modifying Data
+
+When a new score component, field, rating, or data type is added (or an existing one is modified), it must be reflected on EVERY surface where related data appears. Adding to one surface and forgetting others creates silent inconsistencies that erode product credibility.
+
+Surfaces to check whenever scoring/data changes:
+- `/ticker/<symbol>` — header row, scorecard radar, score breakdown card, fundamentals card, stat cards row
+- `/screener` — column visibility, sort options, filter options
+- `/penny/screener` — column visibility, sort options, filters
+- `/watchlist` — column visibility
+- `/backtest` — relevant rating analysis
+- `/` dashboard — Discovery Themes, ALL SIGNALS table
+- `/api/*` endpoints — data shape returned to frontend
+- Telegram alerts — if the new data should trigger or appear in notifications
+- Database schema — column exists, populated, indexed if used for sorting/filtering
+
+Every feature prompt must end with: *"Audit all relevant surfaces (ticker page, screener, watchlist, dashboard, backtest, API, alerts, DB) for consistency. Report which surfaces were updated and which were checked-but-already-correct."*
+
+---
+
+## P2 — Diagnose Before Fixing
+
+For any bug or unexpected behaviour, the first action is ALWAYS diagnosis, not modification. Diagnose by:
+- Running SQL queries to check data state
+- Curling API endpoints to see actual responses
+- Reading `git log` for recent changes in the affected area
+- Checking Flask logs for errors
+
+Report the diagnosis findings BEFORE applying a fix. Identify the actual root cause, not the surface symptom.
+
+This prevents "fixing" a code path that was never broken whilst missing the actual bug elsewhere.
+
+---
+
+## P3 — Verify in Browser, Not in Code
+
+A fix is not complete until it has been verified in the actual running application. Code review of the change is insufficient. Required verification:
+- Hard refresh the page (Cmd+Shift+R)
+- Click through the user journey that exercises the fix
+- Confirm the data/UI matches expected state
+- For backend changes, curl the relevant endpoint and inspect the response
+
+If a fix is reported as complete, the report must include explicit confirmation of browser/endpoint verification. "Code change applied" is not "fix complete."
+
+---
+
+## P4 — Commits Are Checkpoints, Not Summaries
+
+Commits are made per logical fix or feature, not in batches at the end of a session. The commit message must describe the specific change, not the broader theme. Granular commits enable selective rollback when something regresses.
+
+- **Bad:** `"Stabilisation session complete"`
+- **Good:** `"Fix Item 5: populate Short Interest from FinViz Ownership view"`
+- **Good:** `"Fix Item 14: read rating from data attribute not button text"`
+
+If a session has 13 items, expect ≥13 commits.
+
+---
+
+## P5 — Treat Absence of Data as Neutral, Not Negative
+
+Queries that depend on sparsely-populated tables (`legal_risk`, `insider_trades`, `dividend_history`, `earnings_calendar`, `analyst_recom`) must handle NULL/missing data correctly:
+- Tickers without data should be treated as "not flagged"
+- Use LEFT JOIN, not INNER JOIN
+- Default scoring impact for missing data: 0 (neutral), not a penalty
+
+This prevents systematically excluding tickers from themes and scoring views simply because their underlying data hasn't been gathered yet.
+
+---
+
+## P6 — Numeric Values Stored Numeric, Displayed Formatted
+
+All numeric data (market cap, volume, price, percentages, scores) must be stored in DB as NUMERIC types. Sort operations must use the numeric value. Display formatting (B/M/K suffixes, $ prefixes, comma separators, percentage signs) is applied ONLY at render time, never to the underlying value.
+
+The display string and the sort key must always be separate.
+
+---
+
+## P7 — UI Tooltips on Labels, Not (?) Icons
+
+When a UI element has a hover tooltip on its text label, do NOT add a `(?)` icon next to it. The `(?)` icon is visual clutter that adds no information value. Hover tooltips are sufficient.
+
+**Exception:** when no hover tooltip is present and a tooltip is specifically needed, a `(?)` icon may be used. Once added, the hover behaviour should attach to both the label and the icon, not just the icon.
+
+---
+
+## P8 — Theme Definitions Are Single Source of Truth
+
+Discovery Theme definitions live in `config/themes.py` and are referenced by both the homepage Discovery Themes card and the screener `?theme=<id>` route.
+
+If the homepage count and the screener row count for a theme differ, that is a bug.
+
+Adding a new theme requires updating `config/themes.py` only — the homepage and screener consume the canonical definition.
+
+---
+
+## P9 — Filter and Sort State Preserves Across Actions
+
+In any filterable/sortable table:
+- Clicking a filter must preserve the active sort
+- Clicking a sort header must preserve all active filters
+- State lives in URL query parameters (bookmarkable)
+- Browser back button must work (`history.pushState`)
+
+The `/screener` implementation is the reference. New filterable tables must replicate this pattern.
+
+---
+
+## P10 — Defensive Empty-State Handling
+
+API endpoints and frontend components must NEVER hang on "Loading..." indefinitely. If a query returns empty:
+- The response must include a clear status message (e.g. "Insufficient data — backtest stats accumulating")
+- The frontend must render the message
+- Empty state must be distinguishable from broken state
+
+Loading states should resolve in <5 seconds. Anything longer needs explicit user-facing communication.
+
+---
+
+## P11 — Document Scoring Invariants as You Discover Them
+
+When you discover or codify a "should always be true" rule about SignalIntel's scoring or data, append it to `docs/scoring_invariants.md`. Examples:
+- "Composite score must be in range 0–100"
+- "Sector strength score must be in range 0–100"
+- "Legal classification 'None' must result in 0 score impact"
+- "Sector modifier must never exceed ±7.5 points"
+
+This file becomes the source of truth for the test suite.
+
+---
+
+## P12 — Preserve Raw Values When Applying Modifiers
+
+When a calculated value modifies another (e.g. `sector_modifier` applied to `composite_score`), preserve the original as a separate column (`composite_score_raw`) alongside the modified value. This enables:
+- A/B comparison of modifier effectiveness
+- Backtest validation of whether modifier adds value
+- Rollback if the modifier introduces problems
+- User-facing transparency about what's being adjusted

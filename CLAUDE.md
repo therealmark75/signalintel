@@ -1,5 +1,7 @@
 # SignalIntel — Project Context for Claude Code
 
+> **Before making changes, consult `docs/scoring_invariants.md`** for both data correctness rules (invariants 1–11) and development process rules (P1–P12). These rules apply to every change made in this project.
+
 ## What This Project Is
 SignalIntel is a stock signal intelligence web application. Currently used as a personal backtesting and trading signal tool, with a roadmap to launch as a paid SaaS product for serious traders. The AI assistant working on this project is referred to as **Athena**.
 
