@@ -39,7 +39,7 @@ RISK_COLORS = {
 }
 
 RISK_PENALTIES = {
-    RISK_NONE:               2,
+    RISK_NONE:               0,
     RISK_MINOR:             -5,
     RISK_CLASS_ACTION:     -15,
     RISK_SEC_INVESTIGATION: -25,
