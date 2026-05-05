@@ -544,6 +544,16 @@ def main():
 
         for t in SCREENER_SCRAPE_TIMES:
             h, m = t.split(":")
+            m2 = (int(m) + 33) % 60
+            h2 = int(h) + (1 if int(m) + 33 >= 60 else 0)
+            scheduler.add_job(
+                job_compute_target_prices,
+                CronTrigger(hour=h2, minute=m2, day_of_week="mon-fri"),
+                id=f"targets_{t}", name=f"Target Prices {h2:02d}:{m2:02d}",
+            )
+
+        for t in SCREENER_SCRAPE_TIMES:
+            h, m = t.split(":")
             m2 = (int(m) + 35) % 60
             h2 = int(h) + (1 if int(m) + 35 >= 60 else 0)
             scheduler.add_job(
