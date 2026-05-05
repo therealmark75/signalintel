@@ -193,12 +193,18 @@ tr:hover td{background:rgba(0,212,255,0.03);cursor:pointer;}
 <!-- ── Main table ─────────────────────────────────── -->
 <div class="main">
     <div class="presets">
-        <button class="preset-btn" onclick="applyPreset('strong_buys')">🔥 Strong Buys</button>
-        <button class="preset-btn" onclick="applyPreset('momentum')">📊 Top Momentum</button>
-        <button class="preset-btn" onclick="applyPreset('oversold')">📉 Oversold</button>
-        <button class="preset-btn" onclick="applyPreset('high_short')">🔴 High Short Interest</button>
-        <button class="preset-btn" onclick="window.location='/dividends'">💰 High Yield</button>
-        <button class="preset-btn" onclick="window.location='/earnings'">⚡ Earnings Soon</button>
+        <button class="preset-btn" onclick="applyPreset('strong_buys')"
+            data-tip="Shows only Strong Buy and Buy rated tickers with composite score above 68. Highest conviction signals.">🔥 Strong Buys</button>
+        <button class="preset-btn" onclick="applyPreset('momentum')"
+            data-tip="Tickers with the highest momentum scores. Strong price trends and moving average signals.">📊 Top Momentum</button>
+        <button class="preset-btn" onclick="applyPreset('oversold')"
+            data-tip="Tickers with RSI below 30, indicating potentially oversold conditions that may be due for a reversal.">📉 Oversold</button>
+        <button class="preset-btn" onclick="applyPreset('high_short')"
+            data-tip="Tickers with short interest above 20% of float. High short interest can signal bearish sentiment or potential short squeeze opportunity.">🔴 High Short Interest</button>
+        <button class="preset-btn" onclick="window.location='/dividends'"
+            data-tip="Dividend paying stocks with yield above 4%. Redirects to the Dividend Centre filtered by high yield.">💰 High Yield</button>
+        <button class="preset-btn" onclick="window.location='/earnings'"
+            data-tip="Companies reporting earnings within the next 7 days. Redirects to the Earnings Calendar.">⚡ Earnings Soon</button>
     </div>
     <div class="toolbar">
         <div class="toolbar-left">
@@ -524,7 +530,7 @@ document.querySelectorAll('.mcap-btn').forEach(btn => {
     });
 });
 
-// Column header tooltips (floating div)
+// Column header tooltips (floating div, follows cursor)
 (function() {
     const box = document.getElementById('tip-box');
     document.querySelectorAll('th[data-tip]').forEach(th => {
@@ -534,6 +540,19 @@ document.querySelectorAll('.mcap-btn').forEach(btn => {
             box.style.top  = Math.max(e.clientY - 44, 4) + 'px';
         });
         th.addEventListener('mouseleave', () => { box.style.display = 'none'; });
+    });
+
+    // Preset button tooltips — pinned below the button
+    document.querySelectorAll('.preset-btn[data-tip]').forEach(btn => {
+        btn.addEventListener('mouseenter', () => {
+            box.textContent = btn.dataset.tip;
+            box.style.display = 'block';
+            const r = btn.getBoundingClientRect();
+            const left = Math.min(r.left, window.innerWidth - 246);
+            box.style.left = Math.max(4, left) + 'px';
+            box.style.top  = (r.bottom + 6) + 'px';
+        });
+        btn.addEventListener('mouseleave', () => { box.style.display = 'none'; });
     });
 })();
 
