@@ -78,7 +78,11 @@
 </header>
 <nav>
     <a href="/" class="tab">Signals</a>
+    <a href="/screener" class="tab">Screener</a>
+    <a href="/earnings" class="tab">Earnings</a>
+    <a href="/dividends" class="tab">Dividends</a>
     <a href="/watchlist" class="tab active">My Watchlist</a>
+    <a href="/backtest" class="tab">Backtest</a>
 </nav>
 <main>
     <h1>My Watchlist</h1>
@@ -96,7 +100,7 @@
             <thead><tr>
                 <th>Ticker</th><th>Rating</th><th>Score</th>
                 <th>Mom</th><th>Qual</th><th>Insider</th>
-                <th>Price</th><th>Change</th><th>RSI</th><th>Added</th><th></th>
+                <th>Price</th><th>Target</th><th>Upside</th><th>Change</th><th>RSI</th><th>Added</th><th></th>
             </tr></thead>
             <tbody>
             {% for item in items %}
@@ -114,6 +118,10 @@
                 <td class="score">{{ '%.1f'|format(item.quality_score) if item.quality_score else '-' }}</td>
                 <td class="score">{{ '%.1f'|format(item.insider_score) if item.insider_score else '-' }}</td>
                 <td style="font-family:var(--mono)">${{ '%.2f'|format(item.price) if item.price else '-' }}</td>
+                <td style="font-family:var(--mono)">{{ '$%.2f'|format(item.target_price) if item.target_price else '-' }}</td>
+                <td style="font-family:var(--mono);color:{% if item.target_upside and item.target_upside >= 0 %}var(--accent2){% else %}var(--danger){% endif %}">
+                    {% if item.target_upside %}{{ '%+.1f'|format(item.target_upside) }}%{% else %}-{% endif %}
+                </td>
                 <td style="font-family:var(--mono);color:{% if item.change_pct and item.change_pct >= 0 %}var(--accent2){% else %}var(--danger){% endif %}">
                     {% if item.change_pct %}{{ '%+.2f'|format(item.change_pct) }}%{% else %}-{% endif %}
                 </td>

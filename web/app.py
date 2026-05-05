@@ -366,7 +366,7 @@ def api_search():
     substr = "%" + q + "%"
     rows = db_query("""
         SELECT ss.ticker, ss.company,
-               sig.rating, sig.composite_score
+               sig.rating, sig.composite_score, sig.target_price, sig.target_upside
         FROM (
             SELECT ticker, company
             FROM screener_snapshots
@@ -374,7 +374,8 @@ def api_search():
             GROUP BY ticker
         ) ss
         LEFT JOIN (
-            SELECT ticker, rating, MAX(composite_score) as composite_score
+            SELECT ticker, rating, composite_score, target_price, target_upside,
+                   MAX(scored_at) as max_ts
             FROM signal_scores
             GROUP BY ticker
         ) sig ON ss.ticker = sig.ticker
@@ -796,18 +797,32 @@ def api_ticker(ticker):
     )
     analyst_updated_at = analyst_ts[0]['ts'] if analyst_ts and analyst_ts[0]['ts'] else None
 
+    next_earnings_date = None
+    try:
+        from scrapers.fmp_scraper import _ensure_tables
+        _ensure_tables(DATABASE_PATH)
+        ec = db_query(
+            "SELECT earnings_date FROM earnings_calendar WHERE ticker = ? AND earnings_date >= DATE('now') ORDER BY earnings_date ASC LIMIT 1",
+            (ticker,)
+        )
+        if ec:
+            next_earnings_date = ec[0]['earnings_date']
+    except Exception:
+        pass
+
     return jsonify({
-        "ticker":             ticker,
-        "screener":           sc,
-        "signal":             dict(signal[0]) if signal else {},
-        "insiders":           insiders,
-        "news":               news,
-        "history":            history,
-        "in_watchlist":       in_watchlist,
-        "fair_value":         {"estimated": fair_value, "discount_pct": fv_discount, "label": fv_label} if fair_value else None,
-        "technical":          tech,
-        "legal_risk":         legal,
-        "analyst_updated_at": analyst_updated_at,
+        "ticker":               ticker,
+        "screener":             sc,
+        "signal":               dict(signal[0]) if signal else {},
+        "insiders":             insiders,
+        "news":                 news,
+        "history":              history,
+        "in_watchlist":         in_watchlist,
+        "fair_value":           {"estimated": fair_value, "discount_pct": fv_discount, "label": fv_label} if fair_value else None,
+        "technical":            tech,
+        "legal_risk":           legal,
+        "analyst_updated_at":   analyst_updated_at,
+        "next_earnings_date":   next_earnings_date,
     })
 
 

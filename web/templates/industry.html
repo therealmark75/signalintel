@@ -45,7 +45,12 @@
 <header>
     <a href="/" class="logo">SIGNAL<span>INTEL</span></a>
     {% include '_search.html' %}
-    <a href="javascript:history.back()" class="btn-back">← Back</a>
+    <div style="display:flex;align-items:center;gap:12px;font-family:var(--mono);font-size:11px">
+        <a href="/screener" style="color:var(--muted2);text-decoration:none">Screener</a>
+        <a href="/earnings" style="color:var(--muted2);text-decoration:none">Earnings</a>
+        <a href="/dividends" style="color:var(--muted2);text-decoration:none">Dividends</a>
+        <a href="javascript:history.back()" class="btn-back">← Back</a>
+    </div>
 </header>
 <main>
     <div class="page-title" id="page-title">{{ industry }}</div>
