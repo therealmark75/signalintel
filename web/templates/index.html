@@ -152,6 +152,72 @@
 </head>
 <body>
 {% include '_nav.html' %}
+
+<!-- Scrolling Ticker Tape — sticky immediately below nav -->
+<div id="ticker-bar" style="
+    overflow:hidden;height:32px;background:rgba(0,0,0,0.45);
+    border-bottom:1px solid var(--border);display:flex;align-items:center;
+    position:sticky;top:56px;z-index:99;">
+    <div style="
+        flex-shrink:0;padding:0 14px;font-family:var(--mono);font-size:9px;
+        text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);
+        border-right:1px solid var(--border);height:100%;display:flex;align-items:center;
+        background:var(--bg);z-index:2;white-space:nowrap;">MARKETS</div>
+    <div style="flex:1;overflow:hidden;position:relative;">
+        <div id="ticker-track" style="
+            display:flex;gap:0;white-space:nowrap;
+            animation:ticker-scroll 60s linear infinite;
+            will-change:transform;">
+            <!-- populated by JS -->
+        </div>
+    </div>
+</div>
+<style>
+@keyframes ticker-scroll{
+    0%{transform:translateX(0)}
+    100%{transform:translateX(-50%)}
+}
+#ticker-track:hover{animation-play-state:paused;}
+.tk-item{display:inline-flex;align-items:center;gap:7px;padding:0 18px;
+    font-family:var(--mono);font-size:11px;border-right:1px solid rgba(26,45,69,0.6);
+    height:32px;cursor:pointer;transition:background .15s;}
+.tk-item:hover{background:rgba(0,212,255,0.05);}
+.tk-sym{color:var(--accent);font-weight:700;font-size:11px;}
+.tk-px{color:var(--muted2);}
+.tk-up{color:#00ff88;}
+.tk-dn{color:#ff3b5c;}
+.tk-neu{color:var(--muted);}
+</style>
+<script>
+(async function loadTicker(){
+    const track = document.getElementById('ticker-track');
+    if (!track) return;
+    const data = await fetch('/api/ticker-tape').then(r=>r.json()).catch(()=>[]);
+    if (!data.length) {
+        document.getElementById('ticker-bar').style.display='none';
+        return;
+    }
+    // Double the items so the scroll loops seamlessly
+    const items = [...data, ...data];
+    track.innerHTML = items.map(d => {
+        const chg  = parseFloat(d.change_pct) || 0;
+        const sign = chg >= 0 ? '+' : '';
+        const cls  = chg > 0 ? 'tk-up' : chg < 0 ? 'tk-dn' : 'tk-neu';
+        const px   = parseFloat(d.price);
+        const pxStr = px < 1 ? px.toFixed(4) : px.toFixed(2);
+        return `<span class="tk-item" onclick="window.location='/ticker/${d.ticker}'">
+            <span class="tk-sym">${d.ticker}</span>
+            <span class="tk-px">$${pxStr}</span>
+            <span class="${cls}">${sign}${chg.toFixed(2)}%</span>
+        </span>`;
+    }).join('');
+    // Adjust animation duration to content width for smooth speed
+    const fullWidth = track.scrollWidth / 2;
+    const speed = 120; // px per second
+    track.style.animationDuration = Math.round(fullWidth / speed) + 's';
+})();
+</script>
+
 <nav>
     <button class="tab active" onclick="showPanel('today',this)">Today's Top 10</button>
     <button class="tab" onclick="showPanel('signals',this)">All Signals</button>
@@ -160,11 +226,6 @@
     <button class="tab" onclick="showPanel('news',this)">News</button>
     <button class="tab" onclick="showPanel('system',this)">System</button>
 </nav>
-<div id="event-banner" style="display:none;background:rgba(255,59,92,0.07);border-bottom:1px solid rgba(255,59,92,0.2);padding:8px 24px;font-family:var(--mono);font-size:11px;color:var(--muted2)">
-    <span style="color:var(--danger);font-weight:700;margin-right:10px">⚡ HIGH IMPACT</span>
-    <span id="event-banner-text"></span>
-    <a href="/events" style="color:var(--accent);margin-left:12px;text-decoration:none">View All Events →</a>
-</div>
 <main>
 
 <!-- TODAY'S TOP 10 -->
@@ -384,22 +445,31 @@ function applyTheme(theme) {
 }
 
 async function loadThemeCounts() {
-    try {
-        const data = await fetch('/api/screener?per_page=1&sort=composite_score&dir=desc').then(r=>r.json());
-        // Just show total; individual theme counts would need extra API calls
-        // Use screener API for a few quick counts
-        const [strongBuys, oversold, insiderBuying, undervalued] = await Promise.all([
-            fetch('/api/screener?rating=STRONG_BUY,BUY&score_min=60&per_page=1').then(r=>r.json()).catch(()=>({total:0})),
-            fetch('/api/screener?rsi_max=35&per_page=1').then(r=>r.json()).catch(()=>({total:0})),
-            fetch('/api/screener?per_page=1&sort=composite_score&dir=desc').then(r=>r.json()).catch(()=>({total:0})),
-            fetch('/api/screener?upside_min=15&rating=STRONG_BUY,BUY&per_page=1').then(r=>r.json()).catch(()=>({total:0})),
-        ]);
-        const ec = await fetch('/api/economic-calendar?from=' + new Date().toISOString().slice(0,10)).then(r=>r.json()).catch(()=>[]);
+    // Set all to loading first, then fill on completion
+    const ids = [0,1,2,3,4,5,6];
+    ids.forEach(i => document.getElementById('theme-count-'+i).textContent = 'Loading...');
 
-        document.getElementById('theme-count-0').textContent = `${strongBuys.total?.toLocaleString() || '—'} stocks`;
-        document.getElementById('theme-count-2').textContent = `${oversold.total?.toLocaleString() || '—'} stocks`;
-        document.getElementById('theme-count-6').textContent = `${undervalued.total?.toLocaleString() || '—'} stocks`;
-    } catch(e) {}
+    // 5-second timeout
+    const ctrl = new AbortController();
+    const tid = setTimeout(() => ctrl.abort(), 5000);
+
+    let counts;
+    try {
+        counts = await fetch('/api/theme-counts', {signal: ctrl.signal}).then(r => r.json());
+    } catch(e) {
+        counts = {};
+    } finally {
+        clearTimeout(tid);
+    }
+
+    const fmt = v => (v != null ? Number(v).toLocaleString() : '0') + ' stocks';
+    document.getElementById('theme-count-0').textContent = fmt(counts.strong_buys);
+    document.getElementById('theme-count-1').textContent = fmt(counts.dividends);
+    document.getElementById('theme-count-2').textContent = fmt(counts.oversold);
+    document.getElementById('theme-count-3').textContent = fmt(counts.earnings_week);
+    document.getElementById('theme-count-4').textContent = fmt(counts.legally_clean);
+    document.getElementById('theme-count-5').textContent = fmt(counts.insider_buying);
+    document.getElementById('theme-count-6').textContent = fmt(counts.undervalued);
 }
 
 function filterByRating(rating) {
@@ -795,15 +865,6 @@ loadThemeCounts();
         if(rating) {
             filterByRating(rating);
         }
-        // High-impact event banner
-        fetch('/api/economic-calendar/high-impact-banner').then(r => r.json()).then(events => {
-            if (!events || !events.length) return;
-            const banner = document.getElementById('event-banner');
-            const text = document.getElementById('event-banner-text');
-            const items = events.map(e => `${e.event_name} (${e.event_date})`).join('  ·  ');
-            text.textContent = items;
-            banner.style.display = 'block';
-        }).catch(() => {});
     });
     // Column header tooltips (applied to dynamically rendered tables via event delegation)
     const tipBox = document.createElement('div');

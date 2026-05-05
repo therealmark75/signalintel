@@ -135,11 +135,21 @@ h1{font-family:var(--mono);font-size:14px;text-transform:uppercase;letter-spacin
 <script>
 // TradingView symbol map
 const TV_SYMS = {
-    '^GSPC':'SP:SPX', '^IXIC':'NASDAQ:NDX', '^DJI':'DJ:DJI',
-    '^RUT':'TVC:RUT', '^VIX':'TVC:VIX',
-    'GC=F':'TVC:GOLD', 'CL=F':'TVC:USOIL', 'SI=F':'TVC:SILVER', 'NG=F':'TVC:NATURALGAS',
-    'EURUSD=X':'FX:EURUSD', 'GBPUSD=X':'FX:GBPUSD', 'JPY=X':'FX:USDJPY', 'AUDUSD=X':'FX:AUDUSD',
-    'BTC-USD':'BINANCE:BTCUSDT', 'ETH-USD':'BINANCE:ETHUSDT', 'SOL-USD':'BINANCE:SOLUSDT',
+    // Indices
+    '^GSPC':'CAPITALCOM:US500', '^IXIC':'CAPITALCOM:US100', '^DJI':'CAPITALCOM:US30',
+    '^RUT':'CAPITALCOM:US2000', '^VIX':'CBOE:VIX',
+    '^FTSE':'CAPITALCOM:UK100', '^GDAXI':'CAPITALCOM:DE40', '^N225':'CAPITALCOM:JP225',
+    '^HSI':'CAPITALCOM:HK50', '^KS11':'CAPITALCOM:KR100', '^AXJO':'CAPITALCOM:AU200',
+    // Commodities
+    'GC=F':'CAPITALCOM:GOLD', 'CL=F':'CAPITALCOM:OIL', 'SI=F':'CAPITALCOM:SILVER',
+    'NG=F':'CAPITALCOM:NATURALGAS', 'HG=F':'CAPITALCOM:COPPER',
+    'BZ=F':'CAPITALCOM:OIL_BRENT',
+    // Forex
+    'EURUSD=X':'FX:EURUSD', 'GBPUSD=X':'FX:GBPUSD', 'JPY=X':'FX:USDJPY',
+    'AUDUSD=X':'FX:AUDUSD', 'USDCHF=X':'FX:USDCHF',
+    // Crypto
+    'BTC-USD':'BITSTAMP:BTCUSD', 'ETH-USD':'BITSTAMP:ETHUSD',
+    'SOL-USD':'COINBASE:SOLUSD', 'XRP-USD':'BITSTAMP:XRPUSD',
 };
 
 let _lastTs = 0;
@@ -242,27 +252,53 @@ function openModal(sym, label, price, changePct) {
     const body = document.getElementById('tv-modal-body');
     body.innerHTML = '<div id="tv-chart-modal" style="width:100%;height:100%;"></div>';
 
-    _tvWidget = new TradingView.widget({
-        autosize: true,
-        symbol: tvSym,
-        interval: '60',
-        timezone: 'Etc/UTC',
-        theme: 'dark',
-        style: '1',
-        locale: 'en',
-        toolbar_bg: '#0d1520',
-        enable_publishing: false,
-        hide_top_toolbar: false,
-        save_image: false,
-        container_id: 'tv-chart-modal',
-        backgroundColor: '#080c14',
-        gridColor: 'rgba(26,45,69,0.5)',
-    });
+    // Detect load failure — TV widget fires no error event, so we use a timeout
+    const failTimer = setTimeout(() => {
+        const frame = body.querySelector('iframe');
+        if (!frame || !frame.contentDocument || frame.contentDocument.body.innerHTML === '') {
+            body.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;
+                height:100%;flex-direction:column;gap:12px;color:var(--muted);
+                font-family:var(--mono);font-size:12px;">
+                <span style="font-size:32px;">📊</span>
+                Chart temporarily unavailable for this symbol
+            </div>`;
+        }
+    }, 8000);
+
+    try {
+        _tvWidget = new TradingView.widget({
+            autosize: true,
+            symbol: tvSym,
+            interval: '60',
+            timezone: 'Etc/UTC',
+            theme: 'dark',
+            style: '1',
+            locale: 'en',
+            toolbar_bg: '#0d1520',
+            enable_publishing: false,
+            hide_top_toolbar: false,
+            save_image: false,
+            container_id: 'tv-chart-modal',
+            backgroundColor: '#080c14',
+            gridColor: 'rgba(26,45,69,0.5)',
+            onChartReady: () => clearTimeout(failTimer),
+        });
+    } catch(e) {
+        clearTimeout(failTimer);
+        body.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;
+            height:100%;flex-direction:column;gap:12px;color:var(--muted);
+            font-family:var(--mono);font-size:12px;">
+            <span style="font-size:32px;">📊</span>
+            Chart temporarily unavailable for this symbol
+        </div>`;
+    }
 
     document.getElementById('tv-modal').classList.add('open');
 }
 
+let _failTimer = null;
 function closeModal() {
+    clearTimeout(_failTimer);
     document.getElementById('tv-modal').classList.remove('open');
     document.getElementById('tv-modal-body').innerHTML = '';
     _tvWidget = null;

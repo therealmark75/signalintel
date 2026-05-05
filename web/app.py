@@ -644,18 +644,94 @@ def api_economic_calendar():
 @app.route("/api/economic-calendar/high-impact-banner")
 @login_required
 def api_high_impact_banner():
-    """Return high-impact events within the next 48h for homepage banner."""
+    """Return high-impact US events within next 7 days for events page banner."""
     rows = db_query("""
-        SELECT event_date, event_name, impact, country, currency, estimate, unit
+        SELECT event_date, event_name
         FROM economic_calendar
         WHERE impact = 'High'
           AND event_date >= DATE('now')
-          AND event_date <= DATE('now', '+2 days')
+          AND event_date <= DATE('now', '+7 days')
           AND country = 'US'
         ORDER BY event_date ASC
-        LIMIT 5
+        LIMIT 20
     """)
     return jsonify(rows)
+
+
+@app.route("/api/theme-counts")
+@login_required
+def api_theme_counts():
+    """Return stock counts for all 7 discovery theme cards."""
+    today_sig = """
+        SELECT ticker, rating, composite_score, insider_score
+        FROM signal_scores
+        WHERE DATE(scored_at) = (SELECT DATE(MAX(scored_at)) FROM signal_scores)
+    """
+    latest_ss = """
+        SELECT s.ticker, s.rsi_14, s.high_52w_pct
+        FROM screener_snapshots s
+        INNER JOIN (
+            SELECT ticker, MAX(scraped_at) AS max_ts
+            FROM screener_snapshots
+            WHERE scraped_at >= datetime('now', '-2 days')
+            GROUP BY ticker
+        ) lts ON s.ticker = lts.ticker AND s.scraped_at = lts.max_ts
+    """
+    conn = get_connection(DATABASE_PATH)
+    cur  = conn.cursor()
+
+    def q(sql):
+        cur.execute(sql)
+        return cur.fetchone()[0] or 0
+
+    strong_buys = q(f"""
+        SELECT COUNT(*) FROM ({today_sig}) sig
+        WHERE sig.rating IN ('STRONG_BUY','BUY') AND sig.composite_score >= 60
+    """)
+    dividends = q("""
+        SELECT COUNT(DISTINCT d.ticker) FROM dividends d
+        JOIN signal_scores sig ON d.ticker = sig.ticker
+        WHERE d.dividend_yield >= 4
+          AND sig.rating IN ('STRONG_BUY','BUY','STRONG_HOLD')
+          AND DATE(sig.scored_at) = (SELECT DATE(MAX(scored_at)) FROM signal_scores)
+    """)
+    oversold = q(f"""
+        SELECT COUNT(*) FROM ({latest_ss}) ss
+        WHERE ss.rsi_14 <= 35
+    """)
+    earnings_week = q("""
+        SELECT COUNT(DISTINCT e.ticker) FROM earnings_calendar e
+        WHERE e.earnings_date BETWEEN DATE('now') AND DATE('now', '+7 days')
+    """)
+    legally_clean = q("""
+        SELECT COUNT(DISTINCT lr.ticker) FROM legal_risk lr
+        JOIN signal_scores sig ON lr.ticker = sig.ticker
+        WHERE lr.risk_label IN ('None','Minor')
+          AND sig.rating IN ('STRONG_BUY','BUY','STRONG_HOLD')
+          AND DATE(sig.scored_at) = (SELECT DATE(MAX(scored_at)) FROM signal_scores)
+    """)
+    insider_buying = q(f"""
+        SELECT COUNT(*) FROM ({today_sig}) sig
+        WHERE sig.insider_score >= 70
+          AND sig.rating IN ('STRONG_BUY','BUY','STRONG_HOLD')
+    """)
+    undervalued = q(f"""
+        SELECT COUNT(*) FROM ({today_sig}) sig
+        JOIN ({latest_ss}) ss ON sig.ticker = ss.ticker
+        WHERE ss.high_52w_pct < -20
+          AND sig.rating IN ('STRONG_BUY','BUY','STRONG_HOLD')
+    """)
+
+    conn.close()
+    return jsonify({
+        "strong_buys":   strong_buys,
+        "dividends":     dividends,
+        "oversold":      oversold,
+        "earnings_week": earnings_week,
+        "legally_clean": legally_clean,
+        "insider_buying":insider_buying,
+        "undervalued":   undervalued,
+    })
 
 
 @app.route("/api/economic-calendar/refresh", methods=["POST"])
@@ -1681,6 +1757,42 @@ def api_penny_hot():
         return jsonify({"no_exchange": True, "movers": top})
 
     return jsonify(result)
+
+
+# ── Ticker tape ───────────────────────────────────────
+
+@app.route("/api/ticker-tape")
+@login_required
+def api_ticker_tape():
+    """Top ~40 movers from today's screener for the scrolling tape."""
+    conn = get_connection(DATABASE_PATH)
+    cur  = conn.cursor()
+    cur.execute("""
+        SELECT ss.ticker, ss.price, ss.change_pct, sig.rating
+        FROM screener_snapshots ss
+        INNER JOIN (
+            SELECT ticker, MAX(scraped_at) AS max_ts
+            FROM screener_snapshots
+            WHERE scraped_at >= datetime('now', '-2 days')
+            GROUP BY ticker
+        ) lts ON ss.ticker = lts.ticker AND ss.scraped_at = lts.max_ts
+        LEFT JOIN (
+            SELECT ticker, rating, MAX(scored_at) AS scored_at
+            FROM signal_scores
+            WHERE DATE(scored_at) = DATE((SELECT MAX(scored_at) FROM signal_scores))
+            GROUP BY ticker
+        ) sig ON ss.ticker = sig.ticker
+        WHERE ss.price IS NOT NULL AND ss.change_pct IS NOT NULL
+          AND ABS(ss.change_pct) > 0
+        ORDER BY ABS(ss.change_pct) DESC
+        LIMIT 40
+    """)
+    rows = cur.fetchall()
+    conn.close()
+    return jsonify([
+        {"ticker": r[0], "price": r[1], "change_pct": r[2], "rating": r[3]}
+        for r in rows
+    ])
 
 
 # ── Static / public pages ─────────────────────────────

@@ -73,6 +73,54 @@ h1{font-family:var(--mono);font-size:14px;text-transform:uppercase;letter-spacin
 </head>
 <body>
 {% include '_nav.html' %}
+
+<!-- High Impact Events Scrolling Banner -->
+<div id="hi-banner" style="display:none;overflow:hidden;height:30px;
+    background:linear-gradient(90deg,rgba(255,59,92,0.12),rgba(245,158,11,0.08));
+    border-bottom:1px solid rgba(255,59,92,0.25);position:relative;">
+    <div style="position:absolute;left:0;top:0;bottom:0;padding:0 14px;
+        background:rgba(255,59,92,0.15);border-right:1px solid rgba(255,59,92,0.3);
+        display:flex;align-items:center;gap:6px;z-index:2;white-space:nowrap;">
+        <span style="color:#ff3b5c;font-size:11px;">⚡</span>
+        <span style="font-family:var(--mono);font-size:9px;font-weight:700;
+            color:#ff3b5c;letter-spacing:1.5px;text-transform:uppercase;">HIGH IMPACT</span>
+    </div>
+    <div style="margin-left:140px;height:100%;overflow:hidden;">
+        <div id="hi-track" style="display:flex;align-items:center;height:100%;
+            white-space:nowrap;will-change:transform;
+            animation:hi-scroll 40s linear infinite;">
+        </div>
+    </div>
+</div>
+<style>
+@keyframes hi-scroll{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
+#hi-track:hover{animation-play-state:paused;}
+.hi-item{display:inline-flex;align-items:center;gap:8px;padding:0 24px;
+    font-family:var(--mono);font-size:11px;color:var(--muted2);
+    border-right:1px solid rgba(255,59,92,0.15);}
+.hi-date{color:#ff9500;font-size:10px;}
+</style>
+<script>
+(async function loadHiBanner(){
+    const data = await fetch('/api/economic-calendar/high-impact-banner')
+        .then(r=>r.json()).catch(()=>[]);
+    if (!data.length) return;
+    const banner = document.getElementById('hi-banner');
+    const track  = document.getElementById('hi-track');
+    const items  = [...data, ...data]; // double for seamless loop
+    track.innerHTML = items.map(e =>
+        `<span class="hi-item">
+            <span>${e.event_name}</span>
+            <span class="hi-date">${e.event_date}</span>
+        </span>`
+    ).join('');
+    // Adjust speed based on content width
+    const tw  = track.scrollWidth / 2;
+    track.style.animationDuration = Math.max(20, Math.round(tw / 80)) + 's';
+    banner.style.display = 'block';
+})();
+</script>
+
 <main>
     <div class="page-header">
         <h1>Economic Events Calendar</h1>
