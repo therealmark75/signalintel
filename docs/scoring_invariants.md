@@ -98,6 +98,23 @@ Rating changes are logged via `detect_rating_changes()` after every scoring run.
 
 All filterable and sortable tables must preserve filter state when sort changes, and preserve sort state when filters change.
 
-State lives in URL query parameters. Any UI action reads current params, modifies the relevant one, and triggers a fetch with combined params. Bookmarkable URLs are required.
+The /screener implementation is the reference: all filter + sort state lives in a `state` object, every action updates `state` then calls `load()` which rebuilds the URL. New filterable tables must replicate this pattern, not invent their own.
+
+For client-side sorted tables (dashboard ALL SIGNALS), reading the active filter button's raw rating value from its `onclick` attribute (not textContent) is the correct pattern.
 
 **Applies to:** Dashboard ALL SIGNALS, /screener, /penny/screener, /watchlist
+
+---
+
+## Final Verification — 2026-05-05
+
+| Check | Expected | Actual | Status |
+|---|---|---|---|
+| legal_risk distribution | Mostly None | 28 None / 3 Minor | ✅ |
+| NONE penalty | 0 | 0 | ✅ |
+| signal_scores count (latest) | 11,000+ | 11,118 | ✅ |
+| target_price coverage | 10,000+ | 11,092 | ✅ |
+| legally_clean theme count | 7,000+ | 7,961 | ✅ |
+| Dashboard sort preserves filter | Yes | Fixed (Item 14) | ✅ |
+| Penny screener Top Rated preset | STRONG_BUY/BUY, score≥70 | Fixed (Item 10) | ✅ |
+| Legal None display | "None ✓" no penalty | Fixed (Item 12) | ✅ |
