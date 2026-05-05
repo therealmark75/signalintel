@@ -10,6 +10,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from config.settings import (DATABASE_PATH, SECTORS, SCREENER_SCRAPE_TIMES, NEWS_SCRAPE_TIMES,
     INSIDER_SCRAPE_TIMES, INSIDER_CLUSTER_BUY_COUNT, INSIDER_CLUSTER_DAYS,
     LOG_DIR, LOG_LEVEL, REQUEST_DELAY_SECONDS)
+from notifications.telegram import send_alert
 from database.db import (get_connection, initialise_schema, insert_screener_rows, generate_top_signals_of_day, prune_old_snapshots,
     insert_insider_trades, insert_insider_signal, insert_signal_scores, detect_rating_changes, update_analyst_recom,
     insert_news_articles, insert_ticker_sentiment, insert_calendar_events,
@@ -111,11 +112,12 @@ def job_generate_signals(sector=None):
         generate_top_signals_of_day(DATABASE_PATH)
         logger.info("Top signals of day generated")
         
-        # Detect and log any rating changes
-        detect_rating_changes(DATABASE_PATH)
+        # Detect and log any rating changes, then fire Telegram alerts
+        changes = detect_rating_changes(DATABASE_PATH)
         from scrapers.screener_scraper import scrape_analyst_recom_priority
         scrape_analyst_recom_priority(DATABASE_PATH)
-        logger.info("Rating changes detected and logged")
+        logger.info(f"Rating changes detected and logged ({len(changes)} changes)")
+        _send_rating_alerts(changes)
         log_run(DATABASE_PATH, "signal_generation", "SUCCESS", len(signals), duration_s=duration)
         logger.info(f"JOB DONE: Signals | {len(signals)} scored | {duration:.1f}s")
         return signals, scan_results
@@ -326,9 +328,10 @@ def job_news_and_calendar(top_n: int = 30):
         generate_top_signals_of_day(DATABASE_PATH)
         logger.info("Top signals of day generated")
         
-        # Detect and log any rating changes
-        detect_rating_changes(DATABASE_PATH)
-        logger.info("Rating changes detected and logged")
+        # Detect and log any rating changes, then fire Telegram alerts
+        changes = detect_rating_changes(DATABASE_PATH)
+        logger.info(f"Rating changes detected and logged ({len(changes)} changes)")
+        _send_rating_alerts(changes)
         log_run(DATABASE_PATH, "signal_generation", "SUCCESS", len(signals), duration_s=duration)
         logger.info(f"JOB DONE: Signals | {len(signals)} scored | {duration:.1f}s")
         return signals, scan_results
@@ -336,6 +339,71 @@ def job_news_and_calendar(top_n: int = 30):
         logger.error(f"Signals FAILED: {e}", exc_info=True)
         log_run(DATABASE_PATH, "signal_generation", "FAILED", error_msg=str(e), duration_s=time.time()-start)
         return [], {}
+
+
+_RATING_ORDER = ["STRONG_BUY", "BUY", "STRONG_HOLD", "HOLD", "WEAK_HOLD", "SELL", "STRONG_SELL"]
+_RATING_EMOJI = {
+    "STRONG_BUY":   "🟢",
+    "BUY":          "🔵",
+    "STRONG_HOLD":  "🟡",
+    "HOLD":         "⚪",
+    "WEAK_HOLD":    "🟠",
+    "SELL":         "🔴",
+    "STRONG_SELL":  "⛔",
+}
+
+
+def _send_rating_alerts(changes: list):
+    """Send Telegram alerts for Strong Buy/Sell upgrades and rating downgrades."""
+    for c in changes:
+        old, new = c["old_rating"], c["new_rating"]
+        ticker = c["ticker"]
+        price  = f"${c['price']:.2f}" if c["price"] else "N/A"
+        score  = c["composite_score"]
+
+        if new == "STRONG_BUY" and old and old != "STRONG_BUY":
+            send_alert(
+                f"🟢 <b>STRONG BUY SIGNAL</b>\n"
+                f"<b>${ticker}</b>  |  Score: {score:.1f}\n"
+                f"Price: {price}  |  was {old.replace('_', ' ')}"
+            )
+        elif new == "STRONG_SELL" and old and old != "STRONG_SELL":
+            send_alert(
+                f"⛔ <b>STRONG SELL SIGNAL</b>\n"
+                f"<b>${ticker}</b>  |  Score: {score:.1f}\n"
+                f"Price: {price}  |  was {old.replace('_', ' ')}"
+            )
+        elif old and new and old in _RATING_ORDER and new in _RATING_ORDER:
+            if _RATING_ORDER.index(new) > _RATING_ORDER.index(old):
+                old_e = _RATING_EMOJI.get(old, "")
+                new_e = _RATING_EMOJI.get(new, "")
+                send_alert(
+                    f"🔻 <b>RATING DOWNGRADE</b>\n"
+                    f"<b>${ticker}</b>  {old_e} {old.replace('_', ' ')} → {new_e} {new.replace('_', ' ')}\n"
+                    f"Price: {price}  |  Score: {score:.1f}"
+                )
+
+
+def job_daily_summary():
+    """Send top-5 signals of the day to Telegram at market close."""
+    from database.db import get_top_signals
+    from datetime import date
+    try:
+        top = get_top_signals(DATABASE_PATH, limit=5)
+        if not top:
+            logger.warning("Daily summary: no signals found")
+            return
+        lines = [f"📊 <b>SIGNALINTEL — DAILY SUMMARY</b>  {date.today()}", ""]
+        for s in top:
+            emoji = _RATING_EMOJI.get(s["rating"], "")
+            lines.append(
+                f"{emoji} <b>${s['ticker']}</b>  {s['rating'].replace('_', ' ')}  "
+                f"Score: {s['composite_score']:.1f}"
+            )
+        send_alert("\n".join(lines))
+        logger.info("Daily summary sent to Telegram")
+    except Exception as e:
+        logger.error(f"Daily summary FAILED: {e}")
 
 
 def main():
@@ -451,22 +519,29 @@ def main():
             id="startup_signals", name="Startup signal generation",
         )
 
+        # Daily Telegram summary at market close (after 16:30 signal run)
+        scheduler.add_job(
+            job_daily_summary,
+            CronTrigger(hour=17, minute=5, day_of_week="mon-fri"),
+            id="daily_summary", name="Daily Telegram Summary 17:05",
+        )
+
+        # Legal risk scraper - SEC EDGAR (daily, pre-market)
+        scheduler.add_job(
+            scrape_priority_tickers,
+            CronTrigger(hour=6, minute=0, day_of_week="mon-fri"),
+            id="legal_risk_scraper",
+            name="SEC EDGAR Legal Risk Scraper",
+            replace_existing=True,
+        )
+
         logger.info("Scheduled jobs:")
         for job in scheduler.get_jobs():
             logger.info(f"  {job.name}")
         logger.info("Scheduler running. Press Ctrl+C to stop.")
 
         try:
-        
-    # Legal risk scraper - SEC EDGAR (daily, pre-market)
-    scheduler.add_job(
-        scrape_priority_tickers,
-        CronTrigger(hour=6, minute=0),
-        id="legal_risk_scraper",
-        name="SEC EDGAR Legal Risk Scraper",
-        replace_existing=True,
-    )
-    scheduler.start()
+            scheduler.start()
         except (KeyboardInterrupt, SystemExit):
             logger.info("Scheduler stopped.")
 

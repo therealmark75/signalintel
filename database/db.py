@@ -802,10 +802,13 @@ def update_analyst_recom(db_path: str, recom_map: dict) -> int:
     conn.close()
     return updated
 
-def detect_rating_changes(db_path: str):
-    """After each signal run, check for new rating changes and log them."""
+def detect_rating_changes(db_path: str) -> list:
+    """After each signal run, check for new rating changes and log them.
+    Returns list of change dicts: ticker, old_rating, new_rating, price, composite_score.
+    """
     conn = get_connection(db_path)
     cur = conn.cursor()
+    changes = []
     try:
         # Get today's signals
         cur.execute("""
@@ -845,9 +848,18 @@ def detect_rating_changes(db_path: str):
                     VALUES (?, ?, ?, ?, ?, ?)
                 """, (ticker, old_rating, new_rating, price, day, sig['composite_score']))
 
+                changes.append({
+                    "ticker": ticker,
+                    "old_rating": old_rating,
+                    "new_rating": new_rating,
+                    "price": price,
+                    "composite_score": sig['composite_score'],
+                })
+
         conn.commit()
     except Exception as e:
         conn.rollback()
         raise e
     finally:
         conn.close()
+    return changes
