@@ -30,7 +30,7 @@
         .tab.active{background:rgba(0,212,255,0.08);border-color:rgba(0,212,255,0.3);color:var(--accent);}
         .user-menu{display:flex;align-items:center;gap:12px;font-size:13px;color:var(--muted);}
         .user-menu a{color:var(--accent);text-decoration:none;font-family:var(--mono);font-size:11px;}
-        main{padding:24px;max-width:1400px;margin:0 auto;}
+        main{padding:24px;max-width:1500px;margin:0 auto;}
         h1{font-family:var(--mono);font-size:14px;text-transform:uppercase;letter-spacing:2px;color:var(--muted);margin-bottom:20px;}
         .add-bar{display:flex;gap:10px;margin-bottom:24px;}
         .add-bar input{flex:1;background:var(--surface);border:1px solid var(--border);border-radius:6px;
@@ -44,10 +44,11 @@
         .btn:hover{opacity:0.85;}
         .btn-danger{background:var(--danger);}
         .table-wrap{background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden;}
-        table{width:100%;border-collapse:collapse;}
+        table{width:100%;border-collapse:collapse;min-width:1100px;}
         th{background:var(--surface2);padding:10px 14px;text-align:left;font-family:var(--mono);
             font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);
-            border-bottom:1px solid var(--border);}
+            border-bottom:1px solid var(--border);cursor:help;white-space:nowrap;}
+        th:hover{color:var(--accent);}
         td{padding:10px 14px;border-bottom:1px solid rgba(26,45,69,0.5);vertical-align:middle;}
         tr:last-child td{border-bottom:none;}
         tr:hover td{background:rgba(0,212,255,0.03);}
@@ -56,15 +57,22 @@
         .rating{display:inline-block;padding:2px 8px;border-radius:3px;font-family:var(--mono);font-size:10px;font-weight:700;}
         .rating-BUY{background:rgba(0,212,255,0.12);color:#00d4ff;border:1px solid rgba(0,212,255,0.25);}
         .rating-STRONG_BUY{background:rgba(0,255,136,0.15);color:#00ff88;border:1px solid rgba(0,255,136,0.3);}
-        .rating-WATCH{background:rgba(255,149,0,0.1);color:#ff9500;border:1px solid rgba(255,149,0,0.2);}
-        .rating-REVERSION{background:rgba(175,82,222,0.12);color:#af52de;border:1px solid rgba(175,82,222,0.25);}
-        .rating-AVOID,.rating-SHORT_WATCH{background:rgba(255,59,92,0.1);color:#ff3b5c;border:1px solid rgba(255,59,92,0.2);}
+        .rating-STRONG_HOLD{background:rgba(250,204,21,0.1);color:#facc15;border:1px solid rgba(250,204,21,0.2);}
+        .rating-HOLD{background:rgba(148,163,184,0.1);color:#94a3b8;border:1px solid rgba(148,163,184,0.2);}
+        .rating-WEAK_HOLD{background:rgba(255,149,0,0.1);color:#ff9500;border:1px solid rgba(255,149,0,0.2);}
+        .rating-SELL{background:rgba(255,59,92,0.1);color:#ff3b5c;border:1px solid rgba(255,59,92,0.2);}
+        .rating-STRONG_SELL{background:rgba(255,59,92,0.18);color:#ff3b5c;border:1px solid rgba(255,59,92,0.35);}
         .empty{text-align:center;padding:60px;color:var(--muted);font-family:var(--mono);font-size:13px;}
         .score{font-family:var(--mono);font-size:13px;}
         .hi{color:var(--accent2)}.mid{color:var(--accent)}.lo{color:var(--warning)}.bad{color:var(--danger)}
         .msg{padding:10px 14px;border-radius:6px;margin-bottom:16px;font-size:13px;}
         .msg-ok{background:rgba(0,255,136,0.1);border:1px solid rgba(0,255,136,0.3);color:var(--accent2);}
         .msg-err{background:rgba(255,59,92,0.1);border:1px solid rgba(255,59,92,0.3);color:var(--danger);}
+        /* Floating tooltip */
+        #tip-box{position:fixed;display:none;background:#0a1628;border:1px solid var(--border);
+            color:var(--text);padding:7px 11px;border-radius:5px;font-family:var(--sans);
+            font-size:11px;line-height:1.45;max-width:230px;z-index:9999;pointer-events:none;
+            word-wrap:break-word;box-shadow:0 4px 16px rgba(0,0,0,0.4);}
     </style>
 </head>
 <body>
@@ -99,9 +107,20 @@
     <div class="table-wrap">
         <table>
             <thead><tr>
-                <th>Ticker</th><th>Rating</th><th>Score</th>
-                <th>Mom</th><th>Qual</th><th>Insider</th>
-                <th>Price</th><th>Target</th><th>Upside</th><th>Change</th><th>RSI</th><th>Added</th><th></th>
+                <th data-tip="Stock symbol">Ticker</th>
+                <th data-tip="SignalIntel 7-tier signal rating">Rating</th>
+                <th data-tip="Composite score 0–100 combining Momentum, Quality, Insider, Reversion and Legal signals">Score</th>
+                <th data-tip="Momentum score — measures price trend strength and direction">Mom</th>
+                <th data-tip="Quality score — fundamentals including P/E, EPS growth and return on equity">Qual</th>
+                <th data-tip="Insider score — based on recent insider buying and selling activity">Insider</th>
+                <th data-tip="Current market price">Price</th>
+                <th data-tip="SignalIntel proprietary target price based on DCF, technical analysis, analyst consensus and legal risk adjustment">Target</th>
+                <th data-tip="Percentage difference between current price and SignalIntel target price. Positive = upside, negative = downside.">Upside</th>
+                <th data-tip="Price change today as a percentage">Change</th>
+                <th data-tip="Relative Strength Index (14-day). Above 70 = overbought, below 30 = oversold">RSI</th>
+                <th data-tip="Date this ticker was added to your watchlist">Added</th>
+                <th data-tip="Price change since this ticker was added to your watchlist">Since Added</th>
+                <th></th>
             </tr></thead>
             <tbody>
             {% for item in items %}
@@ -109,7 +128,7 @@
                 <td><span class="ticker" onclick="openTicker('{{ item.ticker }}')">{{ item.ticker }}</span></td>
                 <td>
                     {% if item.rating %}
-                    <span class="rating rating-{{ item.rating }}">{{ item.rating }}</span>
+                    <span class="rating rating-{{ item.rating }}">{{ item.rating | replace('_', ' ') }}</span>
                     {% else %}<span style="color:var(--muted)">-</span>{% endif %}
                 </td>
                 <td class="score {% if item.composite_score and item.composite_score >= 70 %}hi{% elif item.composite_score and item.composite_score >= 55 %}mid{% elif item.composite_score and item.composite_score >= 45 %}lo{% else %}bad{% endif %}">
@@ -120,14 +139,20 @@
                 <td class="score">{{ '%.1f'|format(item.insider_score) if item.insider_score else '-' }}</td>
                 <td style="font-family:var(--mono)">${{ '%.2f'|format(item.price) if item.price else '-' }}</td>
                 <td style="font-family:var(--mono)">{{ '$%.2f'|format(item.target_price) if item.target_price else '-' }}</td>
-                <td style="font-family:var(--mono);color:{% if item.target_upside and item.target_upside >= 0 %}var(--accent2){% else %}var(--danger){% endif %}">
-                    {% if item.target_upside %}{{ '%+.1f'|format(item.target_upside) }}%{% else %}-{% endif %}
+                <td style="font-family:var(--mono);color:{% if item.target_upside is not none and item.target_upside >= 0 %}var(--accent2){% elif item.target_upside is not none %}var(--danger){% else %}var(--muted){% endif %}">
+                    {% if item.target_upside is not none %}
+                        {% if item.target_upside >= 0 %}{{ '%+.1f'|format(item.target_upside) }}% upside
+                        {% else %}{{ '%.1f'|format(item.target_upside|abs) }}% downside{% endif %}
+                    {% else %}-{% endif %}
                 </td>
                 <td style="font-family:var(--mono);color:{% if item.change_pct and item.change_pct >= 0 %}var(--accent2){% else %}var(--danger){% endif %}">
                     {% if item.change_pct %}{{ '%+.2f'|format(item.change_pct) }}%{% else %}-{% endif %}
                 </td>
                 <td style="font-family:var(--mono)">{{ '%.1f'|format(item.rsi_14) if item.rsi_14 else '-' }}</td>
                 <td style="color:var(--muted);font-size:12px">{{ item.added_at[:10] if item.added_at else '-' }}</td>
+                <td style="font-family:var(--mono);color:{% if item.pct_since_add is not none and item.pct_since_add >= 0 %}var(--accent2){% elif item.pct_since_add is not none %}var(--danger){% else %}var(--muted){% endif %}">
+                    {% if item.pct_since_add is not none %}{{ '%+.1f'|format(item.pct_since_add) }}%{% else %}-{% endif %}
+                </td>
                 <td><button class="btn btn-danger" onclick="removeTicker('{{ item.ticker }}', this)" style="padding:5px 10px;font-size:10px">Remove</button></td>
             </tr>
             {% endfor %}
@@ -144,18 +169,30 @@
     {% endif %}
 </main>
 
-<!-- Ticker modal -->
-<div id="modal-overlay" onclick="closeModal(event)" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);backdrop-filter:blur(4px);z-index:200;align-items:center;justify-content:center;">
-    <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;width:90%;max-width:600px;max-height:85vh;overflow-y:auto;padding:24px;">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
-            <span id="modal-ticker" style="font-family:var(--mono);font-size:24px;font-weight:700;color:var(--accent)"></span>
-            <button onclick="document.getElementById('modal-overlay').style.display='none'" style="background:transparent;border:1px solid var(--border);color:var(--text);padding:4px 10px;border-radius:4px;cursor:pointer;font-size:16px">✕</button>
-        </div>
-        <div id="modal-body"></div>
-    </div>
-</div>
+<!-- Floating tooltip -->
+<div id="tip-box"></div>
 
 <script>
+// Column header tooltips
+(function() {
+    const box = document.getElementById('tip-box');
+    document.querySelectorAll('th[data-tip]').forEach(th => {
+        th.addEventListener('mouseenter', () => {
+            box.textContent = th.dataset.tip;
+            box.style.display = 'block';
+        });
+        th.addEventListener('mousemove', e => {
+            const x = e.clientX + 14;
+            const y = e.clientY - 44;
+            box.style.left = Math.min(x, window.innerWidth - 246) + 'px';
+            box.style.top  = Math.max(y, 4) + 'px';
+        });
+        th.addEventListener('mouseleave', () => {
+            box.style.display = 'none';
+        });
+    });
+})();
+
 async function addTicker() {
     const input  = document.getElementById('add-ticker');
     const ticker = input.value.trim().toUpperCase();
@@ -190,11 +227,6 @@ async function removeTicker(ticker, btn) {
 
 async function openTicker(ticker) {
     window.location.href = `/ticker/${ticker}`;
-}
-
-function closeModal(e) {
-    if (e.target === document.getElementById('modal-overlay'))
-        document.getElementById('modal-overlay').style.display = 'none';
 }
 
 document.getElementById('add-ticker').addEventListener('keypress', e => {

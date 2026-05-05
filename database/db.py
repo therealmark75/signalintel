@@ -623,6 +623,23 @@ def get_watchlist(db_path: str, user_id: int) -> list[dict]:
         ORDER BY ss.composite_score DESC NULLS LAST
     """, (user_id,))
     rows = [dict(r) for r in cur.fetchall()]
+
+    # Compute pct_since_add: price closest to added_at vs current price
+    for row in rows:
+        pct = None
+        current_price = row.get("price")
+        added_at = row.get("added_at")
+        if current_price and added_at:
+            snap = cur.execute("""
+                SELECT price FROM screener_snapshots
+                WHERE ticker = ?
+                ORDER BY ABS(julianday(scraped_at) - julianday(?))
+                LIMIT 1
+            """, (row["ticker"], added_at)).fetchone()
+            if snap and snap[0] and snap[0] > 0:
+                pct = round((current_price - snap[0]) / snap[0] * 100.0, 2)
+        row["pct_since_add"] = pct
+
     conn.close()
     return rows
 
