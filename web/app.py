@@ -521,6 +521,26 @@ def api_earnings_refresh():
         return jsonify({"ok": False, "error": str(e)})
 
 
+@app.route("/ratings")
+@login_required
+def ratings():
+    user = current_user()
+    distribution = db_query("""
+        SELECT rating, COUNT(DISTINCT ticker) as count,
+               ROUND(AVG(composite_score), 1) as avg_score,
+               ROUND(MIN(composite_score), 1) as min_score,
+               ROUND(MAX(composite_score), 1) as max_score
+        FROM signal_scores
+        WHERE DATE(scored_at) = DATE((SELECT MAX(scored_at) FROM signal_scores))
+        GROUP BY rating
+        ORDER BY avg_score DESC
+    """)
+    last_run = db_query("SELECT MAX(scored_at) as ts FROM signal_scores")
+    return render_template("ratings.html", user=user,
+                           distribution=distribution,
+                           last_run=last_run[0]["ts"] if last_run else None)
+
+
 @app.route("/screener")
 @login_required
 def screener():
