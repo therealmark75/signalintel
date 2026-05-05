@@ -71,7 +71,7 @@ tr:hover td{background:rgba(0,212,255,0.03);cursor:pointer;}
 {% include '_nav.html' %}
 <main>
     <h1>EARNINGS CALENDAR</h1>
-    <p class="subtitle">Upcoming earnings announcements with SignalIntel ratings and analyst estimates</p>
+    <p class="subtitle">Upcoming earnings announcements with SignalIntel signal strength and analyst estimates</p>
 
     {% if not has_fmp_key %}
     <div class="no-key-banner">
@@ -117,7 +117,7 @@ tr:hover td{background:rgba(0,212,255,0.03);cursor:pointer;}
                     <th data-tip="Percentage change in EPS forecast vs same quarter last year. Green = growth, red = decline">EPS CHG</th>
                     <th data-tip="Analyst consensus estimate for total revenue this quarter">REV. EST.</th>
                     <th data-tip="Price to Earnings ratio — current share price divided by annual earnings per share">P/E</th>
-                    <th data-tip="SignalIntel signal rating for this stock">RATING</th>
+                    <th data-tip="SignalIntel signal strength for this stock">SIGNAL</th>
                     <th data-tip="SignalIntel composite score 0-100">SCORE</th>
                 </tr>
             </thead>
@@ -133,6 +133,7 @@ const RATING_COLORS = {
     STRONG_BUY:'#00ff88', BUY:'#00d4ff', STRONG_HOLD:'#94a3b8',
     HOLD:'#64748b', WEAK_HOLD:'#ff9500', SELL:'#ff3b5c', STRONG_SELL:'#ff3b5c',
 };
+const TIER_SHORT = {STRONG_BUY:'Very Strong',BUY:'Strong',STRONG_HOLD:'Stable',HOLD:'Neutral',WEAK_HOLD:'Soft',SELL:'Bearish',STRONG_SELL:'Very Bearish'};
 
 let currentView = 'week';
 
@@ -194,7 +195,7 @@ async function loadData() {
             <td class="mono ${epsCls}">${epsPct}</td>
             <td class="mono">${fmtRev(r.revenue_estimate)}</td>
             <td class="mono">${fmt(r.pe_ratio,1)}</td>
-            <td>${r.rating ? `<span class="rating-badge" style="background:${rc}22;color:${rc}">${r.rating.replace(/_/g,' ')}</span>` : '-'}</td>
+            <td>${r.rating ? `<span class="rating-badge" style="background:${rc}22;color:${rc}">${TIER_SHORT[r.rating]||r.rating}</span>` : '-'}</td>
             <td class="mono" style="color:${scoreColor}">${r.composite_score ? Number(r.composite_score).toFixed(1) : '-'}</td>
         </tr>`;
     }).join('');

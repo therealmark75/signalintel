@@ -130,7 +130,7 @@ tr:hover td{background:rgba(0,212,255,0.03);cursor:pointer;}
                     <th data-tip="How often dividends are paid: Monthly, Quarterly or Annually">FREQUENCY</th>
                     <th data-tip="Average annual dividend growth rate over the last 5 years. Positive growth indicates a healthy, growing dividend" onclick="setSort('dividend_growth_5yr')">5Y GROWTH</th>
                     <th data-tip="Consecutive years of dividend growth. 25+ years qualifies as a Dividend Aristocrat" onclick="setSort('consecutive_years')">CONSEC.</th>
-                    <th data-tip="SignalIntel signal rating for this stock">RATING</th>
+                    <th data-tip="SignalIntel signal strength for this stock">SIGNAL</th>
                     <th data-tip="SignalIntel composite score 0-100" onclick="setSort('composite_score')">SCORE</th>
                 </tr>
             </thead>
@@ -146,6 +146,7 @@ const RATING_COLORS = {
     STRONG_BUY:'#00ff88', BUY:'#00d4ff', STRONG_HOLD:'#94a3b8',
     HOLD:'#64748b', WEAK_HOLD:'#ff9500', SELL:'#ff3b5c', STRONG_SELL:'#ff3b5c',
 };
+const TIER_SHORT = {STRONG_BUY:'Very Strong',BUY:'Strong',STRONG_HOLD:'Stable',HOLD:'Neutral',WEAK_HOLD:'Soft',SELL:'Bearish',STRONG_SELL:'Very Bearish'};
 
 let sortCol = 'dividend_yield', sortDir = 'desc', aristocratOnly = false;
 
@@ -209,7 +210,7 @@ async function loadData() {
             <td>${r.frequency ? `<span class="freq-badge">${r.frequency}</span>` : '-'}</td>
             <td class="mono ${growthCls}">${r.dividend_growth_5yr != null ? (r.dividend_growth_5yr >= 0 ? '+' : '') + fmt(r.dividend_growth_5yr, 1) + '%' : '-'}</td>
             <td class="mono" style="color:var(--muted2)">${isAristocrat ? `<span class="aristocrat-badge" title="Dividend Aristocrat">★ ${r.consecutive_years}yr</span>` : (r.consecutive_years || '-')}</td>
-            <td>${r.rating ? `<span class="rating-badge" style="background:${rc}22;color:${rc}">${r.rating.replace(/_/g,' ')}</span>` : '-'}</td>
+            <td>${r.rating ? `<span class="rating-badge" style="background:${rc}22;color:${rc}">${TIER_SHORT[r.rating]||r.rating}</span>` : '-'}</td>
             <td class="mono" style="color:${scoreColor}">${r.composite_score ? Number(r.composite_score).toFixed(1) : '-'}</td>
         </tr>`;
     }).join('');
