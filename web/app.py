@@ -858,6 +858,90 @@ def api_ticker(ticker):
     })
 
 
+@app.route("/api/ticker/<ticker>/events")
+@login_required
+def api_ticker_events(ticker):
+    ticker = ticker.upper()
+    events = []
+
+    # Rating changes (last 15)
+    rc = db_query("""
+        SELECT change_date as date, old_rating, new_rating, price_at_change, composite_score
+        FROM rating_changes WHERE ticker = ?
+        ORDER BY change_date DESC LIMIT 15
+    """, (ticker,))
+    for r in rc:
+        up_tiers = {'STRONG_BUY','BUY','STRONG_HOLD'}
+        down_tiers = {'SELL','STRONG_SELL','WEAK_HOLD'}
+        direction = 'up' if r['new_rating'] in up_tiers else 'down' if r['new_rating'] in down_tiers else 'neutral'
+        events.append({
+            'type': 'rating',
+            'date': r['date'],
+            'title': f"Rating changed: {(r['old_rating'] or '?').replace('_',' ')} → {(r['new_rating'] or '?').replace('_',' ')}",
+            'detail': f"Score {r['composite_score']:.1f} · Price ${r['price_at_change']:.2f}" if r['composite_score'] and r['price_at_change'] else None,
+            'direction': direction,
+            'new_rating': r['new_rating'],
+        })
+
+    # Insider trades (last 10)
+    it = db_query("""
+        SELECT transaction_date as date, insider_name, insider_title, transaction_type, shares, price, value
+        FROM insider_trades WHERE ticker = ?
+        ORDER BY transaction_date DESC LIMIT 10
+    """, (ticker,))
+    for r in it:
+        is_buy = (r['transaction_type'] or '').upper() in ('BUY','P - PURCHASE','PURCHASE')
+        val_str = f"${r['value']:,.0f}" if r['value'] else ''
+        sh_str  = f"{int(r['shares']):,} shares" if r['shares'] else ''
+        events.append({
+            'type': 'insider',
+            'date': r['date'],
+            'title': f"Insider {'Buy' if is_buy else 'Sell'}: {r['insider_name'] or 'Unknown'} ({r['insider_title'] or ''})",
+            'detail': ' · '.join(filter(None, [sh_str, val_str])),
+            'direction': 'up' if is_buy else 'down',
+            'new_rating': None,
+        })
+
+    # Legal risk entry
+    lr = db_query("""
+        SELECT scraped_at as date, risk_level, risk_label, filing_type
+        FROM legal_risk WHERE ticker = ?
+        ORDER BY scraped_at DESC LIMIT 1
+    """, (ticker,))
+    if lr:
+        r = lr[0]
+        direction = 'down' if r['risk_level'] not in ('NONE','MINOR') else 'neutral'
+        events.append({
+            'type': 'legal',
+            'date': (r['date'] or '')[:10],
+            'title': f"Legal risk assessed: {r['risk_label'] or r['risk_level']}",
+            'detail': f"Filing: {r['filing_type']}" if r['filing_type'] else None,
+            'direction': direction,
+            'new_rating': None,
+        })
+
+    # Upcoming earnings
+    ec = db_query("""
+        SELECT earnings_date as date, timing, eps_estimate, eps_last_year
+        FROM earnings_calendar WHERE ticker = ? AND earnings_date >= DATE('now')
+        ORDER BY earnings_date ASC LIMIT 1
+    """, (ticker,))
+    for r in ec:
+        est = f"EPS est. ${r['eps_estimate']:.2f}" if r['eps_estimate'] else None
+        events.append({
+            'type': 'earnings',
+            'date': r['date'],
+            'title': f"Earnings report ({r['timing'] or 'TBD'})",
+            'detail': est,
+            'direction': 'neutral',
+            'new_rating': None,
+        })
+
+    # Sort all events by date desc, take last 10
+    events.sort(key=lambda e: e['date'] or '', reverse=True)
+    return jsonify({'events': events[:10]})
+
+
 @app.route("/api/run_log")
 @login_required
 def api_run_log():

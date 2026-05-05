@@ -166,6 +166,28 @@
     cursor:help;margin-left:3px;vertical-align:middle;}
 .score-q:hover{border-color:var(--accent);color:var(--accent);}
 
+/* Event Feed Timeline */
+.event-feed{margin-bottom:20px;}
+.event-feed-title{font-family:var(--mono);font-size:10px;text-transform:uppercase;
+    letter-spacing:2px;color:var(--muted2);margin-bottom:14px;padding-bottom:10px;
+    border-bottom:1px solid var(--border);}
+.event-item{display:flex;gap:14px;padding:10px 0;border-bottom:1px solid rgba(26,45,69,0.4);}
+.event-item:last-child{border-bottom:none;}
+.event-spine{display:flex;flex-direction:column;align-items:center;width:20px;flex-shrink:0;}
+.event-dot{width:10px;height:10px;border-radius:50%;border:2px solid;flex-shrink:0;margin-top:3px;}
+.event-line{width:2px;flex:1;min-height:12px;background:rgba(26,45,69,0.6);margin-top:4px;}
+.event-item:last-child .event-line{display:none;}
+.event-body{flex:1;}
+.event-title{font-size:13px;color:var(--text);line-height:1.4;}
+.event-detail{font-family:var(--mono);font-size:11px;color:var(--muted2);margin-top:3px;}
+.event-date{font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:2px;}
+.event-tag{display:inline-block;padding:1px 7px;border-radius:3px;font-family:var(--mono);
+    font-size:9px;font-weight:700;text-transform:uppercase;margin-right:6px;vertical-align:middle;}
+.event-tag-rating{background:rgba(0,212,255,0.1);color:#00d4ff;border:1px solid rgba(0,212,255,0.2);}
+.event-tag-insider{background:rgba(175,82,222,0.1);color:#af52de;border:1px solid rgba(175,82,222,0.2);}
+.event-tag-legal{background:rgba(255,149,0,0.1);color:#ff9500;border:1px solid rgba(255,149,0,0.2);}
+.event-tag-earnings{background:rgba(250,204,21,0.1);color:#facc15;border:1px solid rgba(250,204,21,0.2);}
+
 /* Hexagon Scorecard */
 .radar-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;
     padding:20px;margin-bottom:20px;display:flex;align-items:center;gap:32px;flex-wrap:wrap;}
@@ -699,6 +721,16 @@ async function loadPage() {
             </div>
         </div>
 
+        <!-- Event Feed -->
+        <div class="card" style="margin-bottom:16px" id="event-feed-card">
+            <div class="event-feed">
+                <div class="event-feed-title">Recent Events</div>
+                <div id="event-feed-body">
+                    <div style="color:var(--muted);font-family:var(--mono);font-size:12px;padding:12px 0">Loading events…</div>
+                </div>
+            </div>
+        </div>
+
         <!-- Signal history + News -->
         <div class="grid-2">
             <div class="card">
@@ -804,7 +836,45 @@ async function loadPage() {
     }
 
     initRadarChart(s, lr);
+    loadEventFeed();
     setTimeout(() => initTradingViewChart(TICKER, 'D'), 100);
+}
+
+async function loadEventFeed() {
+    try {
+        const res = await fetch(`/api/ticker/${TICKER}/events`);
+        const data = await res.json();
+        const events = data.events || [];
+        const body = document.getElementById('event-feed-body');
+        if (!body) return;
+        if (!events.length) {
+            body.innerHTML = '<div style="color:var(--muted);font-family:var(--mono);font-size:12px;padding:12px 0">No events recorded yet.</div>';
+            return;
+        }
+        const dotColor = (e) => {
+            if (e.direction === 'up')   return '#00ff88';
+            if (e.direction === 'down') return '#ff3b5c';
+            return '#4a6380';
+        };
+        const tagMap = {rating:'event-tag-rating',insider:'event-tag-insider',legal:'event-tag-legal',earnings:'event-tag-earnings'};
+        body.innerHTML = events.map((e, i) => `
+            <div class="event-item">
+                <div class="event-spine">
+                    <div class="event-dot" style="border-color:${dotColor(e)};background:${dotColor(e)}22"></div>
+                    <div class="event-line"></div>
+                </div>
+                <div class="event-body">
+                    <div class="event-title">
+                        <span class="event-tag ${tagMap[e.type]||''}">${e.type}</span>${e.title}
+                    </div>
+                    ${e.detail ? `<div class="event-detail">${e.detail}</div>` : ''}
+                    <div class="event-date">${e.date||''}</div>
+                </div>
+            </div>`).join('');
+    } catch(err) {
+        const body = document.getElementById('event-feed-body');
+        if (body) body.innerHTML = '<div style="color:var(--muted2);font-size:12px">Could not load events.</div>';
+    }
 }
 
 function initRadarChart(s, lr) {
