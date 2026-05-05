@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SignalIntel — Penny Screener</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#080c14;--surface:#0d1520;--surface2:#111d2e;--border:#1a2d45;
+    --accent:#00d4ff;--accent2:#00ff88;--warning:#f59e0b;--danger:#ff3b5c;
+    --text:#f0f6ff;--muted:#8aa4bf;--muted2:#c2d4e8;
+    --penny:#f59e0b;--penny-dim:rgba(245,158,11,0.1);--penny-border:rgba(245,158,11,0.3);
+    --mono:'Space Mono',monospace;--sans:'DM Sans',sans-serif;}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14px;min-height:100vh;
+    background-image:linear-gradient(rgba(245,158,11,0.015) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(245,158,11,0.015) 1px,transparent 1px);
+    background-size:40px 40px;}
+
+/* Risk banner */
+.risk-banner{background:rgba(245,158,11,0.07);border:1px solid var(--penny-border);
+    padding:10px 24px;display:flex;align-items:center;gap:12px;}
+.risk-text{font-size:11px;color:var(--muted);line-height:1.4;}
+.risk-text strong{color:var(--penny);}
+.risk-link{font-family:var(--mono);font-size:10px;color:var(--penny);text-decoration:none;
+    margin-left:auto;flex-shrink:0;opacity:0.8;white-space:nowrap;}
+.risk-link:hover{opacity:1;}
+
+/* Page header */
+.page-header{padding:16px 24px 0;display:flex;align-items:center;gap:14px;flex-wrap:wrap;}
+.page-title{font-family:var(--mono);font-size:13px;text-transform:uppercase;letter-spacing:2px;color:var(--penny);}
+.page-badge{font-family:var(--mono);font-size:9px;padding:2px 7px;border-radius:3px;
+    background:var(--penny-dim);color:var(--penny);border:1px solid var(--penny-border);}
+.back-link{font-family:var(--mono);font-size:10px;color:var(--muted);text-decoration:none;margin-left:auto;}
+.back-link:hover{color:var(--penny);}
+
+/* Price tier tabs */
+.tier-bar{padding:12px 24px 0;display:flex;gap:6px;flex-wrap:wrap;}
+.tier-tab{font-family:var(--mono);font-size:10px;padding:5px 14px;border-radius:4px;cursor:pointer;
+    border:1px solid var(--border);background:transparent;color:var(--muted);transition:all .15s;}
+.tier-tab:hover{border-color:var(--penny);color:var(--penny);}
+.tier-tab.active{border-color:var(--penny);color:var(--penny);background:var(--penny-dim);}
+
+/* Presets strip */
+.preset-bar{padding:8px 24px 0;display:flex;gap:6px;flex-wrap:wrap;}
+.preset-btn{font-family:var(--mono);font-size:10px;padding:5px 12px;border-radius:4px;cursor:pointer;
+    border:1px solid var(--border);background:transparent;color:var(--muted2);transition:all .15s;}
+.preset-btn:hover{border-color:var(--penny);color:var(--penny);background:var(--penny-dim);}
+.preset-btn.active{border-color:var(--penny);color:var(--penny);background:var(--penny-dim);}
+.preset-label{font-family:var(--mono);font-size:9px;color:var(--muted);display:flex;align-items:center;
+    padding:5px 0;white-space:nowrap;}
+
+/* Layout */
+.layout{display:flex;min-height:calc(100vh - 56px);}
+
+/* Sidebar */
+.sidebar{width:224px;flex-shrink:0;border-right:1px solid var(--border);padding:16px;
+    background:var(--surface);overflow-y:auto;position:sticky;top:56px;max-height:calc(100vh - 56px);}
+.filter-section{margin-bottom:18px;}
+.filter-label{font-family:var(--mono);font-size:9px;text-transform:uppercase;letter-spacing:1px;
+    color:var(--muted);margin-bottom:7px;display:block;}
+select,input[type=number]{width:100%;background:var(--surface2);border:1px solid var(--border);
+    border-radius:4px;padding:6px 9px;color:var(--text);font-family:var(--mono);font-size:11px;outline:none;}
+select:focus,input[type=number]:focus{border-color:var(--penny);}
+.range-row{display:flex;gap:5px;align-items:center;}
+.range-row input{width:76px;flex-shrink:0;}
+.range-sep{color:var(--muted);font-size:11px;}
+.rating-checks{display:flex;flex-direction:column;gap:4px;}
+.rating-check{display:flex;align-items:center;gap:7px;cursor:pointer;}
+.rating-check input[type=checkbox]{accent-color:var(--penny);cursor:pointer;}
+.rating-check label{font-family:var(--mono);font-size:10px;cursor:pointer;}
+.btn-apply{width:100%;padding:8px;border-radius:4px;border:none;background:var(--penny);
+    color:#000;font-family:var(--mono);font-size:11px;font-weight:700;cursor:pointer;
+    letter-spacing:1px;margin-top:4px;transition:opacity .15s;}
+.btn-apply:hover{opacity:0.85;}
+.btn-reset{width:100%;padding:6px;border-radius:4px;border:1px solid var(--border);background:transparent;
+    color:var(--muted);font-family:var(--mono);font-size:10px;cursor:pointer;margin-top:6px;transition:all .15s;}
+.btn-reset:hover{border-color:var(--danger);color:var(--danger);}
+.filter-divider{border:none;border-top:1px solid var(--border);margin:12px 0;}
+
+/* Main */
+.main{flex:1;padding:16px 20px;overflow:hidden;min-width:0;}
+.toolbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px;}
+.toolbar-left{display:flex;align-items:center;gap:12px;}
+.result-count{font-family:var(--mono);font-size:11px;color:var(--muted);}
+.sort-row{display:flex;align-items:center;gap:8px;}
+.sort-row select{width:auto;padding:5px 8px;font-size:10px;}
+.btn-dir{padding:5px 9px;border-radius:4px;border:1px solid var(--border);background:transparent;
+    color:var(--muted);font-family:var(--mono);font-size:10px;cursor:pointer;transition:all .15s;}
+.btn-dir.asc::after{content:'↑';}
+.btn-dir.desc::after{content:'↓';}
+.btn-dir:hover{border-color:var(--penny);color:var(--penny);}
+
+/* Table */
+.table-wrap{overflow-x:auto;border-radius:8px;border:1px solid var(--border);background:var(--surface);}
+table{width:100%;border-collapse:collapse;min-width:1060px;}
+thead{position:sticky;top:56px;z-index:10;}
+th{background:var(--surface2);padding:8px 10px;text-align:left;font-family:var(--mono);font-size:9px;
+    text-transform:uppercase;letter-spacing:1px;color:var(--muted);border-bottom:1px solid var(--border);
+    white-space:nowrap;cursor:pointer;user-select:none;}
+th:hover{color:var(--penny);}
+th.sorted{color:var(--penny);}
+th .arr{margin-left:3px;opacity:0.5;font-size:8px;}
+th.sorted .arr{opacity:1;}
+td{padding:7px 10px;border-bottom:1px solid rgba(26,45,69,0.4);font-size:12px;white-space:nowrap;}
+tr:last-child td{border-bottom:none;}
+tr:hover td{background:rgba(245,158,11,0.025);cursor:pointer;}
+.tc-ticker{font-family:var(--mono);font-weight:700;color:var(--penny);font-size:12px;}
+.tc-company{color:var(--muted2);max-width:130px;overflow:hidden;text-overflow:ellipsis;}
+.tc-sector{color:var(--muted);font-size:11px;max-width:110px;overflow:hidden;text-overflow:ellipsis;}
+.mono{font-family:var(--mono);font-size:11px;}
+.up{color:#00ff88;}.dn{color:#ff3b5c;}.neu{color:var(--muted);}
+
+/* Relative volume colour coding */
+.relvol-high{color:#ff3b5c;font-weight:700;}     /* >5× */
+.relvol-mid{color:#f59e0b;font-weight:700;}      /* 3-5× */
+.relvol-norm{color:var(--muted2);}
+
+/* Rating badges */
+.rating-pill{font-family:var(--mono);font-size:9px;padding:2px 7px;border-radius:3px;white-space:nowrap;}
+.r-SB{background:rgba(0,255,136,0.12);color:#00ff88;border:1px solid rgba(0,255,136,0.25);}
+.r-B{background:rgba(0,212,255,0.1);color:#00d4ff;border:1px solid rgba(0,212,255,0.2);}
+.r-SH{background:rgba(148,163,184,0.12);color:#94a3b8;border:1px solid rgba(148,163,184,0.25);}
+.r-H{background:rgba(100,116,139,0.12);color:#64748b;border:1px solid rgba(100,116,139,0.25);}
+.r-WH{background:rgba(255,107,53,0.1);color:#ff6b35;border:1px solid rgba(255,107,53,0.2);}
+.r-S{background:rgba(255,59,92,0.1);color:#ff3b5c;border:1px solid rgba(255,59,92,0.2);}
+.r-SS{background:rgba(255,0,0,0.12);color:#ff0000;border:1px solid rgba(255,0,0,0.25);}
+
+/* RSI colouring */
+.rsi-os{color:#00ff88;}   /* oversold <30 */
+.rsi-ob{color:#ff3b5c;}   /* overbought >70 */
+
+/* Score bar */
+.score-bar-wrap{display:flex;align-items:center;gap:6px;}
+.score-bar{height:4px;border-radius:2px;background:var(--border);width:48px;flex-shrink:0;}
+.score-fill{height:100%;border-radius:2px;}
+
+/* Pagination */
+.pagination{display:flex;align-items:center;gap:6px;margin-top:14px;justify-content:center;flex-wrap:wrap;}
+.page-btn{font-family:var(--mono);font-size:10px;padding:5px 10px;border-radius:4px;
+    border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;transition:all .15s;}
+.page-btn:hover{border-color:var(--penny);color:var(--penny);}
+.page-btn.active{border-color:var(--penny);color:var(--penny);background:var(--penny-dim);}
+.page-btn:disabled{opacity:0.35;cursor:default;pointer-events:none;}
+.page-info{font-family:var(--mono);font-size:10px;color:var(--muted);padding:0 4px;}
+
+.empty{text-align:center;padding:48px 24px;color:var(--muted);font-family:var(--mono);font-size:11px;}
+.loading-row td{text-align:center;padding:32px;color:var(--muted);font-family:var(--mono);font-size:11px;}
+
+/* Volume unusual badge */
+.vol-tag{font-family:var(--mono);font-size:8px;padding:1px 5px;border-radius:2px;margin-left:4px;vertical-align:middle;}
+.vol-tag-high{background:rgba(255,59,92,0.15);color:#ff3b5c;border:1px solid rgba(255,59,92,0.3);}
+.vol-tag-mid{background:rgba(245,158,11,0.12);color:#f59e0b;border:1px solid rgba(245,158,11,0.3);}
+</style>
+</head>
+<body>
+{% include '_nav.html' %}
+
+<!-- Risk Banner -->
+<div class="risk-banner">
+    <span style="font-size:16px;flex-shrink:0;">⚠️</span>
+    <div class="risk-text">
+        <strong>High Risk.</strong> Penny stocks are highly volatile and speculative. Prices can move 50–100%+ in a single session. Capital is at risk.
+    </div>
+    <a href="/disclaimer" class="risk-link">Full disclaimer →</a>
+</div>
+
+<!-- Page Header -->
+<div class="page-header">
+    <div class="page-title">Penny Screener</div>
+    <span class="page-badge">PRICE &lt; $5</span>
+    <a href="/penny" class="back-link">← Penny Hub</a>
+</div>
+
+<!-- Price Tier Tabs -->
+<div class="tier-bar" id="tier-bar">
+    <button class="tier-tab active" data-tier="all" onclick="setTier(this,'all')">All Penny (&lt;$5)</button>
+    <button class="tier-tab" data-tier="sub1" onclick="setTier(this,'sub1')">Under $1</button>
+    <button class="tier-tab" data-tier="sub025" onclick="setTier(this,'sub025')">Under $0.25</button>
+    <button class="tier-tab" data-tier="1to5" onclick="setTier(this,'1to5')">$1 – $5</button>
+</div>
+
+<!-- Preset strip -->
+<div class="preset-bar">
+    <span class="preset-label">Presets:</span>
+    <button class="preset-btn" id="pb-top_rated"    onclick="applyPreset('top_rated')">⭐ Top Rated</button>
+    <button class="preset-btn" id="pb-unusual_volume" onclick="applyPreset('unusual_volume')">🔊 Unusual Volume</button>
+    <button class="preset-btn" id="pb-oversold"     onclick="applyPreset('oversold')">📉 Oversold</button>
+    <button class="preset-btn" id="pb-momentum"     onclick="applyPreset('momentum')">🚀 Momentum</button>
+    <button class="preset-btn" id="pb-under_dollar" onclick="applyPreset('under_dollar')">💲 Under $1</button>
+</div>
+
+<!-- Layout -->
+<div class="layout">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+        <div class="filter-section">
+            <span class="filter-label">Sector</span>
+            <select id="f-sector">
+                <option value="">All Sectors</option>
+                <option>Technology</option>
+                <option>Healthcare</option>
+                <option>Consumer Cyclical</option>
+                <option>Consumer Defensive</option>
+                <option>Financial Services</option>
+                <option>Basic Materials</option>
+                <option>Energy</option>
+                <option>Industrials</option>
+                <option>Real Estate</option>
+                <option>Utilities</option>
+                <option>Communication Services</option>
+            </select>
+        </div>
+
+        <div class="filter-section">
+            <span class="filter-label">Rating</span>
+            <div class="rating-checks">
+                <div class="rating-check"><input type="checkbox" id="r-SB" value="STRONG_BUY"><label for="r-SB" style="color:#00ff88">🟢 Strong Buy</label></div>
+                <div class="rating-check"><input type="checkbox" id="r-B"  value="BUY">        <label for="r-B"  style="color:#00d4ff">🔵 Buy</label></div>
+                <div class="rating-check"><input type="checkbox" id="r-SH" value="STRONG_HOLD"><label for="r-SH" style="color:#94a3b8">🟡 Strong Hold</label></div>
+                <div class="rating-check"><input type="checkbox" id="r-H"  value="HOLD">       <label for="r-H"  style="color:#64748b">⚪ Hold</label></div>
+                <div class="rating-check"><input type="checkbox" id="r-WH" value="WEAK_HOLD">  <label for="r-WH" style="color:#ff6b35">🟠 Weak Hold</label></div>
+                <div class="rating-check"><input type="checkbox" id="r-S"  value="SELL">       <label for="r-S"  style="color:#ff3b5c">🔴 Sell</label></div>
+                <div class="rating-check"><input type="checkbox" id="r-SS" value="STRONG_SELL"><label for="r-SS" style="color:#ff0000">⛔ Strong Sell</label></div>
+            </div>
+        </div>
+
+        <hr class="filter-divider">
+
+        <div class="filter-section">
+            <span class="filter-label">RSI (14)</span>
+            <div class="range-row">
+                <input type="number" id="f-rsi-min" placeholder="0"   min="0" max="100" step="1">
+                <span class="range-sep">–</span>
+                <input type="number" id="f-rsi-max" placeholder="100" min="0" max="100" step="1">
+            </div>
+        </div>
+
+        <div class="filter-section">
+            <span class="filter-label">Composite Score Min</span>
+            <input type="number" id="f-score-min" placeholder="0" min="0" max="100" step="1">
+        </div>
+
+        <div class="filter-section">
+            <span class="filter-label">Rel Volume Min (×)</span>
+            <input type="number" id="f-relvol-min" placeholder="e.g. 2" min="0" step="0.1">
+        </div>
+
+        <hr class="filter-divider">
+
+        <div class="filter-section">
+            <span class="filter-label">Per Page</span>
+            <select id="f-per-page">
+                <option value="25">25</option>
+                <option value="50" selected>50</option>
+                <option value="100">100</option>
+            </select>
+        </div>
+
+        <button class="btn-apply" onclick="applyFilters()">Apply Filters</button>
+        <button class="btn-reset" onclick="resetAll()">Reset</button>
+    </aside>
+
+    <!-- Main table area -->
+    <div class="main">
+        <div class="toolbar">
+            <div class="toolbar-left">
+                <span class="result-count" id="result-count">Loading…</span>
+            </div>
+            <div class="sort-row">
+                <span style="font-family:var(--mono);font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;">Sort</span>
+                <select id="f-sort" onchange="applyFilters()">
+                    <option value="composite_score">Score</option>
+                    <option value="rel_volume">Rel Volume</option>
+                    <option value="volume">Volume</option>
+                    <option value="change_pct">Change %</option>
+                    <option value="price">Price</option>
+                    <option value="rsi_14">RSI</option>
+                    <option value="momentum_score">Momentum</option>
+                    <option value="quality_score">Quality</option>
+                    <option value="insider_score">Insider</option>
+                    <option value="target_upside">Target Upside</option>
+                </select>
+                <button class="btn-dir desc" id="dir-btn" onclick="toggleDir()"></button>
+            </div>
+        </div>
+
+        <div class="table-wrap">
+            <table id="results-table">
+                <thead>
+                    <tr>
+                        <th onclick="sortBy('ticker')">Ticker<span class="arr" id="arr-ticker"></span></th>
+                        <th onclick="sortBy('company')">Company<span class="arr" id="arr-company"></span></th>
+                        <th onclick="sortBy('sector')">Sector<span class="arr" id="arr-sector"></span></th>
+                        <th onclick="sortBy('price')">Price<span class="arr" id="arr-price"></span></th>
+                        <th onclick="sortBy('change_pct')">Change<span class="arr" id="arr-change_pct"></span></th>
+                        <th onclick="sortBy('volume')">Volume<span class="arr" id="arr-volume"></span></th>
+                        <th onclick="sortBy('rel_volume')">Rel Vol<span class="arr" id="arr-rel_volume"></span></th>
+                        <th onclick="sortBy('rsi_14')">RSI<span class="arr" id="arr-rsi_14"></span></th>
+                        <th onclick="sortBy('composite_score')">Score<span class="arr" id="arr-composite_score"></span></th>
+                        <th onclick="sortBy('rating')">Rating<span class="arr" id="arr-rating"></span></th>
+                        <th onclick="sortBy('target_upside')">Upside<span class="arr" id="arr-target_upside"></span></th>
+                    </tr>
+                </thead>
+                <tbody id="results-body">
+                    <tr class="loading-row"><td colspan="11">Loading penny stocks…</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="pagination" id="pagination"></div>
+    </div>
+</div>
+
+<script>
+// ── State ─────────────────────────────────────────
+let _state = {
+    price_max: 5,
+    price_min: null,
+    sector: '',
+    ratings: [],
+    rsi_min: null,
+    rsi_max: null,
+    score_min: 0,
+    relvol_min: null,
+    sort: 'composite_score',
+    dir: 'desc',
+    page: 1,
+    per_page: 50,
+    tier: 'all',
+    preset: null,
+};
+
+// ── Presets ───────────────────────────────────────
+const PRESETS = {
+    top_rated:      {price_max:5, price_min:null, sort:'composite_score', dir:'desc', score_min:0, rsi_min:null, rsi_max:null, relvol_min:null},
+    unusual_volume: {price_max:5, price_min:null, sort:'rel_volume',      dir:'desc', score_min:0, rsi_min:null, rsi_max:null, relvol_min:3},
+    oversold:       {price_max:5, price_min:null, sort:'rsi_14',          dir:'asc',  score_min:0, rsi_min:null, rsi_max:30,   relvol_min:null},
+    under_dollar:   {price_max:1, price_min:null, sort:'composite_score', dir:'desc', score_min:0, rsi_min:null, rsi_max:null, relvol_min:null},
+    momentum:       {price_max:5, price_min:null, sort:'momentum_score',  dir:'desc', score_min:55, rsi_min:null, rsi_max:null, relvol_min:null},
+};
+
+// Tier price ranges
+const TIERS = {
+    all:    {price_max:5,    price_min:null},
+    sub1:   {price_max:1,    price_min:null},
+    sub025: {price_max:0.25, price_min:null},
+    '1to5': {price_max:5,    price_min:1},
+};
+
+// ── Boot: read URL preset ─────────────────────────
+function boot() {
+    const params = new URLSearchParams(window.location.search);
+    const preset = params.get('preset');
+    if (preset && PRESETS[preset]) {
+        _state.preset = preset;
+        Object.assign(_state, PRESETS[preset]);
+        syncUIFromState();
+        document.getElementById('pb-' + preset)?.classList.add('active');
+        // sync tier tab if under_dollar
+        if (preset === 'under_dollar') {
+            setTierSilent('sub1');
+        }
+    } else {
+        syncUIFromState();
+    }
+    fetch('/api/screener');  // warm connection
+    load();
+}
+
+function syncUIFromState() {
+    document.getElementById('f-sector').value    = _state.sector || '';
+    document.getElementById('f-rsi-min').value   = _state.rsi_min  ?? '';
+    document.getElementById('f-rsi-max').value   = _state.rsi_max  ?? '';
+    document.getElementById('f-score-min').value = _state.score_min || '';
+    document.getElementById('f-relvol-min').value= _state.relvol_min ?? '';
+    document.getElementById('f-sort').value      = _state.sort;
+    document.getElementById('f-per-page').value  = String(_state.per_page);
+    updateDirBtn();
+    updateSortArrows();
+
+    // ratings
+    document.querySelectorAll('.rating-check input').forEach(cb => {
+        cb.checked = _state.ratings.includes(cb.value);
+    });
+}
+
+// ── Tier tabs ─────────────────────────────────────
+function setTier(btn, tier) {
+    document.querySelectorAll('.tier-tab').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    setTierSilent(tier);
+    clearPreset();
+    _state.page = 1;
+    load();
+}
+
+function setTierSilent(tier) {
+    _state.tier = tier;
+    _state.price_max = TIERS[tier].price_max;
+    _state.price_min = TIERS[tier].price_min;
+    document.querySelectorAll('.tier-tab').forEach(b => {
+        b.classList.toggle('active', b.dataset.tier === tier);
+    });
+}
+
+// ── Presets ───────────────────────────────────────
+function applyPreset(name) {
+    const p = PRESETS[name];
+    if (!p) return;
+    clearPreset();
+    _state.preset = name;
+    Object.assign(_state, p);
+    _state.sector  = '';
+    _state.ratings = [];
+    _state.page    = 1;
+    document.getElementById('pb-' + name)?.classList.add('active');
+
+    // sync tier tab
+    if (name === 'under_dollar') setTierSilent('sub1');
+    else setTierSilent('all');
+
+    syncUIFromState();
+    load();
+}
+
+function clearPreset() {
+    _state.preset = null;
+    document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+}
+
+// ── Filters ───────────────────────────────────────
+function applyFilters() {
+    _state.sector    = document.getElementById('f-sector').value;
+    _state.rsi_min   = parseFloat(document.getElementById('f-rsi-min').value)   || null;
+    _state.rsi_max   = parseFloat(document.getElementById('f-rsi-max').value)   || null;
+    _state.score_min = parseFloat(document.getElementById('f-score-min').value) || 0;
+    _state.relvol_min= parseFloat(document.getElementById('f-relvol-min').value)|| null;
+    _state.sort      = document.getElementById('f-sort').value;
+    _state.per_page  = parseInt(document.getElementById('f-per-page').value, 10) || 50;
+    _state.ratings   = Array.from(document.querySelectorAll('.rating-check input:checked')).map(c => c.value);
+    _state.page      = 1;
+    clearPreset();
+    load();
+}
+
+function resetAll() {
+    _state = {
+        price_max:5, price_min:null, sector:'', ratings:[], rsi_min:null, rsi_max:null,
+        score_min:0, relvol_min:null, sort:'composite_score', dir:'desc',
+        page:1, per_page:50, tier:'all', preset:null,
+    };
+    setTierSilent('all');
+    clearPreset();
+    syncUIFromState();
+    load();
+}
+
+// ── Sort ──────────────────────────────────────────
+function sortBy(col) {
+    if (_state.sort === col) {
+        _state.dir = _state.dir === 'desc' ? 'asc' : 'desc';
+    } else {
+        _state.sort = col;
+        _state.dir = 'desc';
+    }
+    _state.page = 1;
+    document.getElementById('f-sort').value = col;
+    updateDirBtn();
+    updateSortArrows();
+    load();
+}
+
+function toggleDir() {
+    _state.dir = _state.dir === 'desc' ? 'asc' : 'desc';
+    _state.page = 1;
+    updateDirBtn();
+    updateSortArrows();
+    load();
+}
+
+function updateDirBtn() {
+    const btn = document.getElementById('dir-btn');
+    btn.className = 'btn-dir ' + _state.dir;
+}
+
+function updateSortArrows() {
+    document.querySelectorAll('th').forEach(th => th.classList.remove('sorted'));
+    document.querySelectorAll('.arr').forEach(el => el.textContent = '');
+    const th = document.querySelector(`th[onclick="sortBy('${_state.sort}')"]`);
+    if (th) {
+        th.classList.add('sorted');
+        th.querySelector('.arr').textContent = _state.dir === 'desc' ? '↓' : '↑';
+    }
+}
+
+// ── API fetch ─────────────────────────────────────
+async function load() {
+    const body = document.getElementById('results-body');
+    body.innerHTML = '<tr class="loading-row"><td colspan="11">Loading…</td></tr>';
+    document.getElementById('result-count').textContent = 'Loading…';
+
+    const p = new URLSearchParams();
+    p.set('price_max', _state.price_max);
+    if (_state.price_min != null) p.set('price_min', _state.price_min);
+    if (_state.sector) p.set('sector', _state.sector);
+    if (_state.rsi_min != null) p.set('rsi_min', _state.rsi_min);
+    if (_state.rsi_max != null) p.set('rsi_max', _state.rsi_max);
+    if (_state.score_min > 0)   p.set('score_min', _state.score_min);
+    if (_state.relvol_min != null) p.set('relvol_min', _state.relvol_min);
+    _state.ratings.forEach(r => p.append('rating', r));
+    p.set('sort', _state.sort);
+    p.set('dir',  _state.dir);
+    p.set('page', _state.page);
+    p.set('per_page', _state.per_page);
+
+    const data = await fetch('/api/screener?' + p.toString())
+        .then(r => r.json())
+        .catch(() => null);
+
+    if (!data) {
+        body.innerHTML = '<tr class="loading-row"><td colspan="11">Failed to load. Refresh to retry.</td></tr>';
+        return;
+    }
+
+    renderTable(data.results || []);
+    renderPagination(data.page, data.total_pages, data.total);
+    document.getElementById('result-count').textContent =
+        `${data.total || 0} stocks found`;
+    updateSortArrows();
+}
+
+// ── Render ────────────────────────────────────────
+function ratingClass(r) {
+    const map = {STRONG_BUY:'SB',BUY:'B',STRONG_HOLD:'SH',HOLD:'H',WEAK_HOLD:'WH',SELL:'S',STRONG_SELL:'SS'};
+    return 'r-' + (map[r] || 'H');
+}
+
+function fmtRelvol(v) {
+    if (v == null || v === '') return '<span class="neu">—</span>';
+    const n = parseFloat(v);
+    if (isNaN(n)) return '<span class="neu">—</span>';
+    let cls = 'relvol-norm';
+    let tag = '';
+    if (n > 5) {
+        cls = 'relvol-high';
+        tag = '<span class="vol-tag vol-tag-high">HOT</span>';
+    } else if (n >= 3) {
+        cls = 'relvol-mid';
+        tag = '<span class="vol-tag vol-tag-mid">↑VOL</span>';
+    }
+    return `<span class="${cls} mono">${n.toFixed(2)}×</span>${tag}`;
+}
+
+function fmtRsi(v) {
+    if (v == null) return '<span class="neu">—</span>';
+    const n = parseFloat(v);
+    let cls = 'mono';
+    if (n < 30) cls += ' rsi-os';
+    else if (n > 70) cls += ' rsi-ob';
+    return `<span class="${cls}">${n.toFixed(0)}</span>`;
+}
+
+function scoreBar(v) {
+    if (v == null) return '<span class="neu">—</span>';
+    const n = Math.max(0, Math.min(100, parseFloat(v)));
+    const colour = n >= 70 ? '#00ff88' : n >= 45 ? '#00d4ff' : n >= 25 ? '#f59e0b' : '#ff3b5c';
+    return `<div class="score-bar-wrap">
+        <div class="score-bar"><div class="score-fill" style="width:${n}%;background:${colour};"></div></div>
+        <span class="mono" style="color:${colour}">${n.toFixed(0)}</span>
+    </div>`;
+}
+
+function fmtChange(v) {
+    if (v == null) return '<span class="neu">—</span>';
+    const n = parseFloat(v);
+    const sign = n >= 0 ? '+' : '';
+    const cls  = n > 0 ? 'up' : n < 0 ? 'dn' : 'neu';
+    return `<span class="${cls} mono">${sign}${n.toFixed(2)}%</span>`;
+}
+
+function fmtVol(v) {
+    if (v == null) return '<span class="neu">—</span>';
+    const n = parseInt(v);
+    if (isNaN(n)) return '<span class="neu">—</span>';
+    if (n >= 1e6) return `<span class="mono">${(n/1e6).toFixed(1)}M</span>`;
+    if (n >= 1e3) return `<span class="mono">${(n/1e3).toFixed(0)}K</span>`;
+    return `<span class="mono">${n}</span>`;
+}
+
+function fmtPrice(v) {
+    if (v == null) return '<span class="neu">—</span>';
+    const n = parseFloat(v);
+    return `<span class="mono">$${n < 1 ? n.toFixed(4) : n.toFixed(2)}</span>`;
+}
+
+function fmtUpside(v) {
+    if (v == null) return '<span class="neu">—</span>';
+    const n = parseFloat(v);
+    const cls = n > 0 ? 'up' : n < 0 ? 'dn' : 'neu';
+    return `<span class="${cls} mono">${n > 0 ? '+' : ''}${n.toFixed(1)}%</span>`;
+}
+
+function renderTable(rows) {
+    const body = document.getElementById('results-body');
+    if (!rows.length) {
+        body.innerHTML = '<tr><td colspan="11" style="text-align:center;padding:40px;color:var(--muted);font-family:var(--mono);font-size:11px;">No penny stocks match these filters.</td></tr>';
+        return;
+    }
+    body.innerHTML = rows.map(r => `
+        <tr onclick="window.location='/ticker/${r.ticker}'">
+            <td class="tc-ticker">${r.ticker}</td>
+            <td class="tc-company">${r.company || '—'}</td>
+            <td class="tc-sector">${r.sector || '—'}</td>
+            <td>${fmtPrice(r.price)}</td>
+            <td>${fmtChange(r.change_pct)}</td>
+            <td>${fmtVol(r.volume)}</td>
+            <td>${fmtRelvol(r.rel_volume)}</td>
+            <td>${fmtRsi(r.rsi_14)}</td>
+            <td>${scoreBar(r.composite_score)}</td>
+            <td><span class="rating-pill ${ratingClass(r.rating)}">${(r.rating||'').replace(/_/g,' ')}</span></td>
+            <td>${fmtUpside(r.target_upside)}</td>
+        </tr>
+    `).join('');
+}
+
+// ── Pagination ────────────────────────────────────
+function renderPagination(page, totalPages, total) {
+    const el = document.getElementById('pagination');
+    if (!totalPages || totalPages <= 1) { el.innerHTML = ''; return; }
+
+    let html = '';
+    html += `<button class="page-btn" onclick="goPage(${page-1})" ${page<=1?'disabled':''}>‹ Prev</button>`;
+
+    const start = Math.max(1, page - 2);
+    const end   = Math.min(totalPages, page + 2);
+    if (start > 1) html += `<button class="page-btn" onclick="goPage(1)">1</button>`;
+    if (start > 2) html += `<span class="page-info">…</span>`;
+    for (let i = start; i <= end; i++) {
+        html += `<button class="page-btn ${i===page?'active':''}" onclick="goPage(${i})">${i}</button>`;
+    }
+    if (end < totalPages - 1) html += `<span class="page-info">…</span>`;
+    if (end < totalPages) html += `<button class="page-btn" onclick="goPage(${totalPages})">${totalPages}</button>`;
+
+    html += `<button class="page-btn" onclick="goPage(${page+1})" ${page>=totalPages?'disabled':''}>Next ›</button>`;
+    html += `<span class="page-info">Page ${page} of ${totalPages}</span>`;
+    el.innerHTML = html;
+}
+
+function goPage(p) {
+    _state.page = p;
+    load();
+    window.scrollTo({top:0, behavior:'smooth'});
+}
+
+// ── Init ──────────────────────────────────────────
+boot();
+</script>
+{% include '_footer.html' %}
+</body>
+</html>

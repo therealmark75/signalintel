@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SignalIntel — Penny &amp; Small Cap</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#080c14;--surface:#0d1520;--surface2:#111d2e;--border:#1a2d45;
+    --accent:#00d4ff;--accent2:#00ff88;--warning:#f59e0b;--danger:#ff3b5c;
+    --text:#f0f6ff;--muted:#8aa4bf;--muted2:#c2d4e8;
+    --penny:#f59e0b;--penny-dim:rgba(245,158,11,0.1);--penny-border:rgba(245,158,11,0.3);
+    --mono:'Space Mono',monospace;--sans:'DM Sans',sans-serif;}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14px;min-height:100vh;
+    background-image:linear-gradient(rgba(245,158,11,0.02) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(245,158,11,0.02) 1px,transparent 1px);
+    background-size:40px 40px;}
+main{padding:24px;max-width:1400px;margin:0 auto;}
+
+/* Risk banner */
+.risk-banner{background:rgba(245,158,11,0.08);border:1px solid var(--penny-border);border-radius:8px;
+    padding:12px 20px;margin-bottom:24px;display:flex;align-items:center;gap:12px;}
+.risk-icon{font-size:18px;flex-shrink:0;}
+.risk-text{font-size:12px;color:var(--muted2);line-height:1.5;}
+.risk-text strong{color:var(--penny);}
+.risk-link{font-family:var(--mono);font-size:10px;color:var(--penny);text-decoration:none;margin-left:auto;flex-shrink:0;opacity:0.8;}
+.risk-link:hover{opacity:1;}
+
+/* Page header */
+.page-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;flex-wrap:wrap;gap:12px;}
+.page-hdr-left{display:flex;align-items:center;gap:14px;}
+.page-title{font-family:var(--mono);font-size:14px;text-transform:uppercase;letter-spacing:2px;color:var(--penny);}
+.page-badge{font-family:var(--mono);font-size:9px;padding:3px 8px;border-radius:3px;
+    background:var(--penny-dim);color:var(--penny);border:1px solid var(--penny-border);letter-spacing:1px;}
+.screener-btn{font-family:var(--mono);font-size:11px;padding:7px 16px;border-radius:5px;
+    background:var(--penny-dim);border:1px solid var(--penny-border);color:var(--penny);
+    text-decoration:none;transition:all .15s;}
+.screener-btn:hover{background:rgba(245,158,11,0.2);}
+
+/* Grid layout */
+.grid-top{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:24px;}
+@media(max-width:900px){.grid-top{grid-template-columns:1fr;}}
+
+/* Stock of Day card */
+.sotd-card{background:var(--surface);border:1px solid var(--penny-border);border-radius:12px;
+    padding:24px;position:relative;overflow:hidden;}
+.sotd-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;
+    background:linear-gradient(90deg,var(--penny),rgba(245,158,11,0.2));}
+.sotd-header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:20px;}
+.sotd-label{font-family:var(--mono);font-size:9px;text-transform:uppercase;letter-spacing:2px;
+    color:var(--penny);margin-bottom:6px;}
+.sotd-ticker{font-family:var(--mono);font-size:28px;font-weight:700;color:var(--text);margin-bottom:2px;}
+.sotd-company{font-size:13px;color:var(--muted2);}
+.sotd-rating{font-family:var(--mono);font-size:10px;font-weight:700;padding:4px 10px;border-radius:4px;}
+.rating-STRONG_BUY{background:rgba(0,255,136,0.15);color:#00ff88;border:1px solid rgba(0,255,136,0.3);}
+.rating-BUY{background:rgba(0,212,255,0.12);color:#00d4ff;border:1px solid rgba(0,212,255,0.25);}
+.rating-STRONG_HOLD{background:rgba(148,163,184,0.15);color:#94a3b8;border:1px solid rgba(148,163,184,0.3);}
+.rating-HOLD{background:rgba(100,116,139,0.15);color:#64748b;border:1px solid rgba(100,116,139,0.3);}
+.rating-WEAK_HOLD{background:rgba(255,107,53,0.1);color:#ff6b35;border:1px solid rgba(255,107,53,0.2);}
+.rating-SELL{background:rgba(255,59,92,0.1);color:#ff3b5c;border:1px solid rgba(255,59,92,0.2);}
+.rating-STRONG_SELL{background:rgba(255,0,0,0.15);color:#ff0000;border:1px solid rgba(255,0,0,0.3);}
+
+.sotd-price-row{display:flex;align-items:baseline;gap:12px;margin-bottom:20px;}
+.sotd-price{font-family:var(--mono);font-size:32px;font-weight:700;color:var(--text);}
+.sotd-chg{font-family:var(--mono);font-size:14px;}
+.up{color:#00ff88;} .dn{color:#ff3b5c;} .neu{color:var(--muted);}
+
+.scores-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:20px;}
+.score-item{background:var(--surface2);border-radius:6px;padding:10px 12px;text-align:center;}
+.score-label{font-family:var(--mono);font-size:9px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:6px;}
+.score-val{font-family:var(--mono);font-size:18px;font-weight:700;}
+.s-hi{color:#00ff88;} .s-mid{color:#00d4ff;} .s-lo{color:#f59e0b;} .s-bad{color:#ff3b5c;}
+
+.sotd-meta{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:20px;}
+.meta-item{display:flex;flex-direction:column;gap:3px;}
+.meta-key{font-family:var(--mono);font-size:9px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);}
+.meta-val{font-family:var(--mono);font-size:13px;color:var(--text);}
+
+.why-box{background:rgba(245,158,11,0.05);border:1px solid var(--penny-border);border-radius:8px;padding:14px 16px;}
+.why-title{font-family:var(--mono);font-size:9px;text-transform:uppercase;letter-spacing:1.5px;color:var(--penny);margin-bottom:10px;}
+.why-item{font-size:12px;color:var(--muted2);line-height:1.6;margin-bottom:6px;display:flex;gap:8px;}
+.why-item::before{content:'›';color:var(--penny);flex-shrink:0;}
+
+.legal-badge{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:4px;font-family:var(--mono);font-size:10px;margin-bottom:14px;}
+
+.sotd-actions{display:flex;gap:10px;margin-top:16px;}
+.sotd-btn{font-family:var(--mono);font-size:11px;padding:8px 16px;border-radius:5px;
+    text-decoration:none;transition:all .15s;text-align:center;}
+.sotd-btn-primary{background:var(--penny-dim);border:1px solid var(--penny-border);color:var(--penny);}
+.sotd-btn-primary:hover{background:rgba(245,158,11,0.2);}
+.sotd-btn-secondary{background:transparent;border:1px solid var(--border);color:var(--muted2);}
+.sotd-btn-secondary:hover{border-color:var(--accent);color:var(--accent);}
+
+/* Hot movers section */
+.section-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px;}
+.section-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;}
+.section-title{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:2px;color:var(--muted);}
+.exchange-tabs{display:flex;gap:4px;}
+.exch-tab{font-family:var(--mono);font-size:10px;padding:4px 10px;border-radius:4px;cursor:pointer;
+    border:1px solid var(--border);background:transparent;color:var(--muted);transition:all .15s;}
+.exch-tab.active,.exch-tab:hover{border-color:var(--penny);color:var(--penny);background:var(--penny-dim);}
+
+.mover-row{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:6px;
+    background:var(--surface2);margin-bottom:6px;cursor:pointer;transition:border-color .15s;
+    border:1px solid transparent;}
+.mover-row:hover{border-color:rgba(245,158,11,0.3);}
+.mover-ticker{font-family:var(--mono);font-size:13px;font-weight:700;color:var(--penny);min-width:60px;}
+.mover-company{font-size:12px;color:var(--muted2);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.mover-price{font-family:var(--mono);font-size:12px;color:var(--text);min-width:48px;text-align:right;}
+.mover-chg{font-family:var(--mono);font-size:12px;min-width:58px;text-align:right;}
+.mover-rating{font-family:var(--mono);font-size:9px;padding:2px 6px;border-radius:3px;}
+
+/* Quick link card */
+.quick-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px;}
+.quick-title{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:2px;color:var(--muted);margin-bottom:14px;}
+.quick-link{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);
+    text-decoration:none;transition:color .15s;}
+.quick-link:last-child{border-bottom:none;}
+.quick-link:hover .quick-link-label{color:var(--penny);}
+.quick-link-icon{font-size:16px;width:28px;text-align:center;}
+.quick-link-label{font-size:13px;color:var(--muted2);transition:color .15s;}
+.quick-link-sub{font-size:11px;color:var(--muted);margin-left:auto;}
+
+.empty{text-align:center;padding:32px;color:var(--muted);font-family:var(--mono);font-size:11px;}
+.loading-text{text-align:center;padding:24px;color:var(--muted);font-family:var(--mono);font-size:11px;}
+</style>
+</head>
+<body>
+{% include '_nav.html' %}
+<main>
+    <!-- Risk Banner -->
+    <div class="risk-banner">
+        <span class="risk-icon">⚠️</span>
+        <div class="risk-text">
+            <strong>High Risk Asset Class.</strong> Penny and small-cap stocks are significantly more volatile than large-cap equities. Prices can move 50–100% in a single session. Liquidity is often low. Capital is at risk — you may lose your entire investment.
+        </div>
+        <a href="/disclaimer" class="risk-link">Full disclaimer →</a>
+    </div>
+
+    <!-- Page Header -->
+    <div class="page-hdr">
+        <div class="page-hdr-left">
+            <div class="page-title">Penny &amp; Small Cap</div>
+            <span class="page-badge">PRICE &lt; $5</span>
+        </div>
+        <a href="/penny/screener" class="screener-btn">🔍 Open Screener →</a>
+    </div>
+
+    <!-- Top Grid: SOTD + Hot Movers -->
+    <div class="grid-top">
+        <!-- Penny Stock of the Day -->
+        <div class="sotd-card" id="sotd-card">
+            <div class="loading-text">Loading today's pick…</div>
+        </div>
+
+        <!-- Hot Penny Stocks -->
+        <div class="section-card">
+            <div class="section-hdr">
+                <span class="section-title">Hot Penny Stocks</span>
+                <div class="exchange-tabs" id="exch-tabs">
+                    <button class="exch-tab active" data-exch="NASDAQ" onclick="setExch(this,'NASDAQ')">NASDAQ</button>
+                    <button class="exch-tab" data-exch="NYSE" onclick="setExch(this,'NYSE')">NYSE</button>
+                    <button class="exch-tab" data-exch="OTC" onclick="setExch(this,'OTC')">OTC</button>
+                </div>
+            </div>
+            <div id="hot-body"><div class="loading-text">Loading…</div></div>
+        </div>
+    </div>
+
+    <!-- Quick Links -->
+    <div class="quick-card">
+        <div class="quick-title">Penny Screener Presets</div>
+        <a href="/penny/screener?preset=top_rated" class="quick-link">
+            <span class="quick-link-icon">⭐</span>
+            <span class="quick-link-label">Top Rated Pennies</span>
+            <span class="quick-link-sub">Highest composite score</span>
+        </a>
+        <a href="/penny/screener?preset=unusual_volume" class="quick-link">
+            <span class="quick-link-icon">🔊</span>
+            <span class="quick-link-label">Unusual Volume</span>
+            <span class="quick-link-sub">Relative volume &gt; 3×</span>
+        </a>
+        <a href="/penny/screener?preset=oversold" class="quick-link">
+            <span class="quick-link-icon">📉</span>
+            <span class="quick-link-label">Oversold Bounce</span>
+            <span class="quick-link-sub">RSI &lt; 30, looking for reversal</span>
+        </a>
+        <a href="/penny/screener?preset=under_dollar" class="quick-link">
+            <span class="quick-link-icon">💲</span>
+            <span class="quick-link-label">Under $1 Stocks</span>
+            <span class="quick-link-sub">Sub-dollar opportunities</span>
+        </a>
+        <a href="/penny/screener?preset=momentum" class="quick-link">
+            <span class="quick-link-icon">🚀</span>
+            <span class="quick-link-label">Momentum Plays</span>
+            <span class="quick-link-sub">High momentum score, trending up</span>
+        </a>
+    </div>
+</main>
+
+<script>
+const RATING_COLORS = {
+    STRONG_BUY:'#00ff88',BUY:'#00d4ff',STRONG_HOLD:'#94a3b8',
+    HOLD:'#64748b',WEAK_HOLD:'#ff6b35',SELL:'#ff3b5c',STRONG_SELL:'#ff0000'
+};
+
+function scoreClass(v) {
+    if (v == null) return 's-mid';
+    if (v >= 75) return 's-hi';
+    if (v >= 50) return 's-mid';
+    if (v >= 30) return 's-lo';
+    return 's-bad';
+}
+
+function fmtChg(v) {
+    if (v == null) return '<span class="neu">—</span>';
+    const sign = v >= 0 ? '+' : '';
+    const cls  = v > 0 ? 'up' : v < 0 ? 'dn' : 'neu';
+    return `<span class="${cls}">${sign}${Number(v).toFixed(2)}%</span>`;
+}
+
+function ratingBadge(r) {
+    if (!r) return '';
+    const label = r.replace(/_/g,' ');
+    return `<span class="sotd-rating rating-${r}">${label}</span>`;
+}
+
+async function loadSOTD() {
+    const card = document.getElementById('sotd-card');
+    const d = await fetch('/api/penny/stock-of-day').then(r => r.json()).catch(() => null);
+    if (!d || !d.stock) {
+        card.innerHTML = '<div class="empty">No penny stock of the day available.<br>Check back after the next signal run.</div>';
+        return;
+    }
+    const s = d.stock;
+    const chgCls = (s.change_pct || 0) > 0 ? 'up' : (s.change_pct || 0) < 0 ? 'dn' : 'neu';
+    const sign   = (s.change_pct || 0) >= 0 ? '+' : '';
+
+    const legalHtml = s.risk_label ? `
+        <div class="legal-badge" style="background:${s.risk_color || 'rgba(138,164,191,0.1)'};border:1px solid rgba(138,164,191,0.3);">
+            ⚖️ ${s.risk_label}${s.penalty ? ` (−${s.penalty} pts)` : ''}
+        </div>` : '';
+
+    const whyHtml = (s.why || []).map(w => `<div class="why-item">${w}</div>`).join('');
+
+    const upside = s.target_upside ? `<div class="meta-item"><span class="meta-key">Target Upside</span><span class="meta-val" style="color:#00ff88">+${Number(s.target_upside).toFixed(1)}%</span></div>` : '';
+    const target = s.target_price ? `<div class="meta-item"><span class="meta-key">Target Price</span><span class="meta-val">$${Number(s.target_price).toFixed(2)}</span></div>` : '';
+
+    card.innerHTML = `
+        <div class="sotd-header">
+            <div>
+                <div class="sotd-label">★ Penny Stock of the Day — ${d.date}</div>
+                <div class="sotd-ticker">${s.ticker}</div>
+                <div class="sotd-company">${s.company || ''} · ${s.sector || ''}</div>
+            </div>
+            ${ratingBadge(s.rating)}
+        </div>
+        <div class="sotd-price-row">
+            <span class="sotd-price">$${Number(s.price).toFixed(4)}</span>
+            <span class="sotd-chg ${chgCls}">${sign}${Number(s.change_pct || 0).toFixed(2)}%</span>
+        </div>
+        <div class="scores-grid">
+            <div class="score-item"><div class="score-label">Composite</div><div class="score-val ${scoreClass(s.composite_score)}">${(s.composite_score||0).toFixed(0)}</div></div>
+            <div class="score-item"><div class="score-label">Momentum</div><div class="score-val ${scoreClass(s.momentum_score)}">${(s.momentum_score||0).toFixed(0)}</div></div>
+            <div class="score-item"><div class="score-label">Quality</div><div class="score-val ${scoreClass(s.quality_score)}">${(s.quality_score||0).toFixed(0)}</div></div>
+            <div class="score-item"><div class="score-label">Insider</div><div class="score-val ${scoreClass(s.insider_score)}">${(s.insider_score||0).toFixed(0)}</div></div>
+        </div>
+        <div class="sotd-meta">
+            ${target}${upside}
+            ${s.rsi_14 != null ? `<div class="meta-item"><span class="meta-key">RSI(14)</span><span class="meta-val">${Number(s.rsi_14).toFixed(0)}</span></div>` : ''}
+            ${s.beta != null ? `<div class="meta-item"><span class="meta-key">Beta</span><span class="meta-val">${Number(s.beta).toFixed(2)}</span></div>` : ''}
+            ${s.market_cap ? `<div class="meta-item"><span class="meta-key">Mkt Cap</span><span class="meta-val">${s.market_cap}</span></div>` : ''}
+        </div>
+        ${legalHtml}
+        <div class="why-box">
+            <div class="why-title">Why we're watching this</div>
+            ${whyHtml || '<div class="why-item">Highest composite score in today\'s penny universe.</div>'}
+        </div>
+        <div class="sotd-actions">
+            <a href="/ticker/${s.ticker}" class="sotd-btn sotd-btn-primary">View Full Analysis →</a>
+            <a href="/penny/screener" class="sotd-btn sotd-btn-secondary">Browse All Penny Stocks</a>
+        </div>
+    `;
+}
+
+let _hotData = null;
+let _currentExch = 'NASDAQ';
+
+async function loadHot() {
+    const d = await fetch('/api/penny/hot').then(r => r.json()).catch(() => null);
+    if (!d) {
+        document.getElementById('hot-body').innerHTML = '<div class="empty">Failed to load.</div>';
+        return;
+    }
+    _hotData = d;
+    renderHot(_currentExch);
+
+    // If no exchange data, hide tabs
+    if (d.no_exchange) {
+        document.getElementById('exch-tabs').style.display = 'none';
+        document.querySelector('.section-hdr .section-title').textContent = 'Top Movers Today';
+    }
+}
+
+function setExch(btn, exch) {
+    document.querySelectorAll('.exch-tab').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    _currentExch = exch;
+    renderHot(exch);
+}
+
+function renderHot(exch) {
+    const body = document.getElementById('hot-body');
+    if (!_hotData) return;
+
+    let items = _hotData.no_exchange ? _hotData.movers : (_hotData[exch] || []);
+
+    if (!items || !items.length) {
+        body.innerHTML = `<div class="empty">No ${exch} penny movers today.<br><span style="font-size:10px;color:var(--muted)">Exchange data populates after next scraper run.</span></div>`;
+        return;
+    }
+
+    body.innerHTML = items.map(s => {
+        const chg = s.change_pct;
+        const chgCls = chg > 0 ? 'up' : chg < 0 ? 'dn' : 'neu';
+        const sign = chg >= 0 ? '+' : '';
+        const rc = RATING_COLORS[s.rating] || 'var(--muted)';
+        const ratingHtml = s.rating ? `<span class="mover-rating" style="background:rgba(0,0,0,0.3);color:${rc};border:1px solid ${rc}40">${s.rating.replace(/_/g,' ')}</span>` : '';
+        return `<div class="mover-row" onclick="window.location='/ticker/${s.ticker}'">
+            <span class="mover-ticker">${s.ticker}</span>
+            <span class="mover-company">${s.company || ''}</span>
+            <span class="mover-price">$${Number(s.price).toFixed(s.price < 1 ? 4 : 2)}</span>
+            <span class="mover-chg ${chgCls}">${sign}${Number(chg).toFixed(2)}%</span>
+            ${ratingHtml}
+        </div>`;
+    }).join('');
+}
+
+loadSOTD();
+loadHot();
+</script>
+{% include '_footer.html' %}
+</body>
+</html>

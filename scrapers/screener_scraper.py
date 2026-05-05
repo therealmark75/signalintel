@@ -45,6 +45,7 @@ def _normalise_overview(df):
             "price":      _to_float(row.get("Price")),
             "change_pct": _pct_field(row.get("Change")),
             "volume":     _to_int(row.get("Volume")),
+            "exchange":   row.get("Exchange"),
         }
     return result
 

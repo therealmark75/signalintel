@@ -44,6 +44,27 @@ def _init_contact_table():
     conn.close()
 _init_contact_table()
 
+def _init_penny_tables():
+    conn = get_connection(DATABASE_PATH)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS penny_stock_of_day (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            date TEXT NOT NULL UNIQUE,
+            ticker TEXT NOT NULL,
+            composite_score REAL,
+            rating TEXT,
+            selected_at TEXT DEFAULT (datetime('now'))
+        )
+    """)
+    # Add exchange column to screener_snapshots if missing
+    try:
+        conn.execute("ALTER TABLE screener_snapshots ADD COLUMN exchange TEXT")
+    except Exception:
+        pass
+    conn.commit()
+    conn.close()
+_init_penny_tables()
+
 from config.settings import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
 
 def _send_telegram(msg):
@@ -813,6 +834,9 @@ def api_screener():
     rsi_max   = request.args.get("rsi_max", type=float)
     upside_min = request.args.get("upside_min", type=float)
     short_min  = request.args.get("short_min", type=float)
+    price_max  = request.args.get("price_max", type=float)
+    price_min  = request.args.get("price_min", type=float)
+    relvol_min = request.args.get("relvol_min", type=float)
     sort_col  = request.args.get("sort", "composite_score")
     sort_dir  = request.args.get("dir", "desc").lower()
     page      = max(1, request.args.get("page", type=int, default=1))
@@ -824,6 +848,7 @@ def api_screener():
         "pe_ratio", "rsi_14", "rating", "high_52w_pct", "low_52w_pct",
         "momentum_score", "quality_score", "insider_score",
         "short_interest_pct", "insider_transactions", "beta",
+        "rel_volume", "avg_volume",
     }
     if sort_col not in allowed_sorts:
         sort_col = "composite_score"
@@ -886,13 +911,23 @@ def api_screener():
     if short_min is not None:
         where.append("ss.short_interest_pct >= ?")
         params.append(short_min)
+    if price_max is not None:
+        where.append("ss.price <= ?")
+        params.append(price_max)
+    if price_min is not None:
+        where.append("ss.price >= ?")
+        params.append(price_min)
+    if relvol_min is not None:
+        where.append("ss.rel_volume >= ?")
+        params.append(relvol_min)
 
     where_sql = " AND ".join(where)
     # Map sort column to correct table prefix
     _ss_cols = {"ticker","company","sector","market_cap","price","change_pct","volume",
                 "pe_ratio","rsi_14","high_52w_pct","low_52w_pct",
                 "short_interest_pct","insider_transactions","beta",
-                "eps_growth_this_yr","eps_growth_next_yr"}
+                "eps_growth_this_yr","eps_growth_next_yr",
+                "rel_volume","avg_volume","exchange"}
     _sig_cols = {"rating","composite_score","target_price","target_upside",
                  "momentum_score","quality_score","insider_score"}
     if sort_col in _ss_cols:
@@ -905,7 +940,7 @@ def api_screener():
 
     sig_subq = """
         SELECT ticker, rating, composite_score, target_price, target_upside,
-               momentum_score, quality_score, insider_score,
+               momentum_score, quality_score, insider_score, reversion_score,
                MAX(scored_at) as scored_at
         FROM signal_scores
         WHERE DATE(scored_at) = DATE((SELECT MAX(scored_at) FROM signal_scores))
@@ -927,9 +962,10 @@ def api_screener():
                ss.high_52w_pct, ss.low_52w_pct,
                ss.eps_growth_this_yr, ss.eps_growth_next_yr,
                ss.short_interest_pct, ss.insider_transactions, ss.beta,
+               ss.rel_volume, ss.avg_volume, ss.exchange,
                sig.rating, sig.composite_score,
                sig.momentum_score, sig.quality_score, sig.insider_score,
-               sig.target_price, sig.target_upside
+               sig.reversion_score, sig.target_price, sig.target_upside
         FROM ({latest_ss}) ss
         LEFT JOIN ({sig_subq}) sig ON ss.ticker = sig.ticker
         WHERE {where_sql}
@@ -1484,6 +1520,168 @@ def ticker_news(ticker):
     articles = [dict(r) for r in cur.fetchall()]
     conn.close()
     return render_template('ticker_news.html', ticker=ticker, articles=articles)
+
+# ── Penny & Small Cap ─────────────────────────────────
+
+def _penny_why(stock):
+    reasons = []
+    ms  = stock.get("momentum_score") or 0
+    qs  = stock.get("quality_score")  or 0
+    ins = stock.get("insider_score")  or 0
+    rev = stock.get("reversion_score") or 0
+    rsi = stock.get("rsi_14")
+    upside = stock.get("target_upside")
+    cs  = stock.get("composite_score") or 0
+
+    if ms >= 75:
+        reasons.append(f"Strong price momentum (score {ms:.0f}/100) — trending above key moving averages with sustained upward pressure.")
+    elif ms >= 55:
+        reasons.append(f"Building momentum (score {ms:.0f}/100) — early signs of upward trend emerging.")
+    if ins >= 70:
+        reasons.append(f"Significant insider buying activity (score {ins:.0f}/100) — company insiders actively increasing their stake, the strongest conviction signal available.")
+    if qs >= 65:
+        reasons.append(f"Solid fundamentals for a penny stock (quality score {qs:.0f}/100) — above-average business metrics relative to its peer group.")
+    if rsi and rsi < 33:
+        reasons.append(f"Oversold RSI at {rsi:.0f} — potential mean reversion bounce back toward the mean.")
+    if upside and upside > 25:
+        reasons.append(f"Model target price implies {upside:.0f}% potential upside from current levels.")
+    if not reasons:
+        reasons.append(f"Highest composite signal score ({cs:.0f}/100) among penny stocks in today's scan — no single dominant driver but the strongest overall reading in this universe.")
+    return reasons
+
+
+def _select_penny_stock_of_day():
+    today = datetime.utcnow().date().isoformat()
+    conn = get_connection(DATABASE_PATH)
+    cur  = conn.cursor()
+
+    # Return today's pick if already computed
+    cur.execute("SELECT ticker FROM penny_stock_of_day WHERE date = ?", (today,))
+    row = cur.fetchone()
+    if row:
+        conn.close()
+        return row[0]
+
+    # Select best penny stock — prefer STRONG_BUY/BUY, then highest composite
+    cur.execute("""
+        SELECT ss.ticker, sig.composite_score, sig.rating
+        FROM screener_snapshots ss
+        JOIN signal_scores sig ON ss.ticker = sig.ticker
+        WHERE ss.scraped_at = (SELECT MAX(scraped_at) FROM screener_snapshots)
+          AND sig.scored_at = (SELECT MAX(scored_at) FROM signal_scores)
+          AND ss.price > 0 AND ss.price < 5
+          AND sig.composite_score IS NOT NULL
+        ORDER BY
+            CASE sig.rating
+                WHEN 'STRONG_BUY' THEN 1
+                WHEN 'BUY'        THEN 2
+                WHEN 'STRONG_HOLD'THEN 3
+                ELSE 4
+            END ASC,
+            sig.composite_score DESC
+        LIMIT 1
+    """)
+    pick = cur.fetchone()
+    if pick:
+        cur.execute(
+            "INSERT OR REPLACE INTO penny_stock_of_day (date, ticker, composite_score, rating) VALUES (?,?,?,?)",
+            (today, pick[0], pick[1], pick[2])
+        )
+        conn.commit()
+        ticker = pick[0]
+    else:
+        ticker = None
+    conn.close()
+    return ticker
+
+
+@app.route("/penny")
+@login_required
+def penny():
+    user = current_user()
+    return render_template("penny.html", user=user)
+
+
+@app.route("/penny/screener")
+@login_required
+def penny_screener():
+    user = current_user()
+    return render_template("penny_screener.html", user=user)
+
+
+@app.route("/api/penny/stock-of-day")
+@login_required
+def api_penny_stock_of_day():
+    ticker = _select_penny_stock_of_day()
+    if not ticker:
+        return jsonify({"stock": None})
+
+    rows = db_query("""
+        SELECT ss.ticker, ss.company, ss.sector, ss.industry,
+               ss.price, ss.change_pct, ss.volume, ss.rsi_14,
+               ss.high_52w_pct, ss.low_52w_pct, ss.rel_volume, ss.avg_volume,
+               ss.market_cap, ss.beta,
+               sig.rating, sig.composite_score,
+               sig.momentum_score, sig.quality_score,
+               sig.insider_score, sig.reversion_score,
+               sig.target_price, sig.target_upside,
+               lr.risk_label, lr.risk_color, lr.penalty
+        FROM screener_snapshots ss
+        JOIN signal_scores sig ON ss.ticker = sig.ticker
+        LEFT JOIN legal_risk lr ON ss.ticker = lr.ticker
+        WHERE ss.ticker = ?
+          AND ss.scraped_at = (SELECT MAX(scraped_at) FROM screener_snapshots)
+          AND sig.scored_at = (SELECT MAX(scored_at) FROM signal_scores)
+        LIMIT 1
+    """, (ticker,))
+
+    if not rows:
+        return jsonify({"stock": None})
+
+    stock = rows[0]
+    stock["why"] = _penny_why(stock)
+    return jsonify({"stock": stock, "date": datetime.utcnow().date().isoformat()})
+
+
+@app.route("/api/penny/hot")
+@login_required
+def api_penny_hot():
+    exchanges = ["NASDAQ", "NYSE", "OTC"]
+    result = {}
+    for exch in exchanges:
+        rows = db_query("""
+            SELECT ss.ticker, ss.company, ss.price, ss.change_pct, ss.volume,
+                   sig.rating, sig.composite_score
+            FROM screener_snapshots ss
+            LEFT JOIN signal_scores sig ON ss.ticker = sig.ticker
+            WHERE ss.scraped_at = (SELECT MAX(scraped_at) FROM screener_snapshots)
+              AND (sig.scored_at = (SELECT MAX(scored_at) FROM signal_scores) OR sig.scored_at IS NULL)
+              AND ss.price > 0 AND ss.price < 5
+              AND ss.exchange = ?
+              AND ss.change_pct IS NOT NULL
+            ORDER BY ss.change_pct DESC
+            LIMIT 5
+        """, (exch,))
+        result[exch] = rows
+
+    # Fallback: if no exchange data, return top movers overall
+    has_data = any(result[e] for e in exchanges)
+    if not has_data:
+        top = db_query("""
+            SELECT ss.ticker, ss.company, ss.price, ss.change_pct, ss.volume,
+                   sig.rating, sig.composite_score
+            FROM screener_snapshots ss
+            LEFT JOIN signal_scores sig ON ss.ticker = sig.ticker
+            WHERE ss.scraped_at = (SELECT MAX(scraped_at) FROM screener_snapshots)
+              AND ss.price > 0 AND ss.price < 5
+              AND ss.change_pct IS NOT NULL
+            ORDER BY ss.change_pct DESC
+            LIMIT 15
+        """)
+        return jsonify({"no_exchange": True, "movers": top})
+
+    return jsonify(result)
+
 
 # ── Static / public pages ─────────────────────────────
 
