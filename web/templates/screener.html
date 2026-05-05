@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SignalIntel — Screener</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#080c14;--surface:#0d1520;--surface2:#111d2e;--border:#1a2d45;
+    --accent:#00d4ff;--accent2:#00ff88;--warning:#ff9500;--danger:#ff3b5c;
+    --text:#f0f6ff;--muted:#8aa4bf;--muted2:#c2d4e8;
+    --mono:'Space Mono',monospace;--sans:'DM Sans',sans-serif;}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14px;min-height:100vh;}
+header{position:sticky;top:0;z-index:100;background:rgba(8,12,20,0.95);backdrop-filter:blur(12px);
+    border-bottom:1px solid var(--border);padding:0 24px;display:flex;align-items:center;
+    justify-content:space-between;height:56px;}
+.logo{font-family:var(--mono);font-size:15px;color:var(--accent);letter-spacing:2px;text-decoration:none;}
+.logo span{color:var(--accent2);}
+.header-right{display:flex;align-items:center;gap:12px;font-family:var(--mono);font-size:11px;}
+.header-right a{color:var(--muted2);text-decoration:none;}
+.header-right a:hover{color:var(--accent);}
+.header-right a.active{color:var(--accent);}
+.layout{display:flex;min-height:calc(100vh - 56px);}
+
+/* Sidebar */
+.sidebar{width:240px;flex-shrink:0;border-right:1px solid var(--border);padding:16px;
+    background:var(--surface);overflow-y:auto;max-height:calc(100vh - 56px);position:sticky;top:56px;}
+.filter-section{margin-bottom:20px;}
+.filter-label{font-family:var(--mono);font-size:9px;text-transform:uppercase;letter-spacing:1px;
+    color:var(--muted);margin-bottom:8px;display:block;}
+select,input[type=number],input[type=range]{width:100%;background:var(--surface2);
+    border:1px solid var(--border);border-radius:4px;padding:7px 10px;color:var(--text);
+    font-family:var(--mono);font-size:11px;outline:none;}
+select:focus,input[type=number]:focus{border-color:var(--accent);}
+.range-row{display:flex;gap:6px;align-items:center;}
+.range-row input{width:80px;flex-shrink:0;}
+.range-sep{color:var(--muted);font-size:11px;}
+.rating-checks{display:flex;flex-direction:column;gap:5px;}
+.rating-check{display:flex;align-items:center;gap:7px;cursor:pointer;}
+.rating-check input[type=checkbox]{accent-color:var(--accent);cursor:pointer;}
+.rating-check label{font-family:var(--mono);font-size:10px;cursor:pointer;}
+.mcap-btns{display:flex;gap:4px;flex-wrap:wrap;}
+.mcap-btn{padding:4px 8px;border-radius:3px;border:1px solid var(--border);background:transparent;
+    color:var(--muted);font-family:var(--mono);font-size:9px;cursor:pointer;transition:all 0.15s;}
+.mcap-btn.active{border-color:var(--accent);color:var(--accent);background:rgba(0,212,255,0.08);}
+.btn-apply{width:100%;padding:8px;border-radius:4px;border:none;background:var(--accent);
+    color:var(--bg);font-family:var(--mono);font-size:11px;font-weight:700;cursor:pointer;
+    letter-spacing:1px;margin-top:4px;transition:opacity 0.15s;}
+.btn-apply:hover{opacity:0.85;}
+.btn-reset{width:100%;padding:6px;border-radius:4px;border:1px solid var(--border);background:transparent;
+    color:var(--muted);font-family:var(--mono);font-size:10px;cursor:pointer;margin-top:6px;transition:all 0.15s;}
+.btn-reset:hover{border-color:var(--danger);color:var(--danger);}
+
+/* Main content */
+.main{flex:1;padding:20px;overflow:hidden;}
+.toolbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px;}
+.toolbar-left{display:flex;align-items:center;gap:12px;}
+.result-count{font-family:var(--mono);font-size:12px;color:var(--muted);}
+.btn-csv{padding:6px 14px;border-radius:4px;border:1px solid var(--border);background:transparent;
+    color:var(--muted2);font-family:var(--mono);font-size:10px;cursor:pointer;transition:all 0.15s;}
+.btn-csv:hover{border-color:var(--accent2);color:var(--accent2);}
+
+/* Table */
+.table-wrap{overflow-x:auto;border-radius:8px;border:1px solid var(--border);background:var(--surface);}
+table{width:100%;border-collapse:collapse;min-width:1200px;}
+thead{position:sticky;top:0;z-index:10;}
+th{background:var(--surface2);padding:9px 10px;text-align:left;font-family:var(--mono);font-size:9px;
+    text-transform:uppercase;letter-spacing:1px;color:var(--muted);border-bottom:1px solid var(--border);
+    white-space:nowrap;cursor:pointer;user-select:none;}
+th:hover{color:var(--accent);}
+th.sorted{color:var(--accent);}
+th .sort-arrow{margin-left:3px;opacity:0.5;font-size:9px;}
+th.sorted .sort-arrow{opacity:1;}
+td{padding:8px 10px;border-bottom:1px solid rgba(26,45,69,0.4);font-size:12px;white-space:nowrap;}
+tr:hover td{background:rgba(0,212,255,0.03);cursor:pointer;}
+.ticker-cell{font-family:var(--mono);font-weight:700;color:var(--accent);font-size:12px;}
+.company-cell{color:var(--muted2);max-width:140px;overflow:hidden;text-overflow:ellipsis;}
+.mono{font-family:var(--mono);font-size:11px;}
+.up{color:#00ff88;}.down{color:#ff3b5c;}.neu{color:var(--muted);}
+.rating-badge{font-family:var(--mono);font-size:9px;font-weight:700;padding:2px 6px;border-radius:3px;white-space:nowrap;}
+.score-cell{font-family:var(--mono);font-size:12px;}
+
+/* Pagination */
+.pagination{display:flex;align-items:center;gap:6px;margin-top:14px;justify-content:flex-end;}
+.page-btn{padding:4px 10px;border-radius:3px;border:1px solid var(--border);background:transparent;
+    color:var(--muted);font-family:var(--mono);font-size:10px;cursor:pointer;transition:all 0.15s;}
+.page-btn:hover:not(:disabled){border-color:var(--accent);color:var(--accent);}
+.page-btn.active{background:rgba(0,212,255,0.1);border-color:var(--accent);color:var(--accent);}
+.page-btn:disabled{opacity:0.3;cursor:default;}
+.page-info{font-family:var(--mono);font-size:10px;color:var(--muted);}
+
+.loading-row td{text-align:center;padding:40px;color:var(--muted);font-family:var(--mono);}
+</style>
+</head>
+<body>
+<header>
+    <a href="/" class="logo">SIGNAL<span>INTEL</span></a>
+    {% include '_search.html' %}
+    <div class="header-right">
+        <a href="/">Dashboard</a>
+        <a href="/screener" class="active">Screener</a>
+        <a href="/earnings">Earnings</a>
+        <a href="/dividends">Dividends</a>
+        <a href="/watchlist">Watchlist</a>
+        <a href="/backtest">Backtest</a>
+        <a href="/logout">Sign out</a>
+    </div>
+</header>
+
+<div class="layout">
+<!-- ── Sidebar filters ─────────────────────────────── -->
+<aside class="sidebar">
+
+    <div class="filter-section">
+        <span class="filter-label">Sector</span>
+        <select id="f-sector">
+            <option value="">All Sectors</option>
+            {% for s in sectors %}
+            <option value="{{ s }}">{{ s }}</option>
+            {% endfor %}
+        </select>
+    </div>
+
+    <div class="filter-section">
+        <span class="filter-label">Rating</span>
+        <div class="rating-checks" id="f-ratings">
+            {% for r, c in [('STRONG_BUY','#00ff88'),('BUY','#00d4ff'),('STRONG_HOLD','#94a3b8'),
+                            ('HOLD','#64748b'),('WEAK_HOLD','#ff9500'),('SELL','#ff3b5c'),('STRONG_SELL','#ff3b5c')] %}
+            <label class="rating-check">
+                <input type="checkbox" value="{{ r }}" checked>
+                <span style="color:{{ c }};font-family:var(--mono);font-size:10px">{{ r.replace('_',' ') }}</span>
+            </label>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="filter-section">
+        <span class="filter-label">Composite Score</span>
+        <div class="range-row">
+            <input type="number" id="f-score-min" value="0" min="0" max="100" step="1" placeholder="0">
+            <span class="range-sep">–</span>
+            <input type="number" id="f-score-max" value="100" min="0" max="100" step="1" placeholder="100">
+        </div>
+    </div>
+
+    <div class="filter-section">
+        <span class="filter-label">Market Cap</span>
+        <div class="mcap-btns">
+            <button class="mcap-btn active" data-mcap="any">Any</button>
+            <button class="mcap-btn" data-mcap="small">Small &lt;$2B</button>
+            <button class="mcap-btn" data-mcap="mid">Mid $2-10B</button>
+            <button class="mcap-btn" data-mcap="large">Large &gt;$10B</button>
+        </div>
+    </div>
+
+    <div class="filter-section">
+        <span class="filter-label">P/E Ratio</span>
+        <div class="range-row">
+            <input type="number" id="f-pe-min" min="0" placeholder="Min">
+            <span class="range-sep">–</span>
+            <input type="number" id="f-pe-max" placeholder="Max">
+        </div>
+    </div>
+
+    <div class="filter-section">
+        <span class="filter-label">RSI (14)</span>
+        <div class="range-row">
+            <input type="number" id="f-rsi-min" min="0" max="100" placeholder="0">
+            <span class="range-sep">–</span>
+            <input type="number" id="f-rsi-max" min="0" max="100" placeholder="100">
+        </div>
+    </div>
+
+    <div class="filter-section">
+        <span class="filter-label">Min Upside % to Target</span>
+        <input type="number" id="f-upside-min" placeholder="e.g. 10" step="1">
+    </div>
+
+    <button class="btn-apply" onclick="applyFilters()">Apply Filters</button>
+    <button class="btn-reset" onclick="resetFilters()">Reset</button>
+</aside>
+
+<!-- ── Main table ─────────────────────────────────── -->
+<div class="main">
+    <div class="toolbar">
+        <div class="toolbar-left">
+            <span class="result-count" id="result-count">Loading...</span>
+        </div>
+        <button class="btn-csv" onclick="exportCSV()">⬇ Export CSV</button>
+    </div>
+
+    <div class="table-wrap">
+        <table id="screener-table">
+            <thead>
+                <tr>
+                    <th onclick="setSort('ticker')">TICKER<span class="sort-arrow" id="sa-ticker"></span></th>
+                    <th onclick="setSort('company')">COMPANY<span class="sort-arrow" id="sa-company"></span></th>
+                    <th onclick="setSort('sector')">SECTOR<span class="sort-arrow" id="sa-sector"></span></th>
+                    <th onclick="setSort('market_cap')">MKT CAP<span class="sort-arrow" id="sa-market_cap"></span></th>
+                    <th onclick="setSort('rating')">RATING<span class="sort-arrow" id="sa-rating"></span></th>
+                    <th onclick="setSort('composite_score')">SCORE<span class="sort-arrow" id="sa-composite_score"></span></th>
+                    <th onclick="setSort('target_price')">TARGET<span class="sort-arrow" id="sa-target_price"></span></th>
+                    <th onclick="setSort('target_upside')">UPSIDE<span class="sort-arrow" id="sa-target_upside"></span></th>
+                    <th onclick="setSort('price')">PRICE<span class="sort-arrow" id="sa-price"></span></th>
+                    <th onclick="setSort('change_pct')">CHG%<span class="sort-arrow" id="sa-change_pct"></span></th>
+                    <th onclick="setSort('volume')">VOLUME<span class="sort-arrow" id="sa-volume"></span></th>
+                    <th onclick="setSort('pe_ratio')">P/E<span class="sort-arrow" id="sa-pe_ratio"></span></th>
+                    <th onclick="setSort('rsi_14')">RSI<span class="sort-arrow" id="sa-rsi_14"></span></th>
+                    <th onclick="setSort('high_52w_pct')">52W HIGH<span class="sort-arrow" id="sa-high_52w_pct"></span></th>
+                    <th onclick="setSort('low_52w_pct')">52W LOW<span class="sort-arrow" id="sa-low_52w_pct"></span></th>
+                </tr>
+            </thead>
+            <tbody id="screener-tbody">
+                <tr class="loading-row"><td colspan="15">Loading screener data...</td></tr>
+            </tbody>
+        </table>
+    </div>
+    <div class="pagination" id="pagination"></div>
+</div>
+</div>
+
+<script>
+const RATING_COLORS = {
+    STRONG_BUY:'#00ff88', BUY:'#00d4ff', STRONG_HOLD:'#94a3b8',
+    HOLD:'#64748b', WEAK_HOLD:'#ff9500', SELL:'#ff3b5c', STRONG_SELL:'#ff3b5c',
+};
+
+let state = {
+    sort: 'composite_score', dir: 'desc', page: 1, per_page: 50,
+    sector: '', ratings: [], score_min: 0, score_max: 100,
+    mcap: 'any', pe_min: '', pe_max: '', rsi_min: '', rsi_max: '',
+    upside_min: '',
+};
+let totalPages = 1;
+
+function fmt(v, d=1){ return v == null ? '-' : parseFloat(v).toFixed(d); }
+function fmtMC(v){
+    if(!v) return '-';
+    if(v>=1e12) return '$'+(v/1e12).toFixed(1)+'T';
+    if(v>=1e9)  return '$'+(v/1e9).toFixed(1)+'B';
+    if(v>=1e6)  return '$'+(v/1e6).toFixed(1)+'M';
+    return '$'+v.toLocaleString();
+}
+function fmtVol(v){
+    if(!v) return '-';
+    if(v>=1e6) return (v/1e6).toFixed(1)+'M';
+    if(v>=1e3) return (v/1e3).toFixed(0)+'K';
+    return v;
+}
+
+function buildParams() {
+    const p = new URLSearchParams();
+    if(state.sector)    p.set('sector', state.sector);
+    if(state.ratings.length) p.set('rating', state.ratings.join(','));
+    if(state.score_min) p.set('score_min', state.score_min);
+    if(state.score_max < 100) p.set('score_max', state.score_max);
+    if(state.mcap !== 'any') p.set('mcap', state.mcap);
+    if(state.pe_min !== '') p.set('pe_min', state.pe_min);
+    if(state.pe_max !== '') p.set('pe_max', state.pe_max);
+    if(state.rsi_min !== '') p.set('rsi_min', state.rsi_min);
+    if(state.rsi_max !== '') p.set('rsi_max', state.rsi_max);
+    if(state.upside_min !== '') p.set('upside_min', state.upside_min);
+    p.set('sort', state.sort);
+    p.set('dir', state.dir);
+    p.set('page', state.page);
+    p.set('per_page', state.per_page);
+    return p;
+}
+
+async function load() {
+    const tbody = document.getElementById('screener-tbody');
+    tbody.innerHTML = '<tr class="loading-row"><td colspan="15">Loading...</td></tr>';
+    updateSortIndicators();
+
+    const data = await fetch('/api/screener?' + buildParams()).then(r => r.json()).catch(() => null);
+    if (!data) {
+        tbody.innerHTML = '<tr class="loading-row"><td colspan="15">Error loading data.</td></tr>';
+        return;
+    }
+
+    totalPages = data.pages || 1;
+    document.getElementById('result-count').textContent =
+        `${data.total.toLocaleString()} results · page ${data.page} of ${totalPages}`;
+
+    if (!data.rows.length) {
+        tbody.innerHTML = '<tr class="loading-row"><td colspan="15">No results match the current filters.</td></tr>';
+        renderPagination();
+        return;
+    }
+
+    tbody.innerHTML = data.rows.map(r => {
+        const rc  = RATING_COLORS[r.rating] || '#8aa4bf';
+        const chg = r.change_pct || 0;
+        const chgCls = chg > 0 ? 'up' : chg < 0 ? 'down' : 'neu';
+        const upside = r.target_upside;
+        const uCls  = upside > 0 ? 'up' : upside < 0 ? 'down' : 'neu';
+        const scoreColor = r.composite_score >= 70 ? '#00ff88' : r.composite_score >= 50 ? '#00d4ff' : '#8aa4bf';
+        return `<tr onclick="window.location='/ticker/${r.ticker}'">
+            <td class="ticker-cell">${r.ticker}</td>
+            <td class="company-cell">${r.company || '-'}</td>
+            <td class="mono" style="color:var(--muted);font-size:11px">${r.sector || '-'}</td>
+            <td class="mono">${fmtMC(r.market_cap)}</td>
+            <td>${r.rating ? `<span class="rating-badge" style="background:${rc}22;color:${rc}">${r.rating.replace(/_/g,' ')}</span>` : '-'}</td>
+            <td class="score-cell" style="color:${scoreColor}">${fmt(r.composite_score,1)}</td>
+            <td class="mono">${r.target_price ? '$'+fmt(r.target_price,2) : '-'}</td>
+            <td class="mono ${uCls}">${upside != null ? (upside > 0 ? '+' : '') + fmt(upside,1) + '%' : '-'}</td>
+            <td class="mono">$${fmt(r.price,2)}</td>
+            <td class="mono ${chgCls}">${chg >= 0 ? '+' : ''}${fmt(chg,2)}%</td>
+            <td class="mono" style="color:var(--muted)">${fmtVol(r.volume)}</td>
+            <td class="mono">${fmt(r.pe_ratio,1)}</td>
+            <td class="mono" style="color:${r.rsi_14 > 70 ? 'var(--danger)' : r.rsi_14 < 30 ? 'var(--accent2)' : 'inherit'}">${fmt(r.rsi_14,1)}</td>
+            <td class="mono" style="color:var(--muted)">${r.high_52w_pct != null ? (r.high_52w_pct > 0 ? '+' : '') + fmt(r.high_52w_pct,1) + '%' : '-'}</td>
+            <td class="mono" style="color:var(--muted2)">${r.low_52w_pct != null ? '+' + fmt(r.low_52w_pct,1) + '%' : '-'}</td>
+        </tr>`;
+    }).join('');
+
+    renderPagination();
+}
+
+function renderPagination() {
+    const div = document.getElementById('pagination');
+    if (totalPages <= 1) { div.innerHTML = ''; return; }
+    const p = state.page;
+    let html = `<button class="page-btn" onclick="goPage(${p-1})" ${p<=1?'disabled':''}>← Prev</button>`;
+    const start = Math.max(1, p - 2), end = Math.min(totalPages, p + 2);
+    if (start > 1) html += `<button class="page-btn" onclick="goPage(1)">1</button>${start > 2 ? '<span class="page-info">…</span>' : ''}`;
+    for (let i = start; i <= end; i++) {
+        html += `<button class="page-btn ${i===p?'active':''}" onclick="goPage(${i})">${i}</button>`;
+    }
+    if (end < totalPages) html += `${end < totalPages-1 ? '<span class="page-info">…</span>' : ''}<button class="page-btn" onclick="goPage(${totalPages})">${totalPages}</button>`;
+    html += `<button class="page-btn" onclick="goPage(${p+1})" ${p>=totalPages?'disabled':''}>Next →</button>`;
+    div.innerHTML = html;
+}
+
+function goPage(p) {
+    if (p < 1 || p > totalPages) return;
+    state.page = p;
+    load();
+    window.scrollTo(0, 0);
+}
+
+function setSort(col) {
+    if (state.sort === col) { state.dir = state.dir === 'desc' ? 'asc' : 'desc'; }
+    else { state.sort = col; state.dir = 'desc'; }
+    state.page = 1;
+    load();
+}
+
+function updateSortIndicators() {
+    document.querySelectorAll('[id^="sa-"]').forEach(el => el.textContent = '');
+    const el = document.getElementById('sa-' + state.sort);
+    if (el) el.textContent = state.dir === 'desc' ? ' ↓' : ' ↑';
+    document.querySelectorAll('th').forEach(th => th.classList.remove('sorted'));
+    document.querySelectorAll('th').forEach(th => {
+        if (th.onclick && th.onclick.toString().includes("'" + state.sort + "'")) th.classList.add('sorted');
+    });
+}
+
+function applyFilters() {
+    state.sector    = document.getElementById('f-sector').value;
+    state.ratings   = [...document.querySelectorAll('#f-ratings input:checked')].map(i => i.value);
+    state.score_min = parseFloat(document.getElementById('f-score-min').value) || 0;
+    state.score_max = parseFloat(document.getElementById('f-score-max').value) || 100;
+    state.mcap      = document.querySelector('.mcap-btn.active')?.dataset.mcap || 'any';
+    state.pe_min    = document.getElementById('f-pe-min').value;
+    state.pe_max    = document.getElementById('f-pe-max').value;
+    state.rsi_min   = document.getElementById('f-rsi-min').value;
+    state.rsi_max   = document.getElementById('f-rsi-max').value;
+    state.upside_min = document.getElementById('f-upside-min').value;
+    state.page = 1;
+    load();
+}
+
+function resetFilters() {
+    document.getElementById('f-sector').value = '';
+    document.querySelectorAll('#f-ratings input').forEach(i => i.checked = true);
+    document.getElementById('f-score-min').value = 0;
+    document.getElementById('f-score-max').value = 100;
+    document.querySelectorAll('.mcap-btn').forEach(b => b.classList.toggle('active', b.dataset.mcap==='any'));
+    ['f-pe-min','f-pe-max','f-rsi-min','f-rsi-max','f-upside-min'].forEach(id => {
+        document.getElementById(id).value = '';
+    });
+    Object.assign(state, {
+        sector:'', ratings:[], score_min:0, score_max:100, mcap:'any',
+        pe_min:'', pe_max:'', rsi_min:'', rsi_max:'', upside_min:'', page:1,
+    });
+    load();
+}
+
+// Market cap button toggle
+document.querySelectorAll('.mcap-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('.mcap-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+    });
+});
+
+function exportCSV() {
+    const params = buildParams();
+    params.set('per_page', '5000');
+    params.set('page', '1');
+    fetch('/api/screener?' + params).then(r => r.json()).then(data => {
+        if (!data.rows?.length) return alert('No data to export.');
+        const cols = ['ticker','company','sector','market_cap','rating','composite_score',
+                      'target_price','target_upside','price','change_pct','volume',
+                      'pe_ratio','rsi_14','high_52w_pct','low_52w_pct'];
+        const lines = [cols.join(',')];
+        data.rows.forEach(r => {
+            lines.push(cols.map(c => {
+                const v = r[c];
+                if (v == null) return '';
+                if (typeof v === 'string' && v.includes(',')) return '"' + v + '"';
+                return v;
+            }).join(','));
+        });
+        const blob = new Blob([lines.join('\n')], {type:'text/csv'});
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'signalintel_screener.csv';
+        a.click();
+    });
+}
+
+// Initial state: read all checked ratings
+state.ratings = [...document.querySelectorAll('#f-ratings input:checked')].map(i => i.value);
+load();
+</script>
+</body>
+</html>

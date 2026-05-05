@@ -386,6 +386,150 @@ def api_search():
     return jsonify({"results": [dict(r) for r in rows]})
 
 
+@app.route("/screener")
+@login_required
+def screener():
+    user = current_user()
+    sectors = db_query("""
+        SELECT DISTINCT sector FROM screener_snapshots
+        WHERE sector IS NOT NULL ORDER BY sector
+    """)
+    return render_template("screener.html", user=user,
+                           sectors=[r["sector"] for r in sectors])
+
+
+@app.route("/api/screener")
+@login_required
+def api_screener():
+    """
+    Filterable screener endpoint. All params are optional query strings:
+    sector, rating (comma-sep), score_min, score_max,
+    mcap (any/small/mid/large), pe_min, pe_max,
+    rsi_min, rsi_max, upside_min,
+    sort (column), dir (asc/desc), page, per_page
+    """
+    sector    = request.args.get("sector", "")
+    ratings   = [r for r in request.args.get("rating", "").split(",") if r]
+    score_min = request.args.get("score_min", type=float, default=0)
+    score_max = request.args.get("score_max", type=float, default=100)
+    mcap      = request.args.get("mcap", "any")
+    pe_min    = request.args.get("pe_min", type=float)
+    pe_max    = request.args.get("pe_max", type=float)
+    rsi_min   = request.args.get("rsi_min", type=float)
+    rsi_max   = request.args.get("rsi_max", type=float)
+    upside_min = request.args.get("upside_min", type=float)
+    sort_col  = request.args.get("sort", "composite_score")
+    sort_dir  = request.args.get("dir", "desc").lower()
+    page      = max(1, request.args.get("page", type=int, default=1))
+    per_page  = min(200, request.args.get("per_page", type=int, default=50))
+
+    # Whitelist sortable columns to prevent SQL injection
+    allowed_sorts = {
+        "ticker", "company", "sector", "market_cap", "composite_score",
+        "target_price", "target_upside", "price", "change_pct", "volume",
+        "pe_ratio", "rsi_14", "rating", "high_52w_pct", "low_52w_pct",
+        "momentum_score", "quality_score", "insider_score",
+    }
+    if sort_col not in allowed_sorts:
+        sort_col = "composite_score"
+    if sort_dir not in ("asc", "desc"):
+        sort_dir = "desc"
+
+    where = ["ss.scraped_at >= datetime('now','-2 days')"]
+    params = []
+
+    if sector:
+        where.append("ss.sector = ?")
+        params.append(sector)
+    if ratings:
+        placeholders = ",".join("?" * len(ratings))
+        where.append(f"sig.rating IN ({placeholders})")
+        params.extend(ratings)
+    if score_min > 0:
+        where.append("sig.composite_score >= ?")
+        params.append(score_min)
+    if score_max < 100:
+        where.append("sig.composite_score <= ?")
+        params.append(score_max)
+    if mcap == "small":
+        where.append("ss.market_cap < 2000000000")
+    elif mcap == "mid":
+        where.append("ss.market_cap >= 2000000000 AND ss.market_cap < 10000000000")
+    elif mcap == "large":
+        where.append("ss.market_cap >= 10000000000")
+    if pe_min is not None:
+        where.append("ss.pe_ratio >= ?")
+        params.append(pe_min)
+    if pe_max is not None:
+        where.append("ss.pe_ratio <= ?")
+        params.append(pe_max)
+    if rsi_min is not None:
+        where.append("ss.rsi_14 >= ?")
+        params.append(rsi_min)
+    if rsi_max is not None:
+        where.append("ss.rsi_14 <= ?")
+        params.append(rsi_max)
+    if upside_min is not None:
+        where.append("sig.target_upside >= ?")
+        params.append(upside_min)
+
+    where_sql = " AND ".join(where)
+    order_sql = f"{sort_col} {sort_dir.upper()} NULLS LAST"
+    offset    = (page - 1) * per_page
+
+    # Count query
+    count_rows = db_query(f"""
+        SELECT COUNT(*) as total
+        FROM (
+            SELECT ss.ticker
+            FROM screener_snapshots ss
+            LEFT JOIN (
+                SELECT ticker, rating, composite_score, target_price, target_upside,
+                       momentum_score, quality_score, insider_score,
+                       MAX(scored_at) as scored_at
+                FROM signal_scores
+                WHERE DATE(scored_at) = DATE((SELECT MAX(scored_at) FROM signal_scores))
+                GROUP BY ticker
+            ) sig ON ss.ticker = sig.ticker
+            WHERE {where_sql}
+            GROUP BY ss.ticker
+        )
+    """, params)
+    total = count_rows[0]["total"] if count_rows else 0
+
+    rows = db_query(f"""
+        SELECT ss.ticker, ss.company, ss.sector,
+               ss.market_cap, ss.price, ss.change_pct, ss.volume,
+               ss.pe_ratio, ss.rsi_14,
+               ss.high_52w_pct, ss.low_52w_pct,
+               ss.eps_growth_this_yr, ss.eps_growth_next_yr,
+               sig.rating, sig.composite_score,
+               sig.momentum_score, sig.quality_score, sig.insider_score,
+               sig.target_price, sig.target_upside
+        FROM screener_snapshots ss
+        LEFT JOIN (
+            SELECT ticker, rating, composite_score, target_price, target_upside,
+                   momentum_score, quality_score, insider_score,
+                   MAX(scored_at) as scored_at
+            FROM signal_scores
+            WHERE DATE(scored_at) = DATE((SELECT MAX(scored_at) FROM signal_scores))
+            GROUP BY ticker
+        ) sig ON ss.ticker = sig.ticker
+        WHERE {where_sql}
+        GROUP BY ss.ticker
+        ORDER BY {order_sql}
+        LIMIT ? OFFSET ?
+    """, params + [per_page, offset])
+
+    return jsonify({
+        "rows":     rows,
+        "total":    total,
+        "page":     page,
+        "per_page": per_page,
+        "pages":    max(1, (total + per_page - 1) // per_page),
+    })
+
+
 @app.route("/api/ticker/<ticker>")
 @login_required
 def api_ticker(ticker):
