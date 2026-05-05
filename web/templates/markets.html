@@ -135,20 +135,20 @@ h1{font-family:var(--mono);font-size:14px;text-transform:uppercase;letter-spacin
 <script>
 // TradingView symbol map
 const TV_SYMS = {
-    // Indices
-    '^GSPC':'INDEX:SPX',  '^IXIC':'INDEX:NDX',   '^DJI':'INDEX:DJI',
-    '^RUT':'INDEX:RUT',   '^VIX':'INDEX:VIX',
-    '^FTSE':'INDEX:UKX',  '^GDAXI':'INDEX:DEU40', '^N225':'INDEX:NKY',
-    '^HSI':'INDEX:HSI',   '^KS11':'INDEX:KOSPI',  '^AXJO':'INDEX:AS51',
-    // Commodities
-    'GC=F':'OANDA:XAUUSD', 'SI=F':'OANDA:XAGUSD',
-    'CL=F':'NYMEX:CL1!',   'BZ=F':'ICEUS:BRN1!',
-    'NG=F':'NYMEX:NG1!',   'HG=F':'COMEX:HG1!',
+    // Indices — free-tier compatible
+    '^GSPC':'FOREXCOM:SPXUSD', '^IXIC':'NASDAQ:IXIC',  '^DJI':'FOREXCOM:DJI',
+    '^RUT':'AMEX:IWM',         '^VIX':'TVC:VIX',
+    '^FTSE':'TVC:UKX',         '^GDAXI':'TVC:DEU30',   '^N225':'TVC:NI225',
+    '^HSI':'TVC:HSI',          '^KS11':'KRX:KOSPI',    '^AXJO':'ASX:XJO',
+    // Commodities — TVC prefix works on free tier
+    'GC=F':'TVC:GOLD',   'SI=F':'TVC:SILVER',
+    'CL=F':'TVC:USOIL',  'BZ=F':'TVC:UKOIL',
+    'NG=F':'TVC:NATGASUSD', 'HG=F':'COMEX:HG1!',
     // Forex
     'EURUSD=X':'FX:EURUSD', 'GBPUSD=X':'FX:GBPUSD', 'JPY=X':'FX:USDJPY',
     'AUDUSD=X':'FX:AUDUSD', 'USDCHF=X':'FX:USDCHF',
     // Crypto
-    'BTC-USD':'COINBASE:BTCUSD', 'ETH-USD':'COINBASE:ETHUSD',
+    'BTC-USD':'BITSTAMP:BTCUSD', 'ETH-USD':'BITSTAMP:ETHUSD',
     'SOL-USD':'COINBASE:SOLUSD', 'XRP-USD':'COINBASE:XRPUSD',
 };
 
