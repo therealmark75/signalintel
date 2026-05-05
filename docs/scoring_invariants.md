@@ -272,3 +272,33 @@ When a calculated value modifies another (e.g. `sector_modifier` applied to `com
 - Backtest validation of whether modifier adds value
 - Rollback if the modifier introduces problems
 - User-facing transparency about what's being adjusted
+
+---
+
+## P13 — User-Facing Signal Language Is Descriptive, Not Directive
+
+All user-facing tier labels must describe signal strength, not prescribe trading actions.
+
+| Internal constant | User-facing label |
+|---|---|
+| `STRONG_BUY` | Very Strong Signal |
+| `BUY` | Strong Signal |
+| `STRONG_HOLD` | Stable Signal |
+| `HOLD` | Neutral Signal |
+| `WEAK_HOLD` | Soft Signal |
+| `SELL` | Bearish Signal |
+| `STRONG_SELL` | Strong Bearish Signal |
+
+The canonical mapping lives in `signals/signal_labels.py`. Internal DB columns, Python constants, and API keys (`STRONG_BUY`, `BUY`, etc.) are **never** renamed. Only display labels change.
+
+**Why:** SignalIntel is not a licensed financial adviser. Directive language ("Buy", "Sell") implies a trading recommendation. Descriptive language ("Very Strong Signal") describes what the data shows.
+
+---
+
+## P14 — Discovery Theme IDs Are Stable; Labels May Change
+
+Theme IDs (e.g. `strong_buy_momentum`, `buy_the_dip`) are used as URL parameters, JS variables, and API keys. They must never be renamed once shipped.
+
+Theme labels (e.g. "Top Signal Momentum", "Oversold Signals") are user-facing and may be updated in `config/themes.py`. The homepage and screener consume the canonical `THEMES` list — updating the label in one place is sufficient.
+
+**Applies to:** `config/themes.py`, `web/templates/index.html` theme card names, `web/templates/screener.html` preset button labels.
