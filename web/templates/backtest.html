@@ -50,6 +50,16 @@
     .arrow{font-size:16px;margin:0 6px;}
     .loading{color:var(--muted);font-family:var(--mono);font-size:13px;padding:40px;text-align:center;}
     .note{background:rgba(0,212,255,0.05);border:1px solid rgba(0,212,255,0.2);border-radius:6px;padding:12px 16px;font-size:12px;color:var(--muted2);margin-bottom:24px;}
+    .stat-card{cursor:pointer;transition:border-color 0.15s;}
+    .stat-card:hover{border-color:rgba(0,212,255,0.4);}
+    .expand-hint{font-size:10px;color:var(--muted);font-family:var(--mono);text-align:center;margin-top:10px;letter-spacing:1px;}
+    .breakdown-panel{display:none;margin-top:12px;border-top:1px solid var(--border);padding-top:12px;}
+    .breakdown-panel.open{display:block;}
+    .breakdown-panel table{font-size:11px;}
+    .breakdown-panel th{font-size:9px;padding:6px 8px;}
+    .breakdown-panel td{padding:5px 8px;font-family:var(--mono);}
+    .breakdown-ticker{color:var(--accent);cursor:pointer;}
+    .breakdown-ticker:hover{text-decoration:underline;}
 </style>
 </head>
 <body>
@@ -85,10 +95,22 @@ async function load() {
     const grid = document.getElementById('stats-grid');
     if (!data.stats.length) { grid.innerHTML = '<div class="loading">No completed signal periods yet. Check back tomorrow.</div>'; }
     else {
-        grid.innerHTML = data.stats.map(s => `
-            <div class="stat-card">
+        grid.innerHTML = data.stats.map((s, i) => {
+            const sellSide = ['STRONG_SELL','SELL','WEAK_HOLD'].includes(s.rating);
+            const tradesHtml = (s.trades || []).map(t => {
+                const retClass = t.return_pct > 0 ? 'pos' : t.return_pct < 0 ? 'neg' : 'neu';
+                return `<tr>
+                    <td><span class="breakdown-ticker" onclick="event.stopPropagation();window.location='/ticker/${t.ticker}'">${t.ticker}</span></td>
+                    <td>${t.entry_date || '-'}</td>
+                    <td>$${t.entry_price ? t.entry_price.toFixed(2) : '-'}</td>
+                    <td class="${retClass}">${t.return_pct > 0 ? '+' : ''}${t.return_pct}%</td>
+                    <td>${t.days_held}d</td>
+                </tr>`;
+            }).join('');
+            return `
+            <div class="stat-card" onclick="toggleBreakdown(${i})">
                 <div class="stat-card-header">
-                    <span class="rating-badge badge-${s.rating}">${s.rating.replace('_',' ')}</span>
+                    <span class="rating-badge badge-${s.rating}">${s.rating.replace(/_/g,' ')}</span>
                     <span class="samples">${s.samples} samples</span>
                 </div>
                 <div class="stat-row">
@@ -103,7 +125,15 @@ async function load() {
                     <span class="stat-label">Avg Days Held</span>
                     <span class="stat-value neu">${s.avg_days_held}d</span>
                 </div>
-            </div>`).join('');
+                <div class="expand-hint" id="hint-${i}">▼ CLICK TO EXPAND</div>
+                <div class="breakdown-panel" id="bd-${i}">
+                    <table>
+                        <thead><tr><th>Ticker</th><th>Date</th><th>Entry</th><th>Return</th><th>Days</th></tr></thead>
+                        <tbody>${tradesHtml || '<tr><td colspan="5" style="color:var(--muted);text-align:center">No trades</td></tr>'}</tbody>
+                    </table>
+                </div>
+            </div>`;
+        }).join('');
     }
 
     // Recent changes table
@@ -129,6 +159,13 @@ async function load() {
                 <td style="color:var(--muted);font-size:12px">${r.change_date}</td>
             </tr>`;
         }).join('')}</tbody></table>`;
+}
+
+function toggleBreakdown(i) {
+    const panel = document.getElementById('bd-' + i);
+    const hint  = document.getElementById('hint-' + i);
+    const open  = panel.classList.toggle('open');
+    hint.textContent = open ? '▲ COLLAPSE' : '▼ CLICK TO EXPAND';
 }
 
 load();

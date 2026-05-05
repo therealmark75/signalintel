@@ -512,17 +512,24 @@ def api_ticker(ticker):
     if legal is None:
         legal = {"risk_level": "NONE", "risk_label": "No data", "risk_color": "#6b7280", "penalty": 0}
 
+    analyst_ts = db_query(
+        "SELECT MAX(scraped_at) as ts FROM screener_snapshots WHERE ticker = ? AND analyst_recom IS NOT NULL",
+        (ticker,)
+    )
+    analyst_updated_at = analyst_ts[0]['ts'] if analyst_ts and analyst_ts[0]['ts'] else None
+
     return jsonify({
-        "ticker":       ticker,
-        "screener":     sc,
-        "signal":       dict(signal[0]) if signal else {},
-        "insiders":     insiders,
-        "news":         news,
-        "history":      history,
-        "in_watchlist": in_watchlist,
-        "fair_value":   {"estimated": fair_value, "discount_pct": fv_discount, "label": fv_label} if fair_value else None,
-        "technical":    tech,
-        "legal_risk":   legal,
+        "ticker":             ticker,
+        "screener":           sc,
+        "signal":             dict(signal[0]) if signal else {},
+        "insiders":           insiders,
+        "news":               news,
+        "history":            history,
+        "in_watchlist":       in_watchlist,
+        "fair_value":         {"estimated": fair_value, "discount_pct": fv_discount, "label": fv_label} if fair_value else None,
+        "technical":          tech,
+        "legal_risk":         legal,
+        "analyst_updated_at": analyst_updated_at,
     })
 
 
@@ -755,15 +762,23 @@ def api_backtest_stats():
     """)
     periods = cur.fetchall()
 
-    stats = defaultdict(lambda: {'returns':[], 'wins':0, 'total':0, 'days':[]})
+    stats = defaultdict(lambda: {'returns':[], 'wins':0, 'total':0, 'days':[], 'trades':[]})
     for p in periods:
         r, rating = p['return_pct'], p['new_rating']
         if r is None: continue
         stats[rating]['returns'].append(r)
         stats[rating]['days'].append(p['days_held'] or 0)
         stats[rating]['total'] += 1
-        if rating in ('STRONG_BUY','BUY') and r > 0: stats[rating]['wins'] += 1
-        elif rating in ('STRONG_SELL','SELL') and r < 0: stats[rating]['wins'] += 1
+        is_win = (r < 0) if rating in ('STRONG_SELL', 'SELL', 'WEAK_HOLD') else (r > 0)
+        if is_win: stats[rating]['wins'] += 1
+        stats[rating]['trades'].append({
+            'ticker':      p['ticker'],
+            'entry_date':  p['entry_date'],
+            'entry_price': p['entry_price'],
+            'exit_price':  p['exit_price'],
+            'return_pct':  r,
+            'days_held':   p['days_held'] or 0,
+        })
 
     # Recent changes feed
     cur.execute("""
@@ -784,11 +799,12 @@ def api_backtest_stats():
         win_rate = (s['wins'] / s['total'] * 100) if s['total'] > 0 else 0
         avg_days = sum(s['days']) / len(s['days']) if s['days'] else 0
         result.append({
-            'rating': rating,
-            'avg_return': round(avg, 2),
-            'win_rate': round(win_rate, 1),
-            'samples': s['total'],
-            'avg_days_held': round(avg_days, 1)
+            'rating':       rating,
+            'avg_return':   round(avg, 2),
+            'win_rate':     round(win_rate, 1),
+            'samples':      s['total'],
+            'avg_days_held': round(avg_days, 1),
+            'trades':       sorted(s['trades'], key=lambda x: x['return_pct'], reverse=True),
         })
 
     return jsonify({'stats': result, 'recent': recent})

@@ -84,7 +84,12 @@ def _classify(text, ticker=None):
                     "if the commission", "if a court", "if we are found", "if such",
                     "it can issue", "it could issue", "may impose", "could impose",
                     "potential liability", "could be required", "may be required",
-                    "an outcome could", "such an outcome", "could materially"]
+                    "an outcome could", "such an outcome", "could materially",
+                    "civil penalties of up to", "disgorgement of profits", "could issue a cease",
+                    "might result in", "may result in", "could be ordered to pay",
+                    "in the event that", "if the sec", "if regulators", "were to impose",
+                    "failure to comply", "noncompliance could", "subject to sanctions",
+                    "exposure to penalties", "potential civil penalty", "potential disgorgement"]
 
     def is_hypothetical(snippet):
         return any(h in snippet for h in hypothetical)
@@ -105,8 +110,8 @@ def _classify(text, ticker=None):
                "administrative law judge ruled", "sec obtained"]:
         if kw in t:
             idx = t.find(kw)
-            # Widen context window - hypothetical markers can be sentences before/after
-            ctx = t[max(0,idx-400):idx+400]
+            # Wide context window - hypothetical markers can be sentences before/after
+            ctx = t[max(0,idx-600):idx+600]
             if not is_hypothetical(ctx):
                 return RISK_SEC_ENFORCEMENT
 
@@ -265,16 +270,16 @@ def fetch_legal_risk(ticker):
 
         if full_risk != RISK_NONE:
             highest_risk = _escalate(highest_risk, full_risk)
-            # Get best snippet for display
             snippet = _best_legal_block(doc_r.text)
             snippet_clean = re.sub(r"\s+", " ", snippet).strip()[:300]
             findings.append({
-                "type": RISK_LABELS[full_risk],
-                "entity": ticker,
-                "date": filing["date"],
+                "type":        RISK_LABELS[full_risk],
+                "entity":      ticker,
+                "date":        filing["date"],
                 "description": f"10-K Legal Proceedings: {snippet_clean}..." if snippet_clean else "See 10-K filing",
-                "source_url": doc_url,
-                "risk_level": full_risk,
+                "source_url":  doc_url,
+                "risk_level":  full_risk,
+                "confidence":  "HIGH",
             })
 
     # ── 8-K analysis ─────────────────────────────────────────────────────────
@@ -299,12 +304,13 @@ def fetch_legal_risk(ticker):
         if risk not in (RISK_NONE, RISK_MINOR):
             highest_risk = _escalate(highest_risk, risk)
             findings.append({
-                "type": RISK_LABELS[risk],
-                "entity": ticker,
-                "date": filing["date"],
+                "type":        RISK_LABELS[risk],
+                "entity":      ticker,
+                "date":        filing["date"],
                 "description": f"8-K Material Legal Event (Items: {filing.get('items','N/A')})",
-                "source_url": f"https://www.sec.gov/Archives/edgar/data/{cik_int}/{acc_nodash}/index.json",
-                "risk_level": risk,
+                "source_url":  f"https://www.sec.gov/Archives/edgar/data/{cik_int}/{acc_nodash}/index.json",
+                "risk_level":  risk,
+                "confidence":  "MEDIUM",
             })
 
     # De-dupe by month
