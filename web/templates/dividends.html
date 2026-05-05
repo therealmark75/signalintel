@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SignalIntel — Dividend Centre</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#080c14;--surface:#0d1520;--surface2:#111d2e;--border:#1a2d45;
+    --accent:#00d4ff;--accent2:#00ff88;--warning:#ff9500;--danger:#ff3b5c;
+    --text:#f0f6ff;--muted:#8aa4bf;--muted2:#c2d4e8;
+    --mono:'Space Mono',monospace;--sans:'DM Sans',sans-serif;}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);}
+header{position:sticky;top:0;z-index:100;background:rgba(8,12,20,0.95);backdrop-filter:blur(12px);
+    border-bottom:1px solid var(--border);padding:0 24px;display:flex;align-items:center;
+    justify-content:space-between;height:56px;}
+.logo{font-family:var(--mono);font-size:15px;color:var(--accent);letter-spacing:2px;text-decoration:none;}
+.logo span{color:var(--accent2);}
+.header-right{display:flex;align-items:center;gap:12px;font-family:var(--mono);font-size:11px;}
+.header-right a{color:var(--muted2);text-decoration:none;}
+.header-right a:hover,.header-right a.active{color:var(--accent);}
+main{max-width:1400px;margin:0 auto;padding:24px;}
+h1{font-family:var(--mono);font-size:20px;color:var(--accent);letter-spacing:2px;margin-bottom:4px;}
+.subtitle{font-size:12px;color:var(--muted);margin-bottom:20px;}
+
+.no-key-banner{background:rgba(255,149,0,0.08);border:1px solid rgba(255,149,0,0.3);
+    border-radius:8px;padding:20px 24px;margin-bottom:24px;}
+.no-key-banner h3{font-family:var(--mono);font-size:13px;color:var(--warning);margin-bottom:8px;}
+.no-key-banner p{font-size:13px;color:var(--muted2);line-height:1.6;}
+.no-key-banner code{font-family:var(--mono);font-size:11px;background:var(--surface2);
+    padding:2px 6px;border-radius:3px;color:var(--accent);}
+
+.toolbar{display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap;}
+select,input[type=number]{background:var(--surface2);border:1px solid var(--border);border-radius:4px;
+    padding:6px 10px;color:var(--text);font-family:var(--mono);font-size:11px;outline:none;}
+select:focus,input[type=number]:focus{border-color:var(--accent);}
+.toggle-btn{padding:6px 14px;border-radius:4px;border:1px solid var(--border);background:transparent;
+    color:var(--muted);font-family:var(--mono);font-size:10px;cursor:pointer;transition:all 0.15s;}
+.toggle-btn.active{border-color:var(--accent2);color:var(--accent2);background:rgba(0,255,136,0.08);}
+.btn-refresh{padding:6px 14px;border-radius:4px;border:1px solid var(--border);background:transparent;
+    color:var(--muted);font-family:var(--mono);font-size:10px;cursor:pointer;transition:all 0.15s;margin-left:auto;}
+.btn-refresh:hover{border-color:var(--accent2);color:var(--accent2);}
+.result-count{font-family:var(--mono);font-size:11px;color:var(--muted);}
+
+.table-wrap{background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow-x:auto;}
+table{width:100%;border-collapse:collapse;min-width:1000px;}
+th{background:var(--surface2);padding:9px 12px;text-align:left;font-family:var(--mono);font-size:9px;
+    text-transform:uppercase;letter-spacing:1px;color:var(--muted);border-bottom:1px solid var(--border);
+    white-space:nowrap;cursor:pointer;user-select:none;}
+th:hover{color:var(--accent);}
+th.sorted{color:var(--accent);}
+td{padding:9px 12px;border-bottom:1px solid rgba(26,45,69,0.4);font-size:13px;}
+tr:last-child td{border-bottom:none;}
+tr:hover td{background:rgba(0,212,255,0.03);cursor:pointer;}
+.ticker-cell{font-family:var(--mono);font-weight:700;color:var(--accent);}
+.mono{font-family:var(--mono);font-size:12px;}
+.up{color:#00ff88;}.down{color:#ff3b5c;}.neu{color:var(--muted);}
+.yield-high{color:#00ff88;font-weight:700;}
+.rating-badge{font-family:var(--mono);font-size:9px;font-weight:700;padding:2px 6px;border-radius:3px;white-space:nowrap;}
+.freq-badge{font-family:var(--mono);font-size:9px;padding:2px 5px;border-radius:3px;
+    background:rgba(0,212,255,0.08);color:var(--accent);border:1px solid rgba(0,212,255,0.2);}
+.aristocrat-badge{font-family:var(--mono);font-size:9px;font-weight:700;padding:2px 6px;border-radius:3px;
+    background:rgba(0,255,136,0.1);color:#00ff88;border:1px solid rgba(0,255,136,0.2);}
+.wl-dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent2);
+    margin-right:5px;vertical-align:middle;}
+.loading{text-align:center;padding:60px;color:var(--muted);font-family:var(--mono);}
+
+.filter-label{font-family:var(--mono);font-size:9px;color:var(--muted);margin-right:4px;}
+</style>
+</head>
+<body>
+<header>
+    <a href="/" class="logo">SIGNAL<span>INTEL</span></a>
+    {% include '_search.html' %}
+    <div class="header-right">
+        <a href="/">Dashboard</a>
+        <a href="/screener">Screener</a>
+        <a href="/earnings">Earnings</a>
+        <a href="/dividends" class="active">Dividends</a>
+        <a href="/watchlist">Watchlist</a>
+        <a href="/backtest">Backtest</a>
+        <a href="/logout">Sign out</a>
+    </div>
+</header>
+<main>
+    <h1>DIVIDEND CENTRE</h1>
+    <p class="subtitle">Dividend-paying stocks ranked by yield, filtered by quality signals</p>
+
+    {% if not has_fmp_key %}
+    <div class="no-key-banner">
+        <h3>⚡ FMP API Key Required</h3>
+        <p>Dividend data is sourced from Financial Modeling Prep. Add your key to
+           <code>config/settings.py</code> as <code>FMP_API_KEY = "your_key"</code>,
+           then click <strong>Refresh Data</strong>.<br><br>
+           Free tier: 250 API calls/day. Sign up at financialmodelingprep.com</p>
+    </div>
+    {% endif %}
+
+    <div class="toolbar">
+        <span class="filter-label">Min Yield</span>
+        <input type="number" id="f-min-yield" value="0" min="0" step="0.5" style="width:70px" placeholder="0%">
+
+        <span class="filter-label">Sector</span>
+        <select id="f-sector">
+            <option value="">All</option>
+            {% for s in sectors %}<option value="{{ s }}">{{ s }}</option>{% endfor %}
+        </select>
+
+        <span class="filter-label">Rating</span>
+        <select id="f-rating">
+            <option value="">All Ratings</option>
+            <option value="STRONG_BUY">Strong Buy</option>
+            <option value="BUY">Buy</option>
+            <option value="STRONG_HOLD">Strong Hold</option>
+            <option value="HOLD">Hold</option>
+            <option value="WEAK_HOLD">Weak Hold</option>
+            <option value="SELL">Sell</option>
+            <option value="STRONG_SELL">Strong Sell</option>
+        </select>
+
+        <button class="toggle-btn" id="aristocrat-toggle" onclick="toggleAristocrat()">
+            ★ Aristocrats Only
+        </button>
+
+        <span class="result-count" id="result-count"></span>
+        <button class="btn-refresh" onclick="refreshData()">⟳ Refresh Data</button>
+    </div>
+
+    <div class="table-wrap">
+        <table>
+            <thead>
+                <tr>
+                    <th onclick="setSort('ticker')">TICKER</th>
+                    <th onclick="setSort('ticker')">COMPANY</th>
+                    <th onclick="setSort('ticker')">SECTOR</th>
+                    <th onclick="setSort('dividend_yield')">YIELD %</th>
+                    <th onclick="setSort('annual_dividend')">ANN. DIV</th>
+                    <th onclick="setSort('payout_ratio')">PAYOUT</th>
+                    <th onclick="setSort('ex_dividend_date')">EX-DATE</th>
+                    <th onclick="setSort('payment_date')">PAY DATE</th>
+                    <th>FREQUENCY</th>
+                    <th onclick="setSort('dividend_growth_5yr')">5Y GROWTH</th>
+                    <th onclick="setSort('consecutive_years')">CONSEC.</th>
+                    <th>RATING</th>
+                    <th onclick="setSort('composite_score')">SCORE</th>
+                </tr>
+            </thead>
+            <tbody id="div-tbody">
+                <tr><td colspan="13" class="loading">Loading dividend data...</td></tr>
+            </tbody>
+        </table>
+    </div>
+</main>
+
+<script>
+const RATING_COLORS = {
+    STRONG_BUY:'#00ff88', BUY:'#00d4ff', STRONG_HOLD:'#94a3b8',
+    HOLD:'#64748b', WEAK_HOLD:'#ff9500', SELL:'#ff3b5c', STRONG_SELL:'#ff3b5c',
+};
+
+let sortCol = 'dividend_yield', sortDir = 'desc', aristocratOnly = false;
+
+function fmt(v, d=2){ return v == null ? '-' : parseFloat(v).toFixed(d); }
+
+function setSort(col) {
+    if (sortCol === col) sortDir = sortDir === 'desc' ? 'asc' : 'desc';
+    else { sortCol = col; sortDir = 'desc'; }
+    document.querySelectorAll('th').forEach(th => th.classList.remove('sorted'));
+    loadData();
+}
+
+function toggleAristocrat() {
+    aristocratOnly = !aristocratOnly;
+    document.getElementById('aristocrat-toggle').classList.toggle('active', aristocratOnly);
+    loadData();
+}
+
+async function loadData() {
+    const tbody = document.getElementById('div-tbody');
+    tbody.innerHTML = '<tr><td colspan="13" class="loading">Loading...</td></tr>';
+
+    const p = new URLSearchParams({
+        sort:       sortCol,
+        dir:        sortDir,
+        min_yield:  document.getElementById('f-min-yield').value || 0,
+        sector:     document.getElementById('f-sector').value,
+        rating:     document.getElementById('f-rating').value,
+        aristocrat: aristocratOnly ? '1' : '0',
+    });
+
+    const data = await fetch('/api/dividends?' + p).then(r => r.json()).catch(() => null);
+    if (!data) {
+        tbody.innerHTML = '<tr><td colspan="13" class="loading">Error loading data.</td></tr>';
+        return;
+    }
+
+    document.getElementById('result-count').textContent = `${data.total} dividend stocks`;
+
+    if (!data.rows.length) {
+        tbody.innerHTML = '<tr><td colspan="13" class="loading">No dividend stocks match your filters.</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = data.rows.map(r => {
+        const rc = RATING_COLORS[r.rating] || '#8aa4bf';
+        const yieldPct = r.dividend_yield;
+        const yieldClass = yieldPct >= 4 ? 'yield-high' : 'mono';
+        const growthCls = (r.dividend_growth_5yr || 0) >= 0 ? 'up' : 'down';
+        const scoreColor = r.composite_score >= 70 ? '#00ff88' : r.composite_score >= 50 ? '#00d4ff' : '#8aa4bf';
+        const isAristocrat = (r.consecutive_years || 0) >= 25;
+        return `<tr onclick="window.location='/ticker/${r.ticker}'">
+            <td class="ticker-cell">${r.in_watchlist ? '<span class="wl-dot"></span>' : ''}${r.ticker}</td>
+            <td style="color:var(--muted2);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.company || '-'}</td>
+            <td class="mono" style="color:var(--muted);font-size:11px">${r.sector || '-'}</td>
+            <td class="${yieldClass}">${yieldPct != null ? fmt(yieldPct, 2) + '%' : '-'}</td>
+            <td class="mono">${r.annual_dividend ? '$' + fmt(r.annual_dividend, 3) : '-'}</td>
+            <td class="mono" style="color:${(r.payout_ratio||0)>80?'var(--danger)':'inherit'}">${r.payout_ratio != null ? fmt(r.payout_ratio, 1) + '%' : '-'}</td>
+            <td class="mono" style="color:var(--muted)">${r.ex_dividend_date || '-'}</td>
+            <td class="mono" style="color:var(--muted)">${r.payment_date || '-'}</td>
+            <td>${r.frequency ? `<span class="freq-badge">${r.frequency}</span>` : '-'}</td>
+            <td class="mono ${growthCls}">${r.dividend_growth_5yr != null ? (r.dividend_growth_5yr >= 0 ? '+' : '') + fmt(r.dividend_growth_5yr, 1) + '%' : '-'}</td>
+            <td class="mono" style="color:var(--muted2)">${isAristocrat ? `<span class="aristocrat-badge" title="Dividend Aristocrat">★ ${r.consecutive_years}yr</span>` : (r.consecutive_years || '-')}</td>
+            <td>${r.rating ? `<span class="rating-badge" style="background:${rc}22;color:${rc}">${r.rating.replace(/_/g,' ')}</span>` : '-'}</td>
+            <td class="mono" style="color:${scoreColor}">${r.composite_score ? Number(r.composite_score).toFixed(1) : '-'}</td>
+        </tr>`;
+    }).join('');
+}
+
+async function refreshData() {
+    const btn = document.querySelector('.btn-refresh');
+    btn.textContent = '⟳ Refreshing...';
+    btn.disabled = true;
+    const data = await fetch('/api/dividends/refresh', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({})
+    }).then(r => r.json()).catch(() => null);
+    btn.textContent = '⟳ Refresh Data';
+    btn.disabled = false;
+    if (data?.ok) {
+        loadData();
+    } else {
+        alert(data?.error || 'Refresh failed. Check FMP API key.');
+    }
+}
+
+// Instant filter on change
+['f-min-yield','f-sector','f-rating'].forEach(id => {
+    document.getElementById(id).addEventListener('change', loadData);
+});
+
+loadData();
+</script>
+</body>
+</html>

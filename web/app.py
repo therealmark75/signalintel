@@ -386,6 +386,79 @@ def api_search():
     return jsonify({"results": [dict(r) for r in rows]})
 
 
+@app.route("/dividends")
+@login_required
+def dividends():
+    user = current_user()
+    try:
+        from config.settings import FMP_API_KEY
+        has_key = bool(FMP_API_KEY)
+    except Exception:
+        has_key = False
+    sectors = db_query("""
+        SELECT DISTINCT sector FROM screener_snapshots WHERE sector IS NOT NULL ORDER BY sector
+    """)
+    return render_template("dividends.html", user=user, has_fmp_key=has_key,
+                           sectors=[r["sector"] for r in sectors])
+
+
+@app.route("/api/dividends")
+@login_required
+def api_dividends():
+    from scrapers.fmp_scraper import get_dividends, _ensure_tables
+    _ensure_tables(DATABASE_PATH)
+    user       = current_user()
+    min_yield  = request.args.get("min_yield", type=float, default=0)
+    sector     = request.args.get("sector", "")
+    rating_f   = request.args.get("rating", "")
+    aristocrat = request.args.get("aristocrat", "0") == "1"
+    sort_col   = request.args.get("sort", "dividend_yield")
+    sort_dir   = request.args.get("dir", "desc")
+
+    allowed_sorts = {"dividend_yield", "annual_dividend", "payout_ratio",
+                     "ex_dividend_date", "payment_date", "dividend_growth_5yr",
+                     "consecutive_years", "composite_score", "ticker"}
+    if sort_col not in allowed_sorts:
+        sort_col = "dividend_yield"
+    if sort_dir not in ("asc", "desc"):
+        sort_dir = "desc"
+
+    rows = get_dividends(DATABASE_PATH,
+                         min_yield=min_yield,
+                         sector=sector or None,
+                         rating=rating_f or None,
+                         aristocrat=aristocrat)
+
+    # Sort in Python for flexibility
+    def sort_key(r):
+        v = r.get(sort_col)
+        return (v is None, v if v is not None else 0)
+    rows.sort(key=sort_key, reverse=(sort_dir == "desc"))
+
+    # Mark watchlist
+    wl = set()
+    if user:
+        wl_rows = db_query("SELECT ticker FROM watchlists WHERE user_id = ?", (user["id"],))
+        wl = {r["ticker"] for r in wl_rows}
+    for r in rows:
+        r["in_watchlist"] = r.get("ticker") in wl
+
+    return jsonify({"rows": rows, "total": len(rows)})
+
+
+@app.route("/api/dividends/refresh", methods=["POST"])
+@login_required
+def api_dividends_refresh():
+    data   = request.get_json() or {}
+    tickers = data.get("tickers")   # optional list
+    try:
+        from scrapers.fmp_scraper import job_refresh_dividends
+        n = job_refresh_dividends(DATABASE_PATH, tickers=tickers)
+        return jsonify({"ok": True, "saved": n})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)})
+
+
 @app.route("/earnings")
 @login_required
 def earnings():
