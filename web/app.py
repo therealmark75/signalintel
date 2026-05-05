@@ -1038,9 +1038,15 @@ def api_screener():
                 "eps_growth_this_yr","eps_growth_next_yr",
                 "rel_volume","avg_volume","exchange"}
     _sig_cols = {"rating","composite_score","target_price","target_upside",
-                 "momentum_score","quality_score","insider_score","reversion_score"}
+                 "momentum_score","quality_score","insider_score","reversion_score",
+                 "sector_strength_score"}
+    # Columns stored as TEXT but containing numeric values — must cast for correct sort order
+    _numeric_text_cols = {"market_cap"}
     if sort_col in _ss_cols:
-        order_sql = f"ss.{sort_col} {sort_dir.upper()} NULLS LAST"
+        if sort_col in _numeric_text_cols:
+            order_sql = f"CAST(ss.{sort_col} AS REAL) {sort_dir.upper()} NULLS LAST"
+        else:
+            order_sql = f"ss.{sort_col} {sort_dir.upper()} NULLS LAST"
     elif sort_col in _sig_cols:
         order_sql = f"sig.{sort_col} {sort_dir.upper()} NULLS LAST"
     else:
