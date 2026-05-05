@@ -77,6 +77,22 @@ def _escalate(current, candidate):
 def _classify(text, ticker=None):
     t = text.lower()
 
+    # ── Patent / USPTO / IP proceedings exclusion ────────────────────────────
+    # Patent disputes are routine business, not legal risk in the SEC/fraud sense.
+    # If the text is dominated by IP/patent language, skip ALL enforcement checks.
+    patent_signals = [
+        "inter partes review", "post-grant review", "patent trial and appeal board",
+        "ptab", "uspto", "u.s. patent and trademark", "patent infringement",
+        "alleged infringement", "infringement claims", "infringes our patents",
+        "our intellectual property", "intellectual property rights",
+        "trade secret misappropriation", "patent invalidation", "invalidating our patents",
+        "claims of patent infringement", "claimed infringement", "patent litigation",
+        "patent dispute", "license agreement", "licensing dispute",
+        "claims that our products infringe", "products infringe", "infringe upon",
+    ]
+    patent_score = sum(1 for p in patent_signals if p in t)
+    is_patent_doc = patent_score >= 3
+
     # ── Policy/compliance document detection ─────────────────────────────────
     # Insider trading compliance policies and codes of conduct legitimately contain
     # penalty language in an educational/prescriptive context — not enforcement.
@@ -135,7 +151,7 @@ def _classify(text, ticker=None):
     # Never classify a policy/compliance document as enforcement.
     # Tier 1: single match sufficient — language that only appears in actual enforcement orders
     # Tier 2: moderate signals — require 2+ non-hypothetical hits to reduce false positives
-    if not is_policy_doc:
+    if not is_policy_doc and not is_patent_doc:
         # Tier 1 — extremely specific to actual enforcement; one match is conclusive
         enforcement_definite = [
             "without admitting or denying",           # SEC settlement boilerplate
@@ -200,6 +216,8 @@ def _classify(text, ticker=None):
             return RISK_SEC_INVESTIGATION
 
     # ── Class action ─────────────────────────────────────────────────────────
+    # Require present-tense active litigation. Past settlements/dismissals are not
+    # active risk. Skip if patent context dominates.
     class_action_kws = [
         "class action lawsuit", "class action complaint", "putative class action",
         "securities class action", "class action has been filed", "class action was filed",
@@ -207,9 +225,20 @@ def _classify(text, ticker=None):
     ]
     if ticker:
         class_action_kws.append(f"v. {ticker.lower()}")
+    # Signals that indicate the action is resolved/dismissed (not active)
+    resolved_signals = [
+        "class action was dismissed", "class action has been dismissed",
+        "dismissal of the class action", "settled the class action",
+        "class action settled", "settlement of the class action",
+        "class was decertified", "motion to dismiss was granted",
+        "complaint was dismissed with prejudice",
+    ]
     for kw in class_action_kws:
-        if kw in t:
-            return RISK_CLASS_ACTION
+        if kw in t and not is_patent_doc:
+            idx = t.find(kw)
+            ctx = t[max(0, idx-300):idx+300]
+            if not is_hypothetical(ctx) and not any(r in ctx for r in resolved_signals):
+                return RISK_CLASS_ACTION
 
     # ── Minor ────────────────────────────────────────────────────────────────
     for kw in ["we are party to", "we are a defendant", "plaintiff alleges",
