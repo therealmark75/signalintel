@@ -228,7 +228,11 @@
 <body>
 {% include '_nav.html' %}
 <div class="ticker-sub-bar">
+    {% if from_page in ('penny', 'penny_screener') %}
+    <a href="/penny" class="btn-back">← Back to Penny Hub</a>
+    {% else %}
     <a href="/" class="btn-back">← Back to Dashboard</a>
+    {% endif %}
     <button id="wl-btn" class="btn-wl btn-add" onclick="toggleWatchlist()">+ Watchlist</button>
 </div>
 

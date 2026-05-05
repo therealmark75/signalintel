@@ -94,7 +94,7 @@ select:focus,input[type=number]:focus{border-color:var(--penny);}
 /* Table */
 .table-wrap{overflow-x:auto;border-radius:8px;border:1px solid var(--border);background:var(--surface);}
 table{width:100%;border-collapse:collapse;min-width:1060px;}
-thead{position:sticky;top:56px;z-index:10;}
+thead{position:sticky;top:0;z-index:10;}
 th{background:var(--surface2);padding:8px 10px;text-align:left;font-family:var(--mono);font-size:9px;
     text-transform:uppercase;letter-spacing:1px;color:var(--muted);border-bottom:1px solid var(--border);
     white-space:nowrap;cursor:pointer;user-select:none;}
@@ -333,7 +333,7 @@ let _state = {
 
 // ── Presets ───────────────────────────────────────
 const PRESETS = {
-    top_rated:      {price_max:5, price_min:null, sort:'composite_score', dir:'desc', score_min:0, rsi_min:null, rsi_max:null, relvol_min:null},
+    top_rated:      {price_max:5, price_min:null, sort:'composite_score', dir:'desc', score_min:60, rsi_min:null, rsi_max:null, relvol_min:null},
     unusual_volume: {price_max:5, price_min:null, sort:'rel_volume',      dir:'desc', score_min:0, rsi_min:null, rsi_max:null, relvol_min:3},
     oversold:       {price_max:5, price_min:null, sort:'rsi_14',          dir:'asc',  score_min:0, rsi_min:null, rsi_max:30,   relvol_min:null},
     under_dollar:   {price_max:1, price_min:null, sort:'composite_score', dir:'desc', score_min:0, rsi_min:null, rsi_max:null, relvol_min:null},
@@ -608,7 +608,7 @@ function renderTable(rows) {
         return;
     }
     body.innerHTML = rows.map(r => `
-        <tr onclick="window.location='/ticker/${r.ticker}'">
+        <tr onclick="window.location='/ticker/${r.ticker}?from=penny_screener'">
             <td class="tc-ticker">${r.ticker}</td>
             <td class="tc-company">${r.company || '—'}</td>
             <td class="tc-sector">${r.sector || '—'}</td>

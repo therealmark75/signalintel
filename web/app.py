@@ -213,7 +213,9 @@ def ticker_page(ticker):
                 'risk_color': '#6b7280', 'penalty': 0, 'findings': [],
                 'scraped_at': None,
             }
-    return render_template('ticker.html', ticker=ticker.upper(), legal_risk=legal_risk_data)
+    from_page = request.args.get('from', '')
+    return render_template('ticker.html', ticker=ticker.upper(),
+                           legal_risk=legal_risk_data, from_page=from_page)
 
 
 
@@ -1732,36 +1734,49 @@ def api_penny_stock_of_day():
 @app.route("/api/penny/hot")
 @login_required
 def api_penny_hot():
+    # One row per ticker (latest snapshot + latest signal score)
+    lts_sq = """
+        SELECT ticker, MAX(scraped_at) AS max_ts
+        FROM screener_snapshots
+        WHERE scraped_at >= datetime('now', '-2 days')
+        GROUP BY ticker
+    """
+    sig_sq = """
+        SELECT ticker, rating, composite_score, MAX(scored_at) AS scored_at
+        FROM signal_scores
+        WHERE DATE(scored_at) = DATE((SELECT MAX(scored_at) FROM signal_scores))
+        GROUP BY ticker
+    """
+
     exchanges = ["NASDAQ", "NYSE", "OTC"]
     result = {}
     for exch in exchanges:
-        rows = db_query("""
+        rows = db_query(f"""
             SELECT ss.ticker, ss.company, ss.price, ss.change_pct, ss.volume,
                    sig.rating, sig.composite_score
             FROM screener_snapshots ss
-            LEFT JOIN signal_scores sig ON ss.ticker = sig.ticker
-            WHERE ss.scraped_at = (SELECT MAX(scraped_at) FROM screener_snapshots)
-              AND (sig.scored_at = (SELECT MAX(scored_at) FROM signal_scores) OR sig.scored_at IS NULL)
-              AND ss.price > 0 AND ss.price < 5
+            INNER JOIN ({lts_sq}) lts ON ss.ticker = lts.ticker AND ss.scraped_at = lts.max_ts
+            LEFT JOIN ({sig_sq}) sig ON ss.ticker = sig.ticker
+            WHERE ss.price > 0 AND ss.price < 5
               AND ss.exchange = ?
               AND ss.change_pct IS NOT NULL
-            ORDER BY ss.change_pct DESC
+            ORDER BY ABS(ss.change_pct) DESC
             LIMIT 5
         """, (exch,))
         result[exch] = rows
 
-    # Fallback: if no exchange data, return top movers overall
+    # Fallback: if no exchange data, return top movers regardless of exchange
     has_data = any(result[e] for e in exchanges)
     if not has_data:
-        top = db_query("""
+        top = db_query(f"""
             SELECT ss.ticker, ss.company, ss.price, ss.change_pct, ss.volume,
                    sig.rating, sig.composite_score
             FROM screener_snapshots ss
-            LEFT JOIN signal_scores sig ON ss.ticker = sig.ticker
-            WHERE ss.scraped_at = (SELECT MAX(scraped_at) FROM screener_snapshots)
-              AND ss.price > 0 AND ss.price < 5
+            INNER JOIN ({lts_sq}) lts ON ss.ticker = lts.ticker AND ss.scraped_at = lts.max_ts
+            LEFT JOIN ({sig_sq}) sig ON ss.ticker = sig.ticker
+            WHERE ss.price > 0 AND ss.price < 5
               AND ss.change_pct IS NOT NULL
-            ORDER BY ss.change_pct DESC
+            ORDER BY ABS(ss.change_pct) DESC
             LIMIT 15
         """)
         return jsonify({"no_exchange": True, "movers": top})

@@ -238,8 +238,10 @@ async function loadSOTD() {
     const sign   = (s.change_pct || 0) >= 0 ? '+' : '';
 
     const legalHtml = s.risk_label ? `
-        <div class="legal-badge" style="background:${s.risk_color || 'rgba(138,164,191,0.1)'};border:1px solid rgba(138,164,191,0.3);">
-            ⚖️ ${s.risk_label}${s.penalty ? ` (−${s.penalty} pts)` : ''}
+        <div class="legal-badge"
+             style="background:${s.risk_color || 'rgba(138,164,191,0.1)'};border:1px solid rgba(138,164,191,0.3);"
+             title="SEC EDGAR legal risk assessment: ${s.risk_label}. A penalty of ${s.penalty || 0} pts has been deducted from the composite score.">
+            ⚖️ Legal Risk: ${s.risk_label}${s.penalty ? ` (−${s.penalty} pts penalty)` : ''}
         </div>` : '';
 
     const whyHtml = (s.why || []).map(w => `<div class="why-item">${w}</div>`).join('');
@@ -278,7 +280,7 @@ async function loadSOTD() {
             ${whyHtml || '<div class="why-item">Highest composite score in today\'s penny universe.</div>'}
         </div>
         <div class="sotd-actions">
-            <a href="/ticker/${s.ticker}" class="sotd-btn sotd-btn-primary">View Full Analysis →</a>
+            <a href="/ticker/${s.ticker}?from=penny" class="sotd-btn sotd-btn-primary">View Full Analysis →</a>
             <a href="/penny/screener" class="sotd-btn sotd-btn-secondary">Browse All Penny Stocks</a>
         </div>
     `;
