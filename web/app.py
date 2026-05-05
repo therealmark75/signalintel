@@ -559,7 +559,7 @@ def api_screener():
     """
     Filterable screener endpoint. All params are optional query strings:
     sector, rating (comma-sep), score_min, score_max,
-    mcap (any/small/mid/large), pe_min, pe_max,
+    mcap (any/micro/small/mid/large), pe_min, pe_max,
     rsi_min, rsi_max, upside_min,
     sort (column), dir (asc/desc), page, per_page
     """
@@ -578,7 +578,6 @@ def api_screener():
     page      = max(1, request.args.get("page", type=int, default=1))
     per_page  = min(200, request.args.get("per_page", type=int, default=50))
 
-    # Whitelist sortable columns to prevent SQL injection
     allowed_sorts = {
         "ticker", "company", "sector", "market_cap", "composite_score",
         "target_price", "target_upside", "price", "change_pct", "volume",
@@ -590,7 +589,21 @@ def api_screener():
     if sort_dir not in ("asc", "desc"):
         sort_dir = "desc"
 
-    where = ["ss.scraped_at >= datetime('now','-2 days')"]
+    # Base FROM: one row per ticker (latest scraped_at in last 2 days).
+    # This prevents market_cap ambiguity when a ticker has multiple scraped rows
+    # with different (or NULL) market_cap values within the window.
+    latest_ss = """
+        SELECT s.*
+        FROM screener_snapshots s
+        INNER JOIN (
+            SELECT ticker, MAX(scraped_at) AS max_ts
+            FROM screener_snapshots
+            WHERE scraped_at >= datetime('now', '-2 days')
+            GROUP BY ticker
+        ) lts ON s.ticker = lts.ticker AND s.scraped_at = lts.max_ts
+    """
+
+    where = ["1=1"]
     params = []
 
     if sector:
@@ -606,8 +619,10 @@ def api_screener():
     if score_max < 100:
         where.append("sig.composite_score <= ?")
         params.append(score_max)
-    if mcap == "small":
-        where.append("CAST(ss.market_cap AS REAL) < 2000000000")
+    if mcap == "micro":
+        where.append("(ss.market_cap IS NULL OR ss.market_cap = '' OR CAST(ss.market_cap AS REAL) < 300000000)")
+    elif mcap == "small":
+        where.append("CAST(ss.market_cap AS REAL) >= 300000000 AND CAST(ss.market_cap AS REAL) < 2000000000")
     elif mcap == "mid":
         where.append("CAST(ss.market_cap AS REAL) >= 2000000000 AND CAST(ss.market_cap AS REAL) < 10000000000")
     elif mcap == "large":
@@ -632,23 +647,20 @@ def api_screener():
     order_sql = f"{sort_col} {sort_dir.upper()} NULLS LAST"
     offset    = (page - 1) * per_page
 
-    # Count query
+    sig_subq = """
+        SELECT ticker, rating, composite_score, target_price, target_upside,
+               momentum_score, quality_score, insider_score,
+               MAX(scored_at) as scored_at
+        FROM signal_scores
+        WHERE DATE(scored_at) = DATE((SELECT MAX(scored_at) FROM signal_scores))
+        GROUP BY ticker
+    """
+
     count_rows = db_query(f"""
         SELECT COUNT(*) as total
-        FROM (
-            SELECT ss.ticker
-            FROM screener_snapshots ss
-            LEFT JOIN (
-                SELECT ticker, rating, composite_score, target_price, target_upside,
-                       momentum_score, quality_score, insider_score,
-                       MAX(scored_at) as scored_at
-                FROM signal_scores
-                WHERE DATE(scored_at) = DATE((SELECT MAX(scored_at) FROM signal_scores))
-                GROUP BY ticker
-            ) sig ON ss.ticker = sig.ticker
-            WHERE {where_sql}
-            GROUP BY ss.ticker
-        )
+        FROM ({latest_ss}) ss
+        LEFT JOIN ({sig_subq}) sig ON ss.ticker = sig.ticker
+        WHERE {where_sql}
     """, params)
     total = count_rows[0]["total"] if count_rows else 0
 
@@ -661,17 +673,9 @@ def api_screener():
                sig.rating, sig.composite_score,
                sig.momentum_score, sig.quality_score, sig.insider_score,
                sig.target_price, sig.target_upside
-        FROM screener_snapshots ss
-        LEFT JOIN (
-            SELECT ticker, rating, composite_score, target_price, target_upside,
-                   momentum_score, quality_score, insider_score,
-                   MAX(scored_at) as scored_at
-            FROM signal_scores
-            WHERE DATE(scored_at) = DATE((SELECT MAX(scored_at) FROM signal_scores))
-            GROUP BY ticker
-        ) sig ON ss.ticker = sig.ticker
+        FROM ({latest_ss}) ss
+        LEFT JOIN ({sig_subq}) sig ON ss.ticker = sig.ticker
         WHERE {where_sql}
-        GROUP BY ss.ticker
         ORDER BY {order_sql}
         LIMIT ? OFFSET ?
     """, params + [per_page, offset])
