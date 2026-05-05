@@ -1,4 +1,10 @@
 """
+CRITICAL: Any change to the scoring pipeline must verify that update_target_prices() still
+runs after composite_score calculation. Target prices have broken twice during pipeline
+modifications (2026-05-05). Always run an end-to-end pipeline test after touching this area.
+The silent-failure guard in main.py logs at ERROR level — check logs if 12M TARGET shows '-'
+on the screener.
+
 SignalIntel 12-Month Price Target Model
 Blends four components into a single 12-month forward price target.
 

@@ -125,7 +125,7 @@ def job_generate_signals(sector=None):
             tp_count = sum(1 for r in tp_rows if r.get("target_price"))
             logger.info(f"  12-month target prices computed for {tp_count}/{len(tp_rows)} tickers")
         except Exception as e:
-            logger.warning(f"  Target price computation failed (non-fatal): {e}")
+            logger.error(f"  Target price computation FAILED: {e}", exc_info=True)
 
         scan_results = run_all_scans(screener_rows, insider_trades, cluster_signals)
         strong_buys = [s for s in signals if s.rating == "STRONG_BUY"]

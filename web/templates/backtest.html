@@ -194,7 +194,11 @@ function toggleBreakdown(i) {
     hint.textContent = open ? '▲ COLLAPSE' : '▼ CLICK TO EXPAND';
 }
 
-load();
+load().catch(err => {
+    document.getElementById('stats-grid').innerHTML = `<div class="loading" style="color:var(--danger)">Failed to load backtest data: ${err.message}</div>`;
+    document.getElementById('sector-comparison').innerHTML = '';
+    document.getElementById('recent-table').innerHTML = '';
+});
 </script>
 {% include '_footer.html' %}
 </body>

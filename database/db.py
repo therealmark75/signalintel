@@ -621,7 +621,7 @@ def get_watchlist(db_path: str, user_id: int) -> list[dict]:
         SELECT w.ticker, w.added_at, w.notes,
                ss.composite_score, ss.rating, ss.momentum_score,
                ss.quality_score, ss.insider_score, ss.flags,
-               ss.target_price, ss.target_upside,
+               ss.target_price, ss.target_upside, ss.sector_strength_score,
                sn.price, sn.change_pct, sn.rsi_14
         FROM watchlists w
         LEFT JOIN (

@@ -219,6 +219,7 @@ tr:hover td{background:rgba(0,212,255,0.03);cursor:pointer;}
         <button class="btn-csv" onclick="exportCSV()">⬇ Export CSV</button>
     </div>
 
+    <div id="target-banner" style="display:none;background:rgba(255,149,0,0.08);border:1px solid rgba(255,149,0,0.3);border-radius:6px;padding:8px 14px;font-size:12px;color:#ff9500;margin-bottom:10px"></div>
     <div class="table-wrap">
         <table id="screener-table">
             <thead>
@@ -229,6 +230,7 @@ tr:hover td{background:rgba(0,212,255,0.03);cursor:pointer;}
                     <th data-tip="Total market capitalisation. Micro <$300M, Small $300M-$2B, Mid $2-10B, Large >$10B" onclick="setSort('market_cap')">MKT CAP<span class="sort-arrow" id="sa-market_cap"></span></th>
                     <th data-tip="SignalIntel 7-tier signal rating" onclick="setSort('rating')">RATING<span class="sort-arrow" id="sa-rating"></span></th>
                     <th data-tip="Composite score 0–100 combining Momentum, Quality, Insider, Reversion and Legal signals" onclick="setSort('composite_score')">SCORE<span class="sort-arrow" id="sa-composite_score"></span></th>
+                    <th data-tip="Sector relative strength score 0-100 based on the ticker's sector ETF 7-day performance." onclick="setSort('sector_strength_score')">SECT SS<span class="sort-arrow" id="sa-sector_strength_score"></span></th>
                     <th data-tip="12-month price target: DCF (40%) + analyst consensus (35%) + technical projection (15%) + quality/legal (10%). Re-calculated daily." onclick="setSort('target_price')">12M TARGET<span class="sort-arrow" id="sa-target_price"></span></th>
                     <th data-tip="% upside/downside to 12-month target. Positive = upside, negative = downside." onclick="setSort('target_upside')">UPSIDE<span class="sort-arrow" id="sa-target_upside"></span></th>
                     <th data-tip="Current market price" onclick="setSort('price')">PRICE<span class="sort-arrow" id="sa-price"></span></th>
@@ -247,7 +249,7 @@ tr:hover td{background:rgba(0,212,255,0.03);cursor:pointer;}
                 </tr>
             </thead>
             <tbody id="screener-tbody">
-                <tr class="loading-row"><td colspan="20">Loading screener data...</td></tr>
+                <tr class="loading-row"><td colspan="21">Loading screener data...</td></tr>
             </tbody>
         </table>
     </div>
@@ -374,6 +376,12 @@ async function load() {
     document.getElementById('result-count').textContent =
         `${data.total.toLocaleString()} results · page ${data.page} of ${totalPages}`;
 
+    const bannerEl = document.getElementById('target-banner');
+    if (bannerEl) {
+        bannerEl.style.display = data.target_banner ? 'block' : 'none';
+        bannerEl.textContent   = data.target_banner || '';
+    }
+
     if (!data.rows.length) {
         tbody.innerHTML = '<tr class="loading-row"><td colspan="20">No results match the current filters.</td></tr>';
         renderPagination();
@@ -399,6 +407,7 @@ async function load() {
             <td class="mono">${fmtMC(r.market_cap)}</td>
             <td>${r.rating ? `<span class="rating-badge" style="background:${rc}22;color:${rc}">${r.rating.replace(/_/g,' ')}</span>` : '-'}</td>
             <td class="score-cell" style="color:${scoreColor}">${fmt(r.composite_score,1)}</td>
+            <td class="mono" style="color:${r.sector_strength_score >= 80 ? 'var(--accent)' : r.sector_strength_score <= 20 ? 'var(--danger)' : 'inherit'}">${r.sector_strength_score != null ? Math.round(r.sector_strength_score) : '-'}</td>
             <td class="mono">${r.target_price ? '$'+fmt(r.target_price,2) : '-'}</td>
             <td class="mono ${uCls}">${upside != null ? (upside > 0 ? '+' : '') + fmt(upside,1) + '%' : '-'}</td>
             <td class="mono">$${fmt(r.price,2)}</td>
@@ -642,7 +651,7 @@ function exportCSV() {
     fetch('/api/screener?' + params).then(r => r.json()).then(data => {
         if (!data.rows?.length) return alert('No data to export.');
         const cols = ['ticker','company','sector','market_cap','rating','composite_score',
-                      'target_price','target_upside','price','change_pct','volume',
+                      'sector_strength_score','target_price','target_upside','price','change_pct','volume',
                       'pe_ratio','eps_growth_this_yr','eps_growth_next_yr',
                       'short_interest_pct','insider_transactions','beta',
                       'rsi_14','high_52w_pct','low_52w_pct'];
