@@ -549,6 +549,76 @@ def ratings():
                            last_run=last_run[0]["ts"] if last_run else None)
 
 
+@app.route("/events")
+@login_required
+def events_page():
+    user = current_user()
+    return render_template("events.html", user=user)
+
+
+@app.route("/api/economic-calendar")
+@login_required
+def api_economic_calendar():
+    impact = request.args.get("impact", "")
+    country = request.args.get("country", "")
+    from_date = request.args.get("from", "")
+    to_date = request.args.get("to", "")
+
+    conditions = []
+    params = []
+    if impact:
+        conditions.append("impact = ?")
+        params.append(impact)
+    if country:
+        conditions.append("country = ?")
+        params.append(country.upper())
+    if from_date:
+        conditions.append("event_date >= ?")
+        params.append(from_date)
+    if to_date:
+        conditions.append("event_date <= ?")
+        params.append(to_date)
+
+    where = "WHERE " + " AND ".join(conditions) if conditions else ""
+    rows = db_query(f"""
+        SELECT event_date, event_name, impact, country, currency,
+               estimate, actual, previous, unit
+        FROM economic_calendar
+        {where}
+        ORDER BY event_date ASC, impact DESC
+        LIMIT 500
+    """, params)
+    return jsonify(rows)
+
+
+@app.route("/api/economic-calendar/high-impact-banner")
+@login_required
+def api_high_impact_banner():
+    """Return high-impact events within the next 48h for homepage banner."""
+    rows = db_query("""
+        SELECT event_date, event_name, impact, country, currency, estimate, unit
+        FROM economic_calendar
+        WHERE impact = 'High'
+          AND event_date >= DATE('now')
+          AND event_date <= DATE('now', '+2 days')
+          AND country = 'US'
+        ORDER BY event_date ASC
+        LIMIT 5
+    """)
+    return jsonify(rows)
+
+
+@app.route("/api/economic-calendar/refresh", methods=["POST"])
+@login_required
+def api_economic_calendar_refresh():
+    try:
+        from scrapers.fmp_scraper import refresh_economic_calendar
+        n = refresh_economic_calendar(DATABASE_PATH)
+        return jsonify({"ok": True, "saved": n})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
 @app.route("/screener")
 @login_required
 def screener():

@@ -483,3 +483,63 @@ def job_refresh_dividends(db_path: str, tickers: list[str] = None) -> int:
             logger.warning(f"[FMP] Dividend fetch failed for {ticker}: {e}")
     logger.info(f"[FMP] Saved {saved} dividend records")
     return saved
+
+
+# ── Economic Calendar ─────────────────────────────────────────────────────────
+
+def fetch_economic_calendar(from_date: str = None, to_date: str = None) -> list[dict]:
+    """Fetch 14-day economic events from FMP. Returns US + major events by default."""
+    if not from_date:
+        from_date = (datetime.now() - timedelta(days=2)).strftime("%Y-%m-%d")
+    if not to_date:
+        to_date = (datetime.now() + timedelta(days=12)).strftime("%Y-%m-%d")
+    data = _get("/economic-calendar", {"from": from_date, "to": to_date})
+    return data if isinstance(data, list) else []
+
+
+def save_economic_calendar(db_path: str, events: list[dict]) -> int:
+    conn = sqlite3.connect(db_path)
+    c = conn.cursor()
+    now = datetime.now().isoformat()
+    saved = 0
+    for ev in events:
+        try:
+            c.execute("""
+                INSERT OR REPLACE INTO economic_calendar
+                (scraped_at, event_date, event_name, impact, country, currency,
+                 estimate, actual, previous, unit)
+                VALUES (?,?,?,?,?,?,?,?,?,?)
+            """, (
+                now,
+                ev.get("date", "")[:10] if ev.get("date") else None,
+                ev.get("event"),
+                ev.get("impact"),
+                ev.get("country"),
+                ev.get("currency"),
+                str(ev["estimate"]) if ev.get("estimate") is not None else None,
+                str(ev["actual"])   if ev.get("actual")   is not None else None,
+                str(ev["previous"]) if ev.get("previous") is not None else None,
+                ev.get("unit"),
+            ))
+            saved += 1
+        except Exception as e:
+            logger.warning(f"[FMP] Econ event save error: {e}")
+    conn.commit()
+    conn.close()
+    return saved
+
+
+def refresh_economic_calendar(db_path: str) -> int:
+    """Delete stale events, fetch fresh 14-day window and save."""
+    conn = sqlite3.connect(db_path)
+    conn.execute("DELETE FROM economic_calendar WHERE event_date < DATE('now', '-3 days')")
+    conn.commit()
+    conn.close()
+
+    events = fetch_economic_calendar()
+    if not events:
+        logger.warning("[FMP] Economic calendar returned no events")
+        return 0
+    saved = save_economic_calendar(db_path, events)
+    logger.info(f"[FMP] Saved {saved} economic calendar events")
+    return saved

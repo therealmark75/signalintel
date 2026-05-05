@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SignalIntel — Economic Events</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#080c14;--surface:#0d1520;--surface2:#111d2e;--border:#1a2d45;
+    --accent:#00d4ff;--accent2:#00ff88;--warning:#ff9500;--danger:#ff3b5c;
+    --text:#f0f6ff;--muted:#8aa4bf;--muted2:#c2d4e8;
+    --mono:'Space Mono',monospace;--sans:'DM Sans',sans-serif;}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14px;
+    background-image:linear-gradient(rgba(0,212,255,0.03) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(0,212,255,0.03) 1px,transparent 1px);
+    background-size:40px 40px;}
+header{position:sticky;top:0;z-index:100;background:rgba(8,12,20,0.95);
+    backdrop-filter:blur(12px);border-bottom:1px solid var(--border);
+    padding:0 24px;display:flex;align-items:center;justify-content:space-between;height:56px;}
+.logo{font-family:var(--mono);font-size:15px;color:var(--accent);letter-spacing:2px;
+    text-transform:uppercase;text-decoration:none;}
+.logo span{color:var(--accent2);}
+nav{display:flex;gap:4px;padding:12px 24px;border-bottom:1px solid var(--border);}
+.tab{padding:6px 16px;border-radius:4px;font-size:12px;font-weight:500;letter-spacing:0.5px;
+    cursor:pointer;border:1px solid transparent;color:var(--muted);transition:all 0.15s;
+    font-family:var(--mono);text-transform:uppercase;text-decoration:none;display:inline-block;}
+.tab:hover{color:var(--text);border-color:var(--border);}
+.tab.active{background:rgba(0,212,255,0.08);border-color:rgba(0,212,255,0.3);color:var(--accent);}
+.user-menu{display:flex;align-items:center;gap:12px;font-size:13px;color:var(--muted);}
+.user-menu a{color:var(--accent);text-decoration:none;font-family:var(--mono);font-size:11px;}
+main{padding:24px;max-width:1400px;margin:0 auto;}
+.page-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px;}
+h1{font-family:var(--mono);font-size:14px;text-transform:uppercase;letter-spacing:2px;color:var(--muted);}
+.filters{display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
+.filter-btn{padding:5px 12px;border-radius:4px;border:1px solid var(--border);background:transparent;
+    color:var(--muted);font-family:var(--mono);font-size:9px;text-transform:uppercase;
+    letter-spacing:0.5px;cursor:pointer;transition:all 0.15s;}
+.filter-btn:hover,.filter-btn.active{border-color:var(--accent);color:var(--accent);background:rgba(0,212,255,0.08);}
+.filter-btn.impact-High.active{border-color:var(--danger);color:var(--danger);background:rgba(255,59,92,0.08);}
+.filter-btn.impact-Medium.active{border-color:var(--warning);color:var(--warning);background:rgba(255,149,0,0.08);}
+.filter-btn.impact-Low.active{border-color:#6b7280;color:#9ca3af;background:rgba(107,114,128,0.08);}
+.refresh-btn{padding:5px 14px;border-radius:4px;border:1px solid var(--border);background:transparent;
+    color:var(--muted2);font-family:var(--mono);font-size:10px;cursor:pointer;transition:all 0.15s;}
+.refresh-btn:hover{border-color:var(--accent2);color:var(--accent2);}
+/* Day groups */
+.day-group{margin-bottom:24px;}
+.day-label{font-family:var(--mono);font-size:11px;color:var(--accent);text-transform:uppercase;
+    letter-spacing:2px;padding:8px 0;border-bottom:1px solid var(--border);margin-bottom:12px;}
+.events-grid{display:flex;flex-direction:column;gap:6px;}
+.event-row{background:var(--surface);border:1px solid var(--border);border-radius:6px;
+    padding:12px 16px;display:flex;align-items:center;gap:16px;transition:border-color 0.15s;}
+.event-row:hover{border-color:rgba(0,212,255,0.25);}
+.event-row.impact-high{border-left:3px solid var(--danger);}
+.event-row.impact-medium{border-left:3px solid var(--warning);}
+.event-row.impact-low{border-left:3px solid #4a6380;}
+.impact-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+.impact-dot.high{background:var(--danger);}
+.impact-dot.medium{background:var(--warning);}
+.impact-dot.low{background:#4a6380;}
+.event-country{font-family:var(--mono);font-size:11px;color:var(--muted);min-width:28px;text-align:center;}
+.event-name{flex:1;font-size:13px;color:var(--text);}
+.event-meta{display:flex;gap:20px;font-family:var(--mono);font-size:11px;flex-shrink:0;}
+.meta-label{color:var(--muted);font-size:9px;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:2px;}
+.meta-val{color:var(--muted2);}
+.meta-val.actual{color:var(--accent2);}
+.impact-badge{padding:2px 8px;border-radius:3px;font-family:var(--mono);font-size:9px;font-weight:700;}
+.badge-high{background:rgba(255,59,92,0.12);color:#ff3b5c;border:1px solid rgba(255,59,92,0.25);}
+.badge-medium{background:rgba(255,149,0,0.1);color:#ff9500;border:1px solid rgba(255,149,0,0.2);}
+.badge-low{background:rgba(74,99,128,0.15);color:#6b7280;border:1px solid rgba(74,99,128,0.2);}
+.empty{text-align:center;padding:60px;color:var(--muted);font-family:var(--mono);font-size:12px;}
+</style>
+</head>
+<body>
+<header>
+    <a href="/" class="logo">Signal<span>Intel</span></a>
+    {% include '_search.html' %}
+    <div class="user-menu">
+        <span>{{ user.username }}</span>
+        <a href="/logout">Sign out</a>
+    </div>
+</header>
+<nav>
+    <a href="/" class="tab">Ratings</a>
+    <a href="/screener" class="tab">Screener</a>
+    <a href="/earnings" class="tab">Earnings</a>
+    <a href="/dividends" class="tab">Dividends</a>
+    <a href="/events" class="tab active">Events</a>
+    <a href="/watchlist" class="tab">My Watchlist</a>
+    <a href="/ratings" class="tab">Rating Tiers</a>
+    <a href="/backtest" class="tab">Backtest</a>
+</nav>
+<main>
+    <div class="page-header">
+        <h1>Economic Events Calendar</h1>
+        <div class="filters">
+            <button class="filter-btn active" data-filter="all" onclick="setFilter(this,'all')">All</button>
+            <button class="filter-btn impact-High" data-filter="High" onclick="setFilter(this,'High')">High Impact</button>
+            <button class="filter-btn impact-Medium" data-filter="Medium" onclick="setFilter(this,'Medium')">Medium</button>
+            <button class="filter-btn impact-Low" data-filter="Low" onclick="setFilter(this,'Low')">Low</button>
+            <button class="filter-btn" data-filter="US" data-country="US" onclick="setCountry(this,'US')">🇺🇸 US</button>
+            <button class="refresh-btn" onclick="refreshData()">↻ Refresh</button>
+        </div>
+    </div>
+    <div id="events-container">
+        <div class="empty">Loading events…</div>
+    </div>
+</main>
+<script>
+let currentImpact = '';
+let currentCountry = '';
+
+function setFilter(btn, impact) {
+    document.querySelectorAll('.filter-btn[data-filter]').forEach(b => {
+        if (!b.dataset.country) b.classList.remove('active');
+    });
+    btn.classList.add('active');
+    currentImpact = impact === 'all' ? '' : impact;
+    loadEvents();
+}
+
+function setCountry(btn, country) {
+    if (btn.classList.contains('active')) {
+        btn.classList.remove('active');
+        currentCountry = '';
+    } else {
+        document.querySelectorAll('.filter-btn[data-country]').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        currentCountry = country;
+    }
+    loadEvents();
+}
+
+async function loadEvents() {
+    const container = document.getElementById('events-container');
+    container.innerHTML = '<div class="empty">Loading…</div>';
+
+    const p = new URLSearchParams();
+    if (currentImpact)  p.set('impact', currentImpact);
+    if (currentCountry) p.set('country', currentCountry);
+
+    const data = await fetch('/api/economic-calendar?' + p).then(r => r.json()).catch(() => []);
+    if (!data.length) {
+        container.innerHTML = '<div class="empty">No events found for the selected filters.</div>';
+        return;
+    }
+
+    // Group by date
+    const groups = {};
+    data.forEach(ev => {
+        const d = ev.event_date || 'Unknown';
+        if (!groups[d]) groups[d] = [];
+        groups[d].push(ev);
+    });
+
+    const today = new Date().toISOString().slice(0,10);
+    const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0,10);
+
+    const impactClass = {High:'high', Medium:'medium', Low:'low'};
+    const impactBadge = {High:'badge-high', Medium:'badge-medium', Low:'badge-low'};
+
+    container.innerHTML = Object.entries(groups).map(([date, events]) => {
+        let label = date;
+        if (date === today)    label = `Today — ${date}`;
+        if (date === tomorrow) label = `Tomorrow — ${date}`;
+        const rows = events.map(ev => {
+            const imp = ev.impact || 'Low';
+            const unit = ev.unit ? ` ${ev.unit}` : '';
+            return `<div class="event-row impact-${imp.toLowerCase()}">
+                <div class="impact-dot ${imp.toLowerCase()}"></div>
+                <div class="event-country">${ev.country || ''}</div>
+                <div class="event-name">${ev.event_name || '-'}</div>
+                <div class="event-meta">
+                    ${ev.actual != null ? `<div><div class="meta-label">Actual</div><div class="meta-val actual">${ev.actual}${unit}</div></div>` : ''}
+                    ${ev.estimate != null ? `<div><div class="meta-label">Forecast</div><div class="meta-val">${ev.estimate}${unit}</div></div>` : ''}
+                    ${ev.previous != null ? `<div><div class="meta-label">Previous</div><div class="meta-val">${ev.previous}${unit}</div></div>` : ''}
+                    <div><span class="impact-badge ${impactBadge[imp]||'badge-low'}">${imp}</span></div>
+                </div>
+            </div>`;
+        }).join('');
+        return `<div class="day-group"><div class="day-label">${label}</div><div class="events-grid">${rows}</div></div>`;
+    }).join('');
+}
+
+async function refreshData() {
+    const btn = document.querySelector('.refresh-btn');
+    btn.textContent = 'Refreshing…';
+    btn.disabled = true;
+    try {
+        await fetch('/api/economic-calendar/refresh', {method:'POST'});
+    } catch(e) {}
+    await loadEvents();
+    btn.textContent = '↻ Refresh';
+    btn.disabled = false;
+}
+
+loadEvents();
+</script>
+</body>
+</html>

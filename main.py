@@ -607,6 +607,21 @@ def main():
             id="fmp_dividends", name="FMP Dividend Refresh Sunday 03:00",
         )
 
+        # Economic calendar refresh (daily, 06:30)
+        def job_economic_calendar():
+            try:
+                from scrapers.fmp_scraper import refresh_economic_calendar
+                n = refresh_economic_calendar(DATABASE_PATH)
+                logger.info(f"[JOB] Economic calendar: {n} events saved")
+            except Exception as e:
+                logger.error(f"[JOB] Economic calendar error: {e}")
+
+        scheduler.add_job(
+            job_economic_calendar,
+            CronTrigger(hour=6, minute=30, day_of_week="mon-fri"),
+            id="economic_calendar", name="FMP Economic Calendar 06:30",
+        )
+
         logger.info("Scheduled jobs:")
         for job in scheduler.get_jobs():
             logger.info(f"  {job.name}")
