@@ -116,7 +116,9 @@ def _classify(text, ticker=None):
 
     # ── Hypothetical/forward-looking language ────────────────────────────────
     hypothetical = [
+        # Forward-looking / conditional language
         "may be subject to", "could be subject to", "might be subject to",
+        "may in the future be", "may from time to time become", "may become subject",
         "could face", "may face", "risk of", "risks include", "could result in",
         "there can be no assurance", "we cannot predict", "if we are subject",
         "if the commission", "if a court", "if we are found", "if such",
@@ -132,6 +134,16 @@ def _classify(text, ticker=None):
         "consequences include", "subject to civil penalties", "including civil penalties",
         "subject to disgorgement", "including disgorgement",
         "violations may result", "violations could result", "violations can result",
+        "may be involved in", "could be involved in", "from time to time",
+        "could subject us to", "may subject us to", "could expose us to",
+        # Explicit negation — company states absence of litigation
+        "there is no pending", "no pending litigation", "no material pending",
+        "not a party to any pending", "no legal proceedings", "no material legal proceedings",
+        "no current legal proceedings", "are not currently a party",
+        "are not a party to any", "we are not aware of any pending",
+        # Accounting/accrual context — "settled for" in reserve/estimate language
+        "reserved item", "accrual", "accrued liabilities", "previously accrued",
+        "reserve for", "amount exceeding the previous estim",
     ]
 
     def is_hypothetical(snippet):
@@ -241,11 +253,15 @@ def _classify(text, ticker=None):
                 return RISK_CLASS_ACTION
 
     # ── Minor ────────────────────────────────────────────────────────────────
+    # Require present-tense active language — skip if context is forward-looking/hypothetical.
     for kw in ["we are party to", "we are a defendant", "plaintiff alleges",
                "complaint alleges", "we have been named", "pending litigation",
                "settled for", "we settled"]:
         if kw in t:
-            return RISK_MINOR
+            idx = t.find(kw)
+            ctx = t[max(0, idx-400):idx+400]
+            if not is_hypothetical(ctx):
+                return RISK_MINOR
 
     return RISK_NONE
 
