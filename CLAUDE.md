@@ -147,3 +147,5 @@ Margin call mechanic:
 - When editing scrapers, be mindful of FinViz rate limits — add delays between requests
 - `rating_changes` table should be populated via `detect_rating_changes()` called after every signal run, not as a standalone job
 - Check `config/settings.py` before hardcoding any values
+- **Ratings Guide has been removed.** The "Ratings Guide" modal and button no longer exist in the nav. `/ratings` (Rating Tiers page) is the single reference for all rating and scoring information. Do not re-add a Ratings Guide button or modal.
+- **Nav bar order** (defined in `web/templates/_nav.html`): Dashboard · Rating Tiers · Screener · Earnings · Dividends · Events · Markets · Watchlist · Backtest · Sign out
