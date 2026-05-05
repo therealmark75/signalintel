@@ -92,7 +92,7 @@
         <table>
             <thead><tr>
                 <th data-tip="Stock symbol">Ticker</th>
-                <th data-tip="SignalIntel 7-tier signal rating">Rating</th>
+                <th data-tip="SignalIntel 7-tier signal strength">Signal</th>
                 <th data-tip="Composite score 0–100 combining Momentum, Quality, Insider, Reversion and Legal signals">Score</th>
                 <th data-tip="Sector relative strength score 0-100 based on the ticker's sector ETF 7-day performance.">Sector</th>
                 <th data-tip="Momentum score — measures price trend strength and direction">Mom</th>
@@ -108,12 +108,13 @@
                 <th></th>
             </tr></thead>
             <tbody>
+            {% set TIER_SHORT = {'STRONG_BUY':'Very Strong','BUY':'Strong','STRONG_HOLD':'Stable','HOLD':'Neutral','WEAK_HOLD':'Soft','SELL':'Bearish','STRONG_SELL':'Very Bearish'} %}
             {% for item in items %}
             <tr>
                 <td><span class="ticker" onclick="openTicker('{{ item.ticker }}')">{{ item.ticker }}</span></td>
                 <td>
                     {% if item.rating %}
-                    <span class="rating rating-{{ item.rating }}">{{ item.rating | replace('_', ' ') }}</span>
+                    <span class="rating rating-{{ item.rating }}">{{ TIER_SHORT.get(item.rating, item.rating) }}</span>
                     {% else %}<span style="color:var(--muted)">-</span>{% endif %}
                 </td>
                 <td class="score {% if item.composite_score and item.composite_score >= 70 %}hi{% elif item.composite_score and item.composite_score >= 55 %}mid{% elif item.composite_score and item.composite_score >= 45 %}lo{% else %}bad{% endif %}">
