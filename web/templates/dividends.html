@@ -133,19 +133,19 @@ tr:hover td{background:rgba(0,212,255,0.03);cursor:pointer;}
         <table>
             <thead>
                 <tr>
-                    <th onclick="setSort('ticker')">TICKER</th>
-                    <th onclick="setSort('ticker')">COMPANY</th>
-                    <th onclick="setSort('ticker')">SECTOR</th>
-                    <th onclick="setSort('dividend_yield')">YIELD %</th>
-                    <th onclick="setSort('annual_dividend')">ANN. DIV</th>
-                    <th onclick="setSort('payout_ratio')">PAYOUT</th>
-                    <th onclick="setSort('ex_dividend_date')">EX-DATE</th>
-                    <th onclick="setSort('payment_date')">PAY DATE</th>
-                    <th>FREQUENCY</th>
-                    <th onclick="setSort('dividend_growth_5yr')">5Y GROWTH</th>
-                    <th onclick="setSort('consecutive_years')">CONSEC.</th>
-                    <th>RATING</th>
-                    <th onclick="setSort('composite_score')">SCORE</th>
+                    <th data-tip="Stock ticker symbol" onclick="setSort('ticker')">TICKER</th>
+                    <th data-tip="Full company name" onclick="setSort('ticker')">COMPANY</th>
+                    <th data-tip="Market sector this company operates in" onclick="setSort('ticker')">SECTOR</th>
+                    <th data-tip="Annual dividend yield as a percentage of current share price. Higher yield = more income per $ invested" onclick="setSort('dividend_yield')">YIELD %</th>
+                    <th data-tip="Total annual dividend payment per share in dollars" onclick="setSort('annual_dividend')">ANN. DIV</th>
+                    <th data-tip="Dividend payout ratio — percentage of earnings paid as dividends. Above 80% may be unsustainable" onclick="setSort('payout_ratio')">PAYOUT</th>
+                    <th data-tip="Ex-dividend date — you must own shares BEFORE this date to receive the next dividend payment" onclick="setSort('ex_dividend_date')">EX-DATE</th>
+                    <th data-tip="Date the dividend payment is actually sent to shareholders" onclick="setSort('payment_date')">PAY DATE</th>
+                    <th data-tip="How often dividends are paid: Monthly, Quarterly or Annually">FREQUENCY</th>
+                    <th data-tip="Average annual dividend growth rate over the last 5 years. Positive growth indicates a healthy, growing dividend" onclick="setSort('dividend_growth_5yr')">5Y GROWTH</th>
+                    <th data-tip="Consecutive years of dividend growth. 25+ years qualifies as a Dividend Aristocrat" onclick="setSort('consecutive_years')">CONSEC.</th>
+                    <th data-tip="SignalIntel signal rating for this stock">RATING</th>
+                    <th data-tip="SignalIntel composite score 0-100" onclick="setSort('composite_score')">SCORE</th>
                 </tr>
             </thead>
             <tbody id="div-tbody">
@@ -253,6 +253,20 @@ async function refreshData() {
 });
 
 loadData();
+
+// Column tooltips
+(function(){
+    const box = document.getElementById('tip-box');
+    document.querySelectorAll('th[data-tip]').forEach(th => {
+        th.addEventListener('mouseenter', () => { box.textContent = th.dataset.tip; box.style.display = 'block'; });
+        th.addEventListener('mousemove', e => {
+            box.style.left = Math.min(e.clientX+14, window.innerWidth-246)+'px';
+            box.style.top  = Math.max(e.clientY-44, 4)+'px';
+        });
+        th.addEventListener('mouseleave', () => { box.style.display = 'none'; });
+    });
+})();
 </script>
+<div id="tip-box" style="position:fixed;display:none;background:#0a1628;border:1px solid var(--border);color:var(--text);padding:7px 11px;border-radius:5px;font-family:var(--sans);font-size:11px;line-height:1.45;max-width:230px;z-index:9999;pointer-events:none;word-wrap:break-word;box-shadow:0 4px 16px rgba(0,0,0,0.4)"></div>
 </body>
 </html>

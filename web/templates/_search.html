@@ -23,8 +23,64 @@
 .sdrop-score{font-family:var(--mono);font-size:11px;color:var(--muted2,#c2d4e8);min-width:32px;text-align:right;flex-shrink:0;}
 .sdrop-target{font-family:var(--mono);font-size:10px;min-width:90px;text-align:right;flex-shrink:0;}
 .sdrop-empty{padding:10px 12px;font-size:12px;color:var(--muted,#8aa4bf);font-family:var(--mono);}
+.sdrop-section-header{padding:6px 12px 4px;font-family:var(--mono);font-size:9px;text-transform:uppercase;
+    letter-spacing:1px;color:var(--muted,#8aa4bf);background:var(--surface2,#111d2e);
+    border-bottom:1px solid var(--border,#1a2d45);}
+
+/* Toast notification */
+#wl-toast{position:fixed;bottom:24px;right:24px;z-index:99999;
+    background:#0a1628;border:1px solid rgba(0,255,136,0.35);border-radius:8px;
+    padding:12px 18px;font-family:var(--mono,monospace);font-size:12px;
+    color:#e2eaf4;box-shadow:0 8px 32px rgba(0,0,0,0.5);
+    display:none;align-items:center;gap:10px;max-width:340px;cursor:pointer;
+    transition:opacity 0.3s;}
+#wl-toast .toast-icon{color:#00ff88;font-size:14px;flex-shrink:0;}
+#wl-toast .toast-msg{flex:1;line-height:1.4;}
+#wl-toast .toast-link{color:#00d4ff;text-decoration:none;white-space:nowrap;}
 </style>
+<!-- Toast notification element (shared across all pages) -->
+<div id="wl-toast" onclick="this.style.display='none'">
+    <span class="toast-icon">✓</span>
+    <span class="toast-msg" id="wl-toast-msg"></span>
+</div>
+
 <script>
+// ── Global toast function ─────────────────────────────────
+window.showWlToast = function(ticker, removed) {
+    const toast = document.getElementById('wl-toast');
+    const msg   = document.getElementById('wl-toast-msg');
+    if (!toast || !msg) return;
+    if (removed) {
+        msg.innerHTML = `${ticker} removed from watchlist`;
+        toast.style.borderColor = 'rgba(255,59,92,0.35)';
+    } else {
+        msg.innerHTML = `${ticker} added to My Watchlist &nbsp;<a class="toast-link" href="/watchlist">View Watchlist →</a>`;
+        toast.style.borderColor = 'rgba(0,255,136,0.35)';
+    }
+    toast.style.display = 'flex';
+    toast.style.opacity = '1';
+    clearTimeout(toast._timer);
+    toast._timer = setTimeout(() => {
+        toast.style.opacity = '0';
+        setTimeout(() => { toast.style.display = 'none'; toast.style.opacity = '1'; }, 350);
+    }, 4000);
+};
+
+// ── Recently viewed tracker ───────────────────────────────
+window.trackRecentlyViewed = function(ticker) {
+    try {
+        let recent = JSON.parse(localStorage.getItem('si_recent') || '[]');
+        recent = [ticker, ...recent.filter(t => t !== ticker)].slice(0, 10);
+        localStorage.setItem('si_recent', JSON.stringify(recent));
+    } catch(e) {}
+};
+
+// Track current page if on a ticker URL
+(function() {
+    const m = location.pathname.match(/^\/ticker\/([A-Z0-9.]+)$/i);
+    if (m) window.trackRecentlyViewed(m[1].toUpperCase());
+})();
+
 (function(){
     const input = document.getElementById('global-search');
     const drop  = document.getElementById('search-drop');
@@ -88,10 +144,68 @@
         });
     }
 
+    async function showPrePopulated() {
+        const sections = [];
+        try {
+            const [wl, signals] = await Promise.all([
+                fetch('/api/watchlist').then(r => r.json()).catch(() => []),
+                fetch('/api/signals?sort=composite_score&dir=desc&per_page=3&rating=STRONG_BUY').then(r => r.json()).catch(() => ({rows:[]})),
+            ]);
+            const recent = (() => {
+                try { return JSON.parse(localStorage.getItem('si_recent') || '[]'); } catch(e) { return []; }
+            })();
+
+            const renderItem = (r, i) => {
+                const c = RC[r.rating] || '#8aa4bf';
+                const label = (r.rating || '').replace(/_/g, ' ');
+                const score = r.composite_score != null ? Number(r.composite_score).toFixed(1) : '';
+                return `<div class="sdrop-item" data-ticker="${r.ticker}" data-idx="${i}">
+                    <span class="sdrop-ticker">${r.ticker}</span>
+                    <span class="sdrop-company">${r.company || ''}</span>
+                    ${label ? `<span class="sdrop-badge" style="color:${c};background:${c}22">${label}</span>` : ''}
+                    <span class="sdrop-score">${score}</span>
+                </div>`;
+            };
+
+            let html = '';
+            const wlSlice = (wl || []).slice(0, 5);
+            if (wlSlice.length) {
+                html += '<div class="sdrop-section-header">Your Watchlist</div>';
+                html += wlSlice.map((r, i) => renderItem({ticker:r.ticker, rating:r.rating, composite_score:r.composite_score, company:r.company}, i)).join('');
+            }
+
+            const topSigs = (signals.rows || signals || []).slice(0, 3);
+            if (topSigs.length) {
+                html += '<div class="sdrop-section-header">Today\'s Top Signals</div>';
+                html += topSigs.map((r, i) => renderItem(r, wlSlice.length + i)).join('');
+            }
+
+            const recentSlice = recent.slice(0, 5);
+            if (recentSlice.length) {
+                html += '<div class="sdrop-section-header">Recently Viewed</div>';
+                html += recentSlice.map((t, i) => `<div class="sdrop-item" data-ticker="${t}" data-idx="${wlSlice.length + topSigs.length + i}">
+                    <span class="sdrop-ticker">${t}</span>
+                    <span class="sdrop-company" style="color:var(--muted,#8aa4bf)">Recently viewed</span>
+                </div>`).join('');
+            }
+
+            if (!html) return;
+            drop.innerHTML = html;
+            drop.querySelectorAll('.sdrop-item').forEach(el => {
+                el.addEventListener('mousedown', e => { e.preventDefault(); go(el.dataset.ticker); });
+            });
+            drop.style.display = 'block';
+        } catch(e) {}
+    }
+
+    input.addEventListener('focus', function() {
+        if (!this.value.trim()) showPrePopulated();
+    });
+
     input.addEventListener('input', function() {
         clearTimeout(timer);
         const q = this.value.trim();
-        if (!q) { clear(); return; }
+        if (!q) { showPrePopulated(); return; }
         timer = setTimeout(() => {
             fetch('/api/search?q=' + encodeURIComponent(q))
                 .then(r => r.json())

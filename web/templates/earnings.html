@@ -121,18 +121,18 @@ tr:hover td{background:rgba(0,212,255,0.03);cursor:pointer;}
         <table>
             <thead>
                 <tr>
-                    <th>TICKER</th>
-                    <th>COMPANY</th>
-                    <th>DATE</th>
-                    <th>TIMING</th>
-                    <th>PERIOD</th>
-                    <th>EPS EST.</th>
-                    <th>EPS LAST YR</th>
-                    <th>EPS CHG</th>
-                    <th>REV. EST.</th>
-                    <th>P/E</th>
-                    <th>RATING</th>
-                    <th>SCORE</th>
+                    <th data-tip="Stock ticker symbol">TICKER</th>
+                    <th data-tip="Full company name">COMPANY</th>
+                    <th data-tip="Date the company reports its earnings results">DATE</th>
+                    <th data-tip="When results are released: Before Open (pre-market) or After Close (post-market)">TIMING</th>
+                    <th data-tip="Financial period covered by this earnings report, e.g. Q1 2026">PERIOD</th>
+                    <th data-tip="Analyst consensus estimate for earnings per share this quarter">EPS EST.</th>
+                    <th data-tip="Actual earnings per share in the same quarter last year, for comparison">EPS LAST YR</th>
+                    <th data-tip="Percentage change in EPS forecast vs same quarter last year. Green = growth, red = decline">EPS CHG</th>
+                    <th data-tip="Analyst consensus estimate for total revenue this quarter">REV. EST.</th>
+                    <th data-tip="Price to Earnings ratio — current share price divided by annual earnings per share">P/E</th>
+                    <th data-tip="SignalIntel signal rating for this stock">RATING</th>
+                    <th data-tip="SignalIntel composite score 0-100">SCORE</th>
                 </tr>
             </thead>
             <tbody id="earnings-tbody">
@@ -229,6 +229,18 @@ async function refreshData() {
 }
 
 loadData();
+(function(){
+    const box = document.getElementById('tip-box');
+    document.querySelectorAll('th[data-tip]').forEach(th => {
+        th.addEventListener('mouseenter', () => { box.textContent = th.dataset.tip; box.style.display = 'block'; });
+        th.addEventListener('mousemove', e => {
+            box.style.left = Math.min(e.clientX+14, window.innerWidth-246)+'px';
+            box.style.top  = Math.max(e.clientY-44, 4)+'px';
+        });
+        th.addEventListener('mouseleave', () => { box.style.display = 'none'; });
+    });
+})();
 </script>
+<div id="tip-box" style="position:fixed;display:none;background:#0a1628;border:1px solid var(--border);color:var(--text);padding:7px 11px;border-radius:5px;font-family:var(--sans);font-size:11px;line-height:1.45;max-width:230px;z-index:9999;pointer-events:none;word-wrap:break-word;box-shadow:0 4px 16px rgba(0,0,0,0.4)"></div>
 </body>
 </html>

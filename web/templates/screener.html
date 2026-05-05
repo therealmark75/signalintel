@@ -305,8 +305,15 @@ async function toggleWatchlist(ticker, btn, e) {
     });
     const data = await res.json();
     if (data.ok) {
-        if (inWl) { watchlistSet.delete(ticker); btn.textContent = '+'; btn.className = 'wl-btn wl-btn-add'; }
-        else      { watchlistSet.add(ticker);    btn.textContent = '✓'; btn.className = 'wl-btn wl-btn-in';  }
+        if (inWl) {
+            watchlistSet.delete(ticker);
+            btn.textContent = '+'; btn.className = 'wl-btn wl-btn-add';
+            if (window.showWlToast) showWlToast(ticker, true);
+        } else {
+            watchlistSet.add(ticker);
+            btn.textContent = '✓'; btn.className = 'wl-btn wl-btn-in';
+            if (window.showWlToast) showWlToast(ticker, false);
+        }
     }
 }
 
