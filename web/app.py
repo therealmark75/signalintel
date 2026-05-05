@@ -356,6 +356,36 @@ def api_top_signals():
     return jsonify(top)
 
 
+@app.route("/api/search")
+@login_required
+def api_search():
+    q = request.args.get("q", "").strip().upper()
+    if not q:
+        return jsonify({"results": []})
+    prefix = q + "%"
+    substr = "%" + q + "%"
+    rows = db_query("""
+        SELECT ss.ticker, ss.company,
+               sig.rating, sig.composite_score
+        FROM (
+            SELECT ticker, company
+            FROM screener_snapshots
+            WHERE ticker LIKE ? OR UPPER(company) LIKE ?
+            GROUP BY ticker
+        ) ss
+        LEFT JOIN (
+            SELECT ticker, rating, MAX(composite_score) as composite_score
+            FROM signal_scores
+            GROUP BY ticker
+        ) sig ON ss.ticker = sig.ticker
+        ORDER BY
+            CASE WHEN ss.ticker LIKE ? THEN 0 ELSE 1 END,
+            sig.composite_score DESC
+        LIMIT 10
+    """, (prefix, substr, prefix))
+    return jsonify({"results": [dict(r) for r in rows]})
+
+
 @app.route("/api/ticker/<ticker>")
 @login_required
 def api_ticker(ticker):

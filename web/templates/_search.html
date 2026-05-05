@@ -1,0 +1,131 @@
+<div class="search-wrap" id="search-wrap">
+    <input type="text" id="global-search" class="search-input"
+           placeholder="Search tickers… (/)" autocomplete="off" spellcheck="false">
+    <div class="search-drop" id="search-drop"></div>
+</div>
+<style>
+.search-wrap{position:relative;width:240px;flex-shrink:0;}
+.search-input{width:100%;background:var(--surface2,#111d2e);border:1px solid var(--border,#1a2d45);
+    border-radius:6px;padding:6px 32px 6px 12px;font-family:var(--mono);font-size:12px;
+    color:var(--text,#f0f6ff);outline:none;box-sizing:border-box;transition:border-color 0.15s;}
+.search-input:focus{border-color:var(--accent,#00d4ff);}
+.search-input::placeholder{color:var(--muted,#8aa4bf);}
+.search-drop{display:none;position:absolute;top:calc(100% + 6px);left:0;right:0;min-width:320px;
+    background:var(--surface,#0d1520);border:1px solid var(--border,#1a2d45);border-radius:6px;
+    z-index:9999;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,0.6);}
+.sdrop-item{display:flex;align-items:center;gap:8px;padding:8px 12px;cursor:pointer;
+    border-bottom:1px solid var(--border,#1a2d45);transition:background 0.1s;}
+.sdrop-item:last-child{border-bottom:none;}
+.sdrop-item:hover,.sdrop-item.sdrop-active{background:var(--surface2,#111d2e);}
+.sdrop-ticker{font-family:var(--mono);font-size:12px;font-weight:700;color:var(--accent,#00d4ff);min-width:52px;}
+.sdrop-company{font-size:11px;color:var(--muted2,#c2d4e8);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.sdrop-badge{font-family:var(--mono);font-size:9px;font-weight:700;padding:1px 6px;border-radius:3px;white-space:nowrap;flex-shrink:0;}
+.sdrop-score{font-family:var(--mono);font-size:11px;color:var(--muted2,#c2d4e8);min-width:32px;text-align:right;flex-shrink:0;}
+.sdrop-empty{padding:10px 12px;font-size:12px;color:var(--muted,#8aa4bf);font-family:var(--mono);}
+</style>
+<script>
+(function(){
+    const input = document.getElementById('global-search');
+    const drop  = document.getElementById('search-drop');
+    if (!input || !drop) return;
+    let timer = null, activeIdx = -1, results = [];
+
+    const RC = {
+        STRONG_BUY:'#00ff88', BUY:'#00d4ff', STRONG_HOLD:'#94a3b8',
+        HOLD:'#64748b', WEAK_HOLD:'#ff9500', SELL:'#ff3b5c', STRONG_SELL:'#ff3b5c'
+    };
+
+    function clear() {
+        drop.innerHTML = '';
+        drop.style.display = 'none';
+        activeIdx = -1;
+        results = [];
+    }
+
+    function go(ticker) {
+        window.location.href = '/ticker/' + ticker.toUpperCase();
+    }
+
+    function render(items) {
+        results = items;
+        if (!items.length) {
+            drop.innerHTML = '<div class="sdrop-empty">No results</div>';
+            drop.style.display = 'block';
+            return;
+        }
+        drop.innerHTML = items.map((r, i) => {
+            const c     = RC[r.rating] || '#8aa4bf';
+            const label = (r.rating || '').replace(/_/g, ' ');
+            const score = r.composite_score != null ? Number(r.composite_score).toFixed(1) : '';
+            return `<div class="sdrop-item" data-ticker="${r.ticker}" data-idx="${i}">
+                <span class="sdrop-ticker">${r.ticker}</span>
+                <span class="sdrop-company">${r.company || ''}</span>
+                ${label ? `<span class="sdrop-badge" style="color:${c};background:${c}22">${label}</span>` : ''}
+                <span class="sdrop-score">${score}</span>
+            </div>`;
+        }).join('');
+        drop.querySelectorAll('.sdrop-item').forEach(el => {
+            el.addEventListener('mousedown', e => {
+                e.preventDefault();
+                go(el.dataset.ticker);
+            });
+        });
+        drop.style.display = 'block';
+    }
+
+    function highlight() {
+        drop.querySelectorAll('.sdrop-item').forEach((el, i) => {
+            el.classList.toggle('sdrop-active', i === activeIdx);
+        });
+    }
+
+    input.addEventListener('input', function() {
+        clearTimeout(timer);
+        const q = this.value.trim();
+        if (!q) { clear(); return; }
+        timer = setTimeout(() => {
+            fetch('/api/search?q=' + encodeURIComponent(q))
+                .then(r => r.json())
+                .then(d => render(d.results || []))
+                .catch(() => clear());
+        }, 150);
+    });
+
+    input.addEventListener('keydown', function(e) {
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            activeIdx = Math.min(activeIdx + 1, results.length - 1);
+            highlight();
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            activeIdx = Math.max(activeIdx - 1, -1);
+            highlight();
+        } else if (e.key === 'Enter') {
+            e.preventDefault();
+            if (activeIdx >= 0 && results[activeIdx]) {
+                go(results[activeIdx].ticker);
+            } else if (this.value.trim()) {
+                go(this.value.trim());
+            }
+        } else if (e.key === 'Escape') {
+            clear();
+            this.blur();
+        }
+    });
+
+    document.addEventListener('click', function(e) {
+        if (!e.target.closest('#search-wrap')) clear();
+    });
+
+    // Press '/' anywhere (outside inputs) to focus the search bar
+    document.addEventListener('keydown', function(e) {
+        if (e.key === '/' &&
+            document.activeElement.tagName !== 'INPUT' &&
+            document.activeElement.tagName !== 'TEXTAREA') {
+            e.preventDefault();
+            input.focus();
+            input.select();
+        }
+    });
+})();
+</script>
