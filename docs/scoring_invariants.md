@@ -106,6 +106,15 @@ For client-side sorted tables (dashboard ALL SIGNALS), reading the active filter
 
 ---
 
+## 11. UI Consistency — Tooltip Icons
+
+Hover `data-tip` or `title` attributes on heading labels are sufficient for tooltips. Do **not** add `(?)` icons next to headings that already have hover tooltips. `(?)` icons add visual clutter without adding information value.
+
+**Acceptable:** `(?) more` used as an inline read-more affordance within prose text (e.g. backtest.html:71).  
+**Not acceptable:** `(?)` adjacent to a heading that already has a hover tooltip on the heading itself.
+
+---
+
 ## Final Verification — 2026-05-05
 
 | Check | Expected | Actual | Status |
