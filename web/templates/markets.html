@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SignalIntel — Market Overview</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#080c14;--surface:#0d1520;--surface2:#111d2e;--border:#1a2d45;
+    --accent:#00d4ff;--accent2:#00ff88;--warning:#ff9500;--danger:#ff3b5c;
+    --text:#f0f6ff;--muted:#8aa4bf;--muted2:#c2d4e8;
+    --mono:'Space Mono',monospace;--sans:'DM Sans',sans-serif;}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);padding-bottom:40px;
+    background-image:linear-gradient(rgba(0,212,255,0.03) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(0,212,255,0.03) 1px,transparent 1px);
+    background-size:40px 40px;}
+header{position:sticky;top:0;z-index:100;background:rgba(8,12,20,0.95);
+    backdrop-filter:blur(12px);border-bottom:1px solid var(--border);
+    padding:0 24px;display:flex;align-items:center;justify-content:space-between;height:56px;}
+.logo{font-family:var(--mono);font-size:15px;color:var(--accent);letter-spacing:2px;text-decoration:none;}
+.logo span{color:var(--accent2);}
+nav{display:flex;gap:4px;padding:10px 24px;border-bottom:1px solid var(--border);}
+.tab{padding:6px 16px;border-radius:4px;font-size:12px;font-weight:500;letter-spacing:0.5px;
+    cursor:pointer;border:1px solid transparent;color:var(--muted);transition:all 0.15s;
+    font-family:var(--mono);text-transform:uppercase;text-decoration:none;display:inline-block;}
+.tab:hover{color:var(--text);border-color:var(--border);}
+.tab.active{background:rgba(0,212,255,0.08);border-color:rgba(0,212,255,0.3);color:var(--accent);}
+.user-menu{display:flex;align-items:center;gap:12px;font-size:13px;color:var(--muted);}
+.user-menu a{color:var(--accent);text-decoration:none;font-family:var(--mono);font-size:11px;}
+main{padding:24px;max-width:1500px;margin:0 auto;}
+
+/* Page header */
+.page-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px;}
+h1{font-family:var(--mono);font-size:14px;text-transform:uppercase;letter-spacing:2px;color:var(--muted);}
+.status-row{display:flex;align-items:center;gap:12px;}
+.market-status{font-family:var(--mono);font-size:11px;padding:4px 10px;border-radius:4px;font-weight:700;}
+.status-OPEN{background:rgba(0,255,136,0.1);color:#00ff88;border:1px solid rgba(0,255,136,0.3);}
+.status-CLOSED{background:rgba(255,59,92,0.08);color:#ff3b5c;border:1px solid rgba(255,59,92,0.2);}
+.status-UNKNOWN{background:rgba(138,164,191,0.08);color:var(--muted);border:1px solid var(--border);}
+.as-of{font-family:var(--mono);font-size:10px;color:var(--muted);}
+.refresh-btn{padding:5px 14px;border-radius:4px;border:1px solid var(--border);background:transparent;
+    color:var(--muted2);font-family:var(--mono);font-size:10px;cursor:pointer;transition:all 0.15s;}
+.refresh-btn:hover{border-color:var(--accent2);color:var(--accent2);}
+
+/* Section */
+.section{margin-bottom:28px;}
+.section-title{font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:2px;
+    color:var(--accent);margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--border);}
+
+/* Instrument cards */
+.cards-grid{display:grid;gap:10px;}
+.cards-indices{grid-template-columns:repeat(5,1fr);}
+.cards-4{grid-template-columns:repeat(4,1fr);}
+.cards-3{grid-template-columns:repeat(3,1fr);}
+@media(max-width:900px){
+    .cards-indices,.cards-4,.cards-3{grid-template-columns:repeat(2,1fr);}
+}
+.mcard{background:var(--surface);border:1px solid var(--border);border-radius:8px;
+    padding:14px 16px;transition:border-color 0.15s;}
+.mcard:hover{border-color:rgba(0,212,255,0.25);}
+.mcard-sym{font-family:var(--mono);font-size:10px;color:var(--muted);margin-bottom:2px;}
+.mcard-label{font-size:13px;color:var(--muted2);margin-bottom:8px;font-weight:500;}
+.mcard-price{font-family:var(--mono);font-size:18px;color:var(--text);font-weight:700;margin-bottom:4px;}
+.mcard-change{font-family:var(--mono);font-size:11px;}
+.mcard-change.up{color:#00ff88;}
+.mcard-change.dn{color:#ff3b5c;}
+.mcard-change.neu{color:var(--muted);}
+.mcard-null{color:var(--muted);font-family:var(--mono);font-size:13px;}
+
+/* Sector bars */
+.sectors-grid{display:flex;flex-direction:column;gap:6px;}
+.sector-row{display:flex;align-items:center;gap:12px;background:var(--surface);
+    border:1px solid var(--border);border-radius:6px;padding:10px 14px;}
+.sector-label{font-size:13px;color:var(--muted2);width:150px;flex-shrink:0;font-weight:500;}
+.sector-bar-wrap{flex:1;background:var(--surface2);border-radius:3px;height:6px;overflow:hidden;}
+.sector-bar{height:100%;border-radius:3px;transition:width 0.4s ease;}
+.sector-pct{font-family:var(--mono);font-size:12px;width:62px;text-align:right;flex-shrink:0;}
+.sector-pct.up{color:#00ff88;}
+.sector-pct.dn{color:#ff3b5c;}
+.sector-pct.neu{color:var(--muted);}
+
+/* Loading */
+.loading{text-align:center;padding:40px;color:var(--muted);font-family:var(--mono);font-size:12px;}
+</style>
+</head>
+<body>
+<header>
+    <a href="/" class="logo">SIGNAL<span>INTEL</span></a>
+    {% include '_search.html' %}
+    <div class="user-menu">
+        <span>{{ user.username }}</span>
+        <a href="/logout">Sign out</a>
+    </div>
+</header>
+<nav>
+    <a href="/" class="tab">Ratings</a>
+    <a href="/screener" class="tab">Screener</a>
+    <a href="/earnings" class="tab">Earnings</a>
+    <a href="/dividends" class="tab">Dividends</a>
+    <a href="/events" class="tab">Events</a>
+    <a href="/markets" class="tab active">Markets</a>
+    <a href="/watchlist" class="tab">My Watchlist</a>
+    <a href="/ratings" class="tab">Rating Tiers</a>
+    <a href="/backtest" class="tab">Backtest</a>
+</nav>
+<main>
+    <div class="page-header">
+        <h1>Market Overview</h1>
+        <div class="status-row">
+            <span class="market-status status-UNKNOWN" id="market-status">—</span>
+            <span class="as-of" id="as-of">—</span>
+            <button class="refresh-btn" onclick="loadData(true)">↻ Refresh</button>
+        </div>
+    </div>
+
+    <div id="content"><div class="loading">Loading market data…</div></div>
+</main>
+
+<script>
+function fmt(v, d) {
+    if (v == null) return '-';
+    const n = Number(v);
+    if (d == null) {
+        if (Math.abs(n) >= 10000) return n.toLocaleString('en-US', {minimumFractionDigits:2,maximumFractionDigits:2});
+        if (Math.abs(n) >= 1000)  return n.toLocaleString('en-US', {minimumFractionDigits:2,maximumFractionDigits:2});
+        return n.toFixed(4);
+    }
+    return n.toFixed(d);
+}
+
+function fmtPrice(v, sym) {
+    if (v == null) return '-';
+    const n = Number(v);
+    // Forex: show 4 dp; large numbers: show 2 dp with commas; otherwise 2 dp
+    if (sym && (sym.includes('=X') || sym === 'JPY=X')) return n.toFixed(4);
+    if (n >= 1000) return n.toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
+    if (n >= 10)   return n.toFixed(2);
+    return n.toFixed(4);
+}
+
+function fmtChange(item) {
+    if (item.change == null || item.change_pct == null) return {html:'<span class="mcard-change neu">—</span>', cls:'neu'};
+    const pct = Number(item.change_pct);
+    const cls = pct > 0 ? 'up' : pct < 0 ? 'dn' : 'neu';
+    const sign = pct >= 0 ? '+' : '';
+    const chg = Number(item.change);
+    const chgStr = Math.abs(chg) >= 100 ? chg.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}) : chg.toFixed(2);
+    return {html:`<span class="mcard-change ${cls}">${sign}${pct.toFixed(2)}%  ${sign}${chgStr}</span>`, cls};
+}
+
+function buildCard(item) {
+    const {html: chgHtml} = fmtChange(item);
+    return `<div class="mcard">
+        <div class="mcard-sym">${item.sym}</div>
+        <div class="mcard-label">${item.label}</div>
+        ${item.price != null
+            ? `<div class="mcard-price">${fmtPrice(item.price, item.sym)}</div>${chgHtml}`
+            : '<div class="mcard-null">—</div>'}
+    </div>`;
+}
+
+function buildSection(title, items, gridClass) {
+    return `<div class="section">
+        <div class="section-title">${title}</div>
+        <div class="cards-grid ${gridClass}">${items.map(buildCard).join('')}</div>
+    </div>`;
+}
+
+function buildSectors(items) {
+    // Find max abs pct for bar scaling
+    const maxPct = Math.max(...items.map(i => Math.abs(i.change_pct || 0)), 3);
+    const rows = items.map(item => {
+        const pct = item.change_pct;
+        if (pct == null) {
+            return `<div class="sector-row">
+                <div class="sector-label">${item.label}</div>
+                <div class="sector-bar-wrap"><div class="sector-bar" style="width:0"></div></div>
+                <div class="sector-pct neu">—</div>
+            </div>`;
+        }
+        const cls = pct > 0 ? 'up' : pct < 0 ? 'dn' : 'neu';
+        const barColor = pct > 0 ? '#00ff88' : pct < 0 ? '#ff3b5c' : '#4a6380';
+        const barW = Math.min(100, Math.abs(pct) / maxPct * 100).toFixed(1);
+        const sign = pct >= 0 ? '+' : '';
+        return `<div class="sector-row">
+            <div class="sector-label">${item.label}</div>
+            <div class="sector-bar-wrap"><div class="sector-bar" style="width:${barW}%;background:${barColor}"></div></div>
+            <div class="sector-pct ${cls}">${sign}${Number(pct).toFixed(2)}%</div>
+        </div>`;
+    });
+    return `<div class="section">
+        <div class="section-title">Sector Performance</div>
+        <div class="sectors-grid">${rows.join('')}</div>
+    </div>`;
+}
+
+async function loadData(force) {
+    const url = '/api/markets' + (force ? '?refresh=1' : '');
+    const btn = document.querySelector('.refresh-btn');
+    if (btn) { btn.textContent = '↻ Loading…'; btn.disabled = true; }
+
+    const data = await fetch(url).then(r => r.json()).catch(() => null);
+
+    if (btn) { btn.textContent = '↻ Refresh'; btn.disabled = false; }
+    if (!data) {
+        document.getElementById('content').innerHTML = '<div class="loading">Failed to load market data.</div>';
+        return;
+    }
+
+    // Status badge
+    const statusEl = document.getElementById('market-status');
+    statusEl.textContent = data.market_status + '  ' + (data.market_time || '');
+    statusEl.className = 'market-status status-' + (data.market_status || 'UNKNOWN');
+    document.getElementById('as-of').textContent = data.as_of ? 'As of ' + data.as_of : '';
+
+    document.getElementById('content').innerHTML =
+        buildSection('Major Indices', data.indices, 'cards-indices') +
+        buildSection('Commodities', data.commodities, 'cards-4') +
+        buildSection('Forex', data.forex, 'cards-4') +
+        buildSection('Cryptocurrency', data.crypto, 'cards-3') +
+        buildSectors(data.sectors);
+}
+
+loadData();
+// Auto-refresh every 60s
+setInterval(() => loadData(false), 60000);
+</script>
+</body>
+</html>

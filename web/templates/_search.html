@@ -38,6 +38,23 @@
 #wl-toast .toast-msg{flex:1;line-height:1.4;}
 #wl-toast .toast-link{color:#00d4ff;text-decoration:none;white-space:nowrap;}
 </style>
+<!-- Ticker tape (shared across all pages) -->
+<div id="si-tape" style="position:fixed;bottom:0;left:0;right:0;z-index:9998;
+    height:26px;background:rgba(8,12,20,0.97);border-top:1px solid var(--border,#1a2d45);
+    overflow:hidden;display:flex;align-items:center;font-family:var(--mono,monospace);font-size:11px;">
+    <div id="si-tape-inner" style="display:flex;align-items:center;gap:0;white-space:nowrap;
+        animation:tape-scroll 60s linear infinite;will-change:transform;"></div>
+</div>
+<style>
+@keyframes tape-scroll{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
+.tape-item{display:inline-flex;align-items:center;gap:6px;padding:0 20px;border-right:1px solid rgba(26,45,69,0.6);}
+.tape-lbl{color:#8aa4bf;}
+.tape-prc{color:#e2eaf4;}
+.tape-up{color:#00ff88;}
+.tape-dn{color:#ff3b5c;}
+.tape-neu{color:#8aa4bf;}
+body{padding-bottom:32px;}
+</style>
 <!-- Toast notification element (shared across all pages) -->
 <div id="wl-toast" onclick="this.style.display='none'">
     <span class="toast-icon">✓</span>
@@ -79,6 +96,42 @@ window.trackRecentlyViewed = function(ticker) {
 (function() {
     const m = location.pathname.match(/^\/ticker\/([A-Z0-9.]+)$/i);
     if (m) window.trackRecentlyViewed(m[1].toUpperCase());
+})();
+
+// ── Ticker tape ──────────────────────────────────
+(function() {
+    const inner = document.getElementById('si-tape-inner');
+    if (!inner) return;
+
+    function fmtTape(item) {
+        const pct = item.change_pct;
+        let priceStr = '-', chgStr = '', cls = 'tape-neu';
+        if (item.price != null) {
+            const p = Number(item.price);
+            priceStr = p >= 1000 ? p.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}) : p.toFixed(2);
+        }
+        if (pct != null) {
+            const sign = Number(pct) >= 0 ? '+' : '';
+            chgStr = ` ${sign}${Number(pct).toFixed(2)}%`;
+            cls = Number(pct) > 0 ? 'tape-up' : Number(pct) < 0 ? 'tape-dn' : 'tape-neu';
+        }
+        return `<span class="tape-item"><span class="tape-lbl">${item.label}</span><span class="tape-prc">${priceStr}</span><span class="${cls}">${chgStr}</span></span>`;
+    }
+
+    function loadTape() {
+        fetch('/api/markets/tape').then(r => r.json()).then(data => {
+            if (!data.items || !data.items.length) return;
+            const html = data.items.map(fmtTape).join('');
+            inner.innerHTML = html + html; // duplicate for seamless loop
+            // Adjust animation duration based on content width
+            const tw = inner.scrollWidth / 2;
+            const dur = Math.max(30, Math.round(tw / 60)) + 's';
+            inner.style.animationDuration = dur;
+        }).catch(() => {});
+    }
+
+    loadTape();
+    setInterval(loadTape, 60000);
 })();
 
 (function(){

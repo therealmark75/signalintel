@@ -619,6 +619,138 @@ def api_economic_calendar_refresh():
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
+# ── Markets ─────────────────────────────────────────────────────────────────
+import threading as _threading, time as _time
+
+_MARKET_SYMS = {
+    "indices": [
+        ("^GSPC","S&P 500"), ("^IXIC","NASDAQ"), ("^DJI","Dow Jones"),
+        ("^RUT","Russell 2000"), ("^VIX","VIX"),
+    ],
+    "commodities": [
+        ("GC=F","Gold"), ("CL=F","WTI Oil"), ("SI=F","Silver"), ("NG=F","Nat Gas"),
+    ],
+    "forex": [
+        ("EURUSD=X","EUR/USD"), ("GBPUSD=X","GBP/USD"),
+        ("JPY=X","USD/JPY"), ("AUDUSD=X","AUD/USD"),
+    ],
+    "crypto": [
+        ("BTC-USD","Bitcoin"), ("ETH-USD","Ethereum"), ("SOL-USD","Solana"),
+    ],
+    "sectors": [
+        ("XLK","Technology"), ("XLF","Financials"), ("XLE","Energy"),
+        ("XLV","Health Care"), ("XLI","Industrials"), ("XLY","Consumer Disc"),
+        ("XLP","Consumer Staples"), ("XLU","Utilities"), ("XLB","Materials"),
+        ("XLRE","Real Estate"), ("XLC","Comm Services"),
+    ],
+}
+_TAPE_SYMS = ["^GSPC","^IXIC","^DJI","^VIX","GC=F","CL=F","BTC-USD","ETH-USD"]
+_markets_cache = {"data": None, "ts": 0}
+_markets_lock  = _threading.Lock()
+
+
+def _fetch_markets_data(force=False):
+    with _markets_lock:
+        if not force and _markets_cache["data"] and (_time.time() - _markets_cache["ts"]) < 60:
+            return _markets_cache["data"]
+
+    try:
+        import yfinance as yf, pandas as pd
+        all_syms = [s for cat in _MARKET_SYMS.values() for s, _ in cat]
+        raw = yf.download(all_syms, period="5d", interval="1d",
+                          auto_adjust=True, progress=False)
+        closes = raw["Close"] if "Close" in raw.columns else raw.xs("Close", axis=1, level=0)
+        prices = {}
+        for sym in all_syms:
+            try:
+                col = closes[sym] if sym in closes.columns else None
+                if col is None:
+                    continue
+                valid = col.dropna()
+                if len(valid) >= 2:
+                    p = float(valid.iloc[-1])
+                    pc = float(valid.iloc[-2])
+                    if pc != 0:
+                        prices[sym] = {
+                            "price": round(p, 4),
+                            "change": round(p - pc, 4),
+                            "change_pct": round((p - pc) / pc * 100, 2),
+                        }
+            except Exception:
+                pass
+    except Exception:
+        prices = {}
+
+    def build(cat_key):
+        out = []
+        for sym, label in _MARKET_SYMS[cat_key]:
+            p = prices.get(sym)
+            if p:
+                out.append({"sym": sym, "label": label, **p})
+            else:
+                out.append({"sym": sym, "label": label, "price": None, "change": None, "change_pct": None})
+        return out
+
+    # Market status (US Eastern)
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    try:
+        et = datetime.now(ZoneInfo("America/New_York"))
+        wd = et.weekday()
+        hr = et.hour + et.minute / 60
+        is_open = (wd < 5) and (9.5 <= hr < 16)
+        market_status = "OPEN" if is_open else "CLOSED"
+        market_time = et.strftime("%I:%M %p ET")
+    except Exception:
+        market_status = "UNKNOWN"
+        market_time = "-"
+
+    result = {
+        "indices":     build("indices"),
+        "commodities": build("commodities"),
+        "forex":       build("forex"),
+        "crypto":      build("crypto"),
+        "sectors":     build("sectors"),
+        "market_status": market_status,
+        "market_time":   market_time,
+        "as_of": datetime.now().strftime("%H:%M:%S"),
+    }
+    with _markets_lock:
+        _markets_cache["data"] = result
+        _markets_cache["ts"] = _time.time()
+    return result
+
+
+@app.route("/markets")
+@login_required
+def markets_page():
+    return render_template("markets.html", user=current_user())
+
+
+@app.route("/api/markets")
+@login_required
+def api_markets():
+    force = request.args.get("refresh") == "1"
+    return jsonify(_fetch_markets_data(force=force))
+
+
+@app.route("/api/markets/tape")
+@login_required
+def api_markets_tape():
+    data = _fetch_markets_data()
+    label_map = {s: l for cat in _MARKET_SYMS.values() for s, l in cat}
+    items = []
+    for sym in _TAPE_SYMS:
+        src = next((i for cat in data.values() if isinstance(cat, list)
+                    for i in cat if isinstance(i, dict) and i.get("sym") == sym), None)
+        if src:
+            items.append(src)
+        else:
+            items.append({"sym": sym, "label": label_map.get(sym, sym),
+                          "price": None, "change": None, "change_pct": None})
+    return jsonify({"items": items, "as_of": data.get("as_of")})
+
+
 @app.route("/screener")
 @login_required
 def screener():
