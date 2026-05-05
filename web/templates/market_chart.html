@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{ label }} — SignalIntel Markets</title>
+<style>
+:root{--bg:#080c14;--surface:#0d1520;--border:#1a2d45;
+    --accent:#00d4ff;--accent2:#00ff88;--danger:#ff3b5c;
+    --text:#f0f6ff;--muted:#8aa4bf;--muted2:#c2d4e8;
+    --mono:'Space Mono',monospace;--sans:'DM Sans',sans-serif;}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:100vh;display:flex;flex-direction:column;}
+.top-bar{background:var(--surface);border-bottom:1px solid var(--border);padding:10px 24px;display:flex;align-items:center;gap:16px;}
+.back-link{font-family:var(--mono);font-size:11px;color:var(--accent);text-decoration:none;letter-spacing:1px;display:flex;align-items:center;gap:6px;}
+.back-link:hover{opacity:0.8;}
+.chart-label{font-family:var(--mono);font-size:14px;font-weight:700;color:var(--text);letter-spacing:1px;}
+.chart-symbol{font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:0.5px;margin-left:auto;}
+.chart-wrap{flex:1;min-height:0;padding:0;}
+.tradingview-widget-container{width:100%;height:100%;}
+</style>
+</head>
+<body>
+{% include '_nav.html' %}
+<div class="top-bar">
+    <a href="/markets" class="back-link">← Back to Markets</a>
+    <span class="chart-label">{{ label }}</span>
+    <span class="chart-symbol">{{ tv_symbol }}</span>
+</div>
+<div class="chart-wrap" style="height:calc(100vh - 110px)">
+    <div class="tradingview-widget-container" style="height:100%;width:100%">
+        <div class="tradingview-widget-container__widget" style="height:100%;width:100%"></div>
+        <script type="text/javascript" src="https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js" async>
+        {
+            "autosize": true,
+            "symbol": "{{ tv_symbol }}",
+            "interval": "D",
+            "timezone": "Etc/UTC",
+            "theme": "dark",
+            "style": "1",
+            "locale": "en",
+            "enable_publishing": false,
+            "backgroundColor": "rgba(8,12,20,1)",
+            "gridColor": "rgba(26,45,69,0.5)",
+            "hide_top_toolbar": false,
+            "hide_legend": false,
+            "save_image": false,
+            "calendar": false,
+            "hide_volume": false
+        }
+        </script>
+    </div>
+</div>
+{% include '_footer.html' %}
+</body>
+</html>

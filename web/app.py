@@ -823,6 +823,15 @@ def markets_page():
     )
 
 
+@app.route("/markets/<path:symbol>")
+@login_required
+def market_chart_page(symbol):
+    from config.markets import MAJOR_INDICES, SP_SECTORS, CURRENCIES, CRYPTO_TOP_10
+    all_items = MAJOR_INDICES + SP_SECTORS + CURRENCIES + CRYPTO_TOP_10
+    label = next((i["label"] for i in all_items if i.get("tv") == symbol or i.get("symbol") == symbol), symbol)
+    return render_template("market_chart.html", user=current_user(), tv_symbol=symbol, label=label)
+
+
 @app.route("/api/market-sessions")
 @login_required
 def api_market_sessions():
@@ -917,7 +926,7 @@ def api_screener():
         "pe_ratio", "rsi_14", "rating", "high_52w_pct", "low_52w_pct",
         "momentum_score", "quality_score", "insider_score",
         "short_interest_pct", "insider_transactions", "beta",
-        "rel_volume", "avg_volume",
+        "rel_volume", "avg_volume", "sector_strength_score",
     }
     if sort_col not in allowed_sorts:
         sort_col = "composite_score"
@@ -1041,6 +1050,7 @@ def api_screener():
     sig_subq = """
         SELECT ticker, rating, composite_score, target_price, target_upside,
                momentum_score, quality_score, insider_score, reversion_score,
+               sector_strength_score,
                MAX(scored_at) as scored_at
         FROM signal_scores
         WHERE DATE(scored_at) = DATE((SELECT MAX(scored_at) FROM signal_scores))
@@ -1066,7 +1076,8 @@ def api_screener():
                ss.rel_volume, ss.avg_volume, ss.exchange,
                sig.rating, sig.composite_score,
                sig.momentum_score, sig.quality_score, sig.insider_score,
-               sig.reversion_score, sig.target_price, sig.target_upside
+               sig.reversion_score, sig.target_price, sig.target_upside,
+               sig.sector_strength_score
         FROM ({latest_ss}) ss
         LEFT JOIN ({sig_subq}) sig ON ss.ticker = sig.ticker
         {extra_joins_sql}
@@ -1075,12 +1086,18 @@ def api_screener():
         LIMIT ? OFFSET ?
     """, params + [per_page, offset])
 
+    target_count = sum(1 for r in rows if r.get("target_price") is not None)
+    target_banner = None
+    if rows and target_count < len(rows) * 0.5:
+        target_banner = "Target prices are being recalculated — check back shortly."
+
     return jsonify({
-        "rows":     rows,
-        "total":    total,
-        "page":     page,
-        "per_page": per_page,
-        "pages":    max(1, (total + per_page - 1) // per_page),
+        "rows":          rows,
+        "total":         total,
+        "page":          page,
+        "per_page":      per_page,
+        "pages":         max(1, (total + per_page - 1) // per_page),
+        "target_banner": target_banner,
     })
 
 
@@ -1604,13 +1621,14 @@ def api_backtest_stats():
         avg = sum(s['returns']) / len(s['returns'])
         win_rate = (s['wins'] / s['total'] * 100) if s['total'] > 0 else 0
         avg_days = sum(s['days']) / len(s['days']) if s['days'] else 0
+        all_trades = sorted(s['trades'], key=lambda x: x['return_pct'], reverse=True)
         result.append({
             'rating':       rating,
             'avg_return':   round(avg, 2),
             'win_rate':     round(win_rate, 1),
             'samples':      s['total'],
             'avg_days_held': round(avg_days, 1),
-            'trades':       sorted(s['trades'], key=lambda x: x['return_pct'], reverse=True),
+            'trades':       all_trades[:20],
         })
 
     # Sector comparison: top-3 vs bottom-3 sector Strong Buys
@@ -1618,7 +1636,6 @@ def api_backtest_stats():
     sector_comparison = {"top_avg": None, "bottom_avg": None, "spread": None,
                          "top_n": 0, "bottom_n": 0, "note": ""}
     try:
-        cur2 = conn if not conn.in_transaction else get_connection(DATABASE_PATH).cursor()
         # Get current sector rankings
         sp_rows = db_query("""
             SELECT sector, rank_7d FROM sector_performance

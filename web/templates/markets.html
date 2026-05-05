@@ -197,9 +197,14 @@ function initLcGrid(tabId) {
     if (!grid || grid.dataset.inited) return;
     grid.dataset.inited = '1';
 
-    TAB_DATA[tabId].forEach(({label, yf}) => {
+    TAB_DATA[tabId].forEach(({label, yf, tv}) => {
         const card = document.createElement('div');
         card.className = 'chart-card';
+        if (tv) {
+            card.style.cursor = 'pointer';
+            card.title = 'Open full chart';
+            card.addEventListener('click', () => window.open('/markets/' + encodeURIComponent(tv), '_blank'));
+        }
 
         const lbl = document.createElement('div');
         lbl.className = 'card-label';
@@ -227,9 +232,15 @@ function initTvGrid(tabId) {
     if (!grid || grid.dataset.inited) return;
     grid.dataset.inited = '1';
 
-    TAB_DATA[tabId].forEach(({label, symbol}) => {
+    TAB_DATA[tabId].forEach(({label, symbol, tv}) => {
         const card = document.createElement('div');
         card.className = 'chart-card';
+        const tvSym = tv || symbol;
+        if (tvSym) {
+            card.style.cursor = 'pointer';
+            card.title = 'Open full chart';
+            card.addEventListener('click', () => window.open('/markets/' + encodeURIComponent(tvSym), '_blank'));
+        }
 
         const lbl = document.createElement('div');
         lbl.className = 'card-label';
