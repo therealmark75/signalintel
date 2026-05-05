@@ -386,6 +386,67 @@ def api_search():
     return jsonify({"results": [dict(r) for r in rows]})
 
 
+@app.route("/earnings")
+@login_required
+def earnings():
+    user = current_user()
+    try:
+        from config.settings import FMP_API_KEY
+        has_key = bool(FMP_API_KEY)
+    except Exception:
+        has_key = False
+    return render_template("earnings.html", user=user, has_fmp_key=has_key)
+
+
+@app.route("/api/earnings")
+@login_required
+def api_earnings():
+    from scrapers.fmp_scraper import get_earnings_calendar, _ensure_tables
+    from datetime import datetime, timedelta
+    _ensure_tables(DATABASE_PATH)
+    view     = request.args.get("view", "week")   # week / next_week / month
+    rating_f = request.args.get("rating", "")
+    user     = current_user()
+
+    today = datetime.now().date()
+    if view == "week":
+        from_d = today.strftime("%Y-%m-%d")
+        to_d   = (today + timedelta(days=7)).strftime("%Y-%m-%d")
+    elif view == "next_week":
+        from_d = (today + timedelta(days=7)).strftime("%Y-%m-%d")
+        to_d   = (today + timedelta(days=14)).strftime("%Y-%m-%d")
+    else:
+        from_d = today.strftime("%Y-%m-%d")
+        to_d   = (today + timedelta(days=30)).strftime("%Y-%m-%d")
+
+    rows = get_earnings_calendar(DATABASE_PATH, from_d, to_d)
+
+    # Filter by rating
+    if rating_f:
+        rows = [r for r in rows if r.get("rating") == rating_f]
+
+    # Mark watchlist tickers
+    wl = set()
+    if user:
+        wl_rows = db_query("SELECT ticker FROM watchlists WHERE user_id = ?", (user["id"],))
+        wl = {r["ticker"] for r in wl_rows}
+    for r in rows:
+        r["in_watchlist"] = r["ticker"] in wl
+
+    return jsonify({"rows": rows, "total": len(rows)})
+
+
+@app.route("/api/earnings/refresh", methods=["POST"])
+@login_required
+def api_earnings_refresh():
+    try:
+        from scrapers.fmp_scraper import job_refresh_earnings
+        n = job_refresh_earnings(DATABASE_PATH, days_ahead=30)
+        return jsonify({"ok": True, "saved": n})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)})
+
+
 @app.route("/screener")
 @login_required
 def screener():
