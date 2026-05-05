@@ -89,18 +89,28 @@ def job_generate_signals(sector=None):
         insider_trades  = get_recent_insiders(DATABASE_PATH, days=30)
         cluster_signals = get_cluster_signals(DATABASE_PATH, days=14)
         legal_risk_map  = get_legal_risk_map(DATABASE_PATH)
+        from scrapers.sector_scraper import get_sector_strength_map
+        sector_strength_map = get_sector_strength_map(DATABASE_PATH)
         if not screener_rows:
             logger.warning("No screener data. Run scrape first.")
             return [], {}
         logger.info(f"  Scoring {len(screener_rows)} tickers... ({len(legal_risk_map)} with legal risk data)")
-        signals = score_all_tickers(screener_rows, insider_trades, legal_risk_map=legal_risk_map)
+        signals = score_all_tickers(
+            screener_rows, insider_trades,
+            legal_risk_map=legal_risk_map,
+            sector_strength_map=sector_strength_map,
+        )
         batch_ts = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
         score_rows = [{
             "scored_at": batch_ts, "ticker": s.ticker,
-            "composite_score": s.composite_score, "momentum_score": s.momentum_score,
+            "composite_score": s.composite_score,
+            "composite_score_raw": s.composite_score_raw,
+            "momentum_score": s.momentum_score,
             "quality_score": s.quality_score, "insider_score": s.insider_score,
             "reversion_score": s.reversion_score, "rating": s.rating,
             "flags": "|".join(s.flags),
+            "sector_strength_score": s.sector_strength_score,
+            "sector_modifier_applied": s.sector_modifier_applied,
         } for s in signals]
         insert_signal_scores(DATABASE_PATH, score_rows)
 
@@ -301,13 +311,19 @@ def job_news_and_calendar(top_n: int = 30):
         insider_trades  = get_recent_insiders(DATABASE_PATH, days=30)
         cluster_signals = get_cluster_signals(DATABASE_PATH, days=14)
         legal_risk_map  = get_legal_risk_map(DATABASE_PATH)
+        from scrapers.sector_scraper import get_sector_strength_map
+        sector_strength_map = get_sector_strength_map(DATABASE_PATH)
 
         if not screener_rows:
             logger.warning("No screener data. Run scrape first.")
             return [], {}
 
         logger.info(f"  Scoring {len(screener_rows)} tickers... ({len(legal_risk_map)} with legal risk data)")
-        signals = score_all_tickers(screener_rows, insider_trades, legal_risk_map=legal_risk_map)
+        signals = score_all_tickers(
+            screener_rows, insider_trades,
+            legal_risk_map=legal_risk_map,
+            sector_strength_map=sector_strength_map,
+        )
 
         # Single shared timestamp for entire batch so dashboard queries work correctly
         batch_ts = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
@@ -316,12 +332,15 @@ def job_news_and_calendar(top_n: int = 30):
             "scored_at": batch_ts,
             "ticker": s.ticker,
             "composite_score": s.composite_score,
+            "composite_score_raw": s.composite_score_raw,
             "momentum_score": s.momentum_score,
             "quality_score": s.quality_score,
             "insider_score": s.insider_score,
             "reversion_score": s.reversion_score,
             "rating": s.rating,
             "flags": "|".join(s.flags),
+            "sector_strength_score": s.sector_strength_score,
+            "sector_modifier_applied": s.sector_modifier_applied,
         } for s in signals]
         insert_signal_scores(DATABASE_PATH, score_rows)
 
@@ -595,6 +614,25 @@ def main():
             job_daily_summary,
             CronTrigger(hour=17, minute=5, day_of_week="mon-fri"),
             id="daily_summary", name="Daily Telegram Summary 17:05",
+        )
+
+        # Sector relative strength (daily 06:00, runs before signal generation)
+        def job_sector_performance():
+            try:
+                from scrapers.sector_scraper import scrape_sector_performance
+                results = scrape_sector_performance(DATABASE_PATH)
+                ranked = sorted(results, key=lambda x: x["rank_7d"] or 99)
+                logger.info(f"[JOB] Sector performance: {len(results)} sectors")
+                for r in ranked:
+                    logger.info(f"  {r['sector']:24} rank={r['rank_7d']} score={r['sector_strength_score']:.0f} 7d={r['return_7d']:+.2f}%" if r['return_7d'] is not None else f"  {r['sector']:24} no data")
+            except Exception as e:
+                logger.error(f"[JOB] Sector performance error: {e}")
+
+        scheduler.add_job(
+            job_sector_performance,
+            CronTrigger(hour=6, minute=0, day_of_week="mon-fri"),
+            id="sector_performance", name="Sector Relative Strength 06:00",
+            replace_existing=True,
         )
 
         # Legal risk scraper - SEC EDGAR (daily, pre-market)

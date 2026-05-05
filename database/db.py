@@ -288,17 +288,30 @@ def insert_signal_scores(db_path: str, rows: list[dict]) -> int:
         return 0
     conn = get_connection(db_path)
     cur  = conn.cursor()
+    # Ensure sector modifier columns exist (idempotent)
+    for col, typ in [
+        ("composite_score_raw",     "REAL"),
+        ("sector_strength_score",   "REAL"),
+        ("sector_modifier_applied", "REAL"),
+    ]:
+        try:
+            cur.execute(f"ALTER TABLE signal_scores ADD COLUMN {col} {typ}")
+        except Exception:
+            pass
+    conn.commit()
     # Delete today's existing scores before inserting fresh ones
     cur.execute(
         "DELETE FROM signal_scores WHERE DATE(scored_at) = DATE('now')"
     )
     cur.executemany("""
         INSERT INTO signal_scores
-            (scored_at, ticker, composite_score, momentum_score, quality_score,
-             insider_score, reversion_score, rating, flags)
+            (scored_at, ticker, composite_score, composite_score_raw,
+             momentum_score, quality_score, insider_score, reversion_score,
+             rating, flags, sector_strength_score, sector_modifier_applied)
         VALUES
-            (:scored_at, :ticker, :composite_score, :momentum_score, :quality_score,
-             :insider_score, :reversion_score, :rating, :flags)
+            (:scored_at, :ticker, :composite_score, :composite_score_raw,
+             :momentum_score, :quality_score, :insider_score, :reversion_score,
+             :rating, :flags, :sector_strength_score, :sector_modifier_applied)
     """, rows)
     conn.commit()
     inserted = cur.rowcount

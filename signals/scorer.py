@@ -258,7 +258,12 @@ class TickerSignal:
     reversion_score:  float = 0.0
     legal_penalty:    int   = 0
     legal_risk_level: str   = "NONE"
-    composite_score:  float = 0.0
+    composite_score:  float = 0.0      # sector-adjusted final score
+    composite_score_raw: float = 0.0   # pre-sector-modifier score
+
+    # Sector relative strength
+    sector_strength_score:   float = 50.0   # 0-100, 50 = neutral
+    sector_modifier_applied: float = 0.0    # multiplier delta actually applied
 
     rating:           str   = "STRONG_HOLD"
     flags:            list  = field(default_factory=list)
@@ -363,17 +368,22 @@ def build_flags(row: dict, insider_score: float,
     return flags
 
 
+_SECTOR_MODIFIER_WEIGHT = 0.15   # dial to 0.10–0.20 after backtesting
+
+
 def score_all_tickers(
     screener_rows: list[dict],
     insider_trades: list[dict],
     weights: dict = None,
     legal_risk_map: dict = None,
+    sector_strength_map: dict = None,
 ) :
     """
     Main entry point. Takes screener rows + insider trades,
     returns sorted list of TickerSignal objects.
     """
-    legal_risk_map = legal_risk_map or {}
+    legal_risk_map      = legal_risk_map      or {}
+    sector_strength_map = sector_strength_map or {}
     missing_legal  = []
     results = []
 
@@ -402,32 +412,44 @@ def score_all_tickers(
             legal_penalty    = legal_data.get("penalty", 0)
             legal_risk_level = legal_data.get("risk_level", "NONE")
 
-        raw_composite = compute_composite(m_score, q_score, i_score, r_score, weights)
-        c_score       = _clamp(raw_composite + legal_penalty)
-        rating        = assign_rating(c_score, r_score, i_score)
-        flags         = build_flags(row, i_score, r_score)
+        raw_composite    = compute_composite(m_score, q_score, i_score, r_score, weights)
+        c_score_raw      = _clamp(raw_composite + legal_penalty)
+
+        # ── Sector relative strength modifier ────────────────────────────────
+        sector           = row.get("sector", "")
+        sector_ss        = sector_strength_map.get(sector, 50.0)
+        sector_modifier  = (sector_ss - 50.0) / 100.0         # -0.5 … +0.5
+        c_score          = _clamp(c_score_raw * (1.0 + sector_modifier * _SECTOR_MODIFIER_WEIGHT))
+        modifier_applied = round(c_score - c_score_raw, 2)
+        # ─────────────────────────────────────────────────────────────────────
+
+        rating = assign_rating(c_score, r_score, i_score)
+        flags  = build_flags(row, i_score, r_score)
 
         sig = TickerSignal(
-            ticker           = ticker,
-            company          = row.get("company", ""),
-            sector           = row.get("sector", ""),
-            price            = row.get("price"),
-            change_pct       = row.get("change_pct"),
-            momentum_score   = round(m_score, 1),
-            quality_score    = round(q_score, 1),
-            insider_score    = round(i_score, 1),
-            reversion_score  = round(r_score, 1),
-            legal_penalty    = legal_penalty,
-            legal_risk_level = legal_risk_level,
-            composite_score  = round(c_score, 1),
-            rating           = rating,
-            flags            = flags,
-            rsi_14           = row.get("rsi_14"),
-            sma_50_pct       = row.get("sma_50_pct"),
-            sma_200_pct      = row.get("sma_200_pct"),
-            analyst_recom    = row.get("analyst_recom"),
-            short_interest   = row.get("short_interest_pct"),
-            insider_count    = len(ticker_insiders),
+            ticker                  = ticker,
+            company                 = row.get("company", ""),
+            sector                  = sector,
+            price                   = row.get("price"),
+            change_pct              = row.get("change_pct"),
+            momentum_score          = round(m_score, 1),
+            quality_score           = round(q_score, 1),
+            insider_score           = round(i_score, 1),
+            reversion_score         = round(r_score, 1),
+            legal_penalty           = legal_penalty,
+            legal_risk_level        = legal_risk_level,
+            composite_score         = round(c_score, 1),
+            composite_score_raw     = round(c_score_raw, 1),
+            sector_strength_score   = round(sector_ss, 1),
+            sector_modifier_applied = modifier_applied,
+            rating                  = rating,
+            flags                   = flags,
+            rsi_14                  = row.get("rsi_14"),
+            sma_50_pct              = row.get("sma_50_pct"),
+            sma_200_pct             = row.get("sma_200_pct"),
+            analyst_recom           = row.get("analyst_recom"),
+            short_interest          = row.get("short_interest_pct"),
+            insider_count           = len(ticker_insiders),
         )
         results.append(sig)
 
