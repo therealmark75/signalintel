@@ -172,6 +172,12 @@ def api_industry(industry_name):
     """, (industry_name,))
     return jsonify(rows)
 
+@app.route("/signals")
+def signals_redirect():
+    """Redirect /signals?rating=X to /?rating=X for nav links from ratings page."""
+    rating = request.args.get("rating", "")
+    return redirect(f"/?rating={rating}" if rating else "/")
+
 @app.route("/watchlist")
 @login_required
 def watchlist():

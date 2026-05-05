@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SignalIntel – Ratings</title>
+<title>SignalIntel – Rating Tiers</title>
 <style>
     :root {
         --bg:#080c14;--surface:#0d1520;--surface2:#111927;--border:#1a2d45;
@@ -24,13 +24,15 @@
     .section-title{font-family:var(--mono);font-size:12px;color:var(--muted2);letter-spacing:1px;text-transform:uppercase;margin:32px 0 16px;}
     /* Tier cards */
     .tier-grid{display:flex;flex-direction:column;gap:12px;}
-    .tier-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:18px 20px;display:flex;align-items:flex-start;gap:16px;}
-    .tier-card:hover{border-color:var(--border);background:var(--surface2);}
-    .tier-icon{font-size:22px;flex-shrink:0;margin-top:2px;}
-    .tier-body{flex:1;}
+    .tier-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:18px 20px;display:grid;grid-template-columns:auto 1fr auto;gap:16px;align-items:start;}
+    .tier-card:hover{background:var(--surface2);}
+    .tier-icon{font-size:22px;margin-top:2px;}
+    .tier-body{min-width:0;}
     .tier-name{font-family:var(--mono);font-size:13px;font-weight:700;margin-bottom:4px;}
-    .tier-desc{font-size:13px;color:var(--muted2);line-height:1.5;}
-    .tier-score{font-family:var(--mono);font-size:11px;color:var(--muted);margin-left:auto;flex-shrink:0;padding-top:2px;}
+    .tier-desc{font-size:13px;color:var(--muted2);line-height:1.5;margin-bottom:8px;}
+    .tier-action{font-size:12px;font-family:var(--mono);padding:4px 10px;border-radius:4px;display:inline-block;margin-bottom:6px;}
+    .tier-condition{font-size:11px;color:var(--muted);font-family:var(--mono);line-height:1.6;}
+    .tier-score{font-family:var(--mono);font-size:11px;color:var(--muted);flex-shrink:0;padding-top:2px;text-align:right;min-width:130px;}
     /* Colors */
     .c-strong-buy{color:#00ff88;}
     .c-buy{color:#00d4ff;}
@@ -39,17 +41,37 @@
     .c-weak-hold{color:#fb923c;}
     .c-sell{color:#f87171;}
     .c-strong-sell{color:#ff3b5c;}
+    .action-strong-buy{background:rgba(0,255,136,0.1);color:#00ff88;border:1px solid rgba(0,255,136,0.2);}
+    .action-buy{background:rgba(0,212,255,0.1);color:#00d4ff;border:1px solid rgba(0,212,255,0.2);}
+    .action-strong-hold{background:rgba(250,204,21,0.08);color:#facc15;border:1px solid rgba(250,204,21,0.2);}
+    .action-hold{background:rgba(148,163,184,0.08);color:#94a3b8;border:1px solid rgba(148,163,184,0.2);}
+    .action-weak-hold{background:rgba(251,146,60,0.08);color:#fb923c;border:1px solid rgba(251,146,60,0.2);}
+    .action-sell{background:rgba(248,113,113,0.1);color:#f87171;border:1px solid rgba(248,113,113,0.2);}
+    .action-strong-sell{background:rgba(255,59,92,0.15);color:#ff3b5c;border:1px solid rgba(255,59,92,0.3);}
     /* Distribution */
     .dist-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;}
-    .dist-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px 18px;}
+    .dist-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px 18px;
+        cursor:pointer;transition:border-color 0.15s,background 0.15s;text-decoration:none;display:block;color:inherit;}
+    .dist-card:hover{background:var(--surface2);border-color:var(--accent);}
+    .dist-card:hover .dist-viewall{opacity:1;}
     .dist-rating{font-family:var(--mono);font-size:11px;font-weight:700;margin-bottom:10px;}
     .dist-count{font-family:var(--mono);font-size:28px;font-weight:700;margin-bottom:4px;}
     .dist-meta{font-size:12px;color:var(--muted);line-height:1.6;}
     .dist-bar-wrap{height:4px;background:var(--border);border-radius:2px;margin-top:10px;}
-    .dist-bar{height:4px;border-radius:2px;background:var(--accent);}
+    .dist-bar{height:4px;border-radius:2px;}
+    .dist-viewall{font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:10px;opacity:0;transition:opacity 0.15s;}
     .last-run{font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:32px;}
     .no-data{color:var(--muted);font-size:13px;padding:24px 0;}
-    @media(max-width:600px){header{padding:0 14px;}.tier-card{flex-wrap:wrap;}.tier-score{margin-left:0;}}
+    /* Score explanation */
+    .score-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+    .score-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px 16px;}
+    .score-name{font-family:var(--mono);font-size:12px;color:var(--accent);margin-bottom:4px;}
+    .score-desc{font-size:12px;color:var(--muted2);line-height:1.5;}
+    @media(max-width:600px){
+        header{padding:0 14px;}
+        .tier-card{grid-template-columns:auto 1fr;}.tier-score{grid-column:2;grid-row:2;}
+        .score-grid{grid-template-columns:1fr;}
+    }
 </style>
 </head>
 <body>
@@ -57,12 +79,12 @@
     <a href="/" class="logo">Signal<span>Intel</span></a>
     {% include '_search.html' %}
     <div class="header-right">
-        <a href="/">Dashboard</a>
+        <a href="/">Ratings</a>
         <a href="/screener">Screener</a>
         <a href="/earnings">Earnings</a>
         <a href="/dividends">Dividends</a>
         <a href="/watchlist">Watchlist</a>
-        <a href="/ratings" class="active">Ratings</a>
+        <a href="/ratings" class="active">Rating Tiers</a>
         <a href="/backtest">Backtest</a>
         <a href="/logout">Sign out</a>
     </div>
@@ -70,89 +92,132 @@
 
 <main>
 <h1>RATING TIERS</h1>
-<p class="subtitle">SignalIntel's 7-tier signal classification — definitions and current distribution</p>
+<p class="subtitle">SignalIntel's 7-tier signal classification — definitions, scoring logic, and current distribution</p>
 
 {% if last_run %}
 <p class="last-run">Last signal run: {{ last_run }}</p>
 {% endif %}
 
-<div class="section-title">Tier Definitions</div>
+<div class="section-title">Tier Definitions &amp; Action Guide</div>
 <div class="tier-grid">
+
     <div class="tier-card">
         <div class="tier-icon">🟢</div>
         <div class="tier-body">
             <div class="tier-name c-strong-buy">STRONG BUY</div>
-            <div class="tier-desc">Highest conviction long. Strong momentum, quality fundamentals, and positive insider activity align. Highest expected returns over the signal period.</div>
+            <div class="tier-desc">Highest conviction long. Strong momentum, quality fundamentals, and significant insider buying all confirm upside. These are the signals with the highest expected returns.</div>
+            <span class="tier-action action-strong-buy">Enter position — target full allocation</span>
+            <div class="tier-condition">Composite ≥ 72 AND Insider Score ≥ 65. Insider activity is required — this tier demands institutional-grade conviction from insiders.</div>
         </div>
-        <div class="tier-score">Score ≥ 80</div>
+        <div class="tier-score">Composite ≥ 72<br>+ Insider ≥ 65</div>
     </div>
+
     <div class="tier-card">
         <div class="tier-icon">🔵</div>
         <div class="tier-body">
             <div class="tier-name c-buy">BUY</div>
-            <div class="tier-desc">Positive signal — enter or add to position. Solid fundamentals with momentum confirming upside. Risk/reward is favourable.</div>
+            <div class="tier-desc">Positive signal — enter or add to position. Solid fundamentals with momentum confirming upside. Risk/reward is favourable even without insider confirmation.</div>
+            <span class="tier-action action-buy">Enter or add to position</span>
+            <div class="tier-condition">Composite ≥ 62. Good overall signal strength across momentum and quality factors.</div>
         </div>
-        <div class="tier-score">Score 68–79</div>
+        <div class="tier-score">Composite ≥ 62</div>
     </div>
+
     <div class="tier-card">
         <div class="tier-icon">🟡</div>
         <div class="tier-body">
             <div class="tier-name c-strong-hold">STRONG HOLD</div>
-            <div class="tier-desc">Good fundamentals but not a new entry point. Existing positions should hold. Wait for momentum confirmation before adding.</div>
+            <div class="tier-desc">Good fundamentals but not a new entry point. Existing positions should hold. Wait for momentum confirmation before adding. The majority of rated tickers sit here.</div>
+            <span class="tier-action action-strong-hold">Hold existing positions — do not add</span>
+            <div class="tier-condition">Composite 45–62 (default tier — no strong signal in either direction).</div>
         </div>
-        <div class="tier-score">Score 56–67</div>
+        <div class="tier-score">Composite 45–62</div>
     </div>
+
     <div class="tier-card">
         <div class="tier-icon">⚪</div>
         <div class="tier-body">
             <div class="tier-name c-hold">HOLD</div>
-            <div class="tier-desc">Neutral signal — watch closely. No strong directional signal in either direction. Mixed or insufficient data to rate higher or lower.</div>
+            <div class="tier-desc">Neutral signal triggered by mean-reversion opportunity — the stock has deviated far from its historical mean and may snap back regardless of current momentum or fundamentals.</div>
+            <span class="tier-action action-hold">Watch closely — no directional action yet</span>
+            <div class="tier-condition">Reversion Score ≥ 75 (overrides composite). High reversion score indicates a potential snap-back candidate.</div>
         </div>
-        <div class="tier-score">Score 44–55</div>
+        <div class="tier-score">Reversion ≥ 75</div>
     </div>
+
     <div class="tier-card">
         <div class="tier-icon">🟠</div>
         <div class="tier-body">
             <div class="tier-name c-weak-hold">WEAK HOLD</div>
-            <div class="tier-desc">Deteriorating signal — reduce exposure or tighten stops. Momentum fading, fundamentals weakening, or insider selling detected.</div>
+            <div class="tier-desc">Deteriorating signal — reduce exposure or tighten stops. Momentum fading, fundamentals weakening, and insider selling or absence of buying detected.</div>
+            <span class="tier-action action-weak-hold">Reduce exposure — tighten stops</span>
+            <div class="tier-condition">Composite &lt; 38 AND Insider Score ≤ 35. Weak fundamentals combined with lack of insider confidence.</div>
         </div>
-        <div class="tier-score">Score 34–43</div>
+        <div class="tier-score">Composite &lt; 38<br>+ Insider ≤ 35</div>
     </div>
+
     <div class="tier-card">
         <div class="tier-icon">🔴</div>
         <div class="tier-body">
             <div class="tier-name c-sell">SELL</div>
-            <div class="tier-desc">Exit position. Multiple negative signals across momentum, quality, and insider activity. Risk outweighs remaining upside.</div>
+            <div class="tier-desc">Exit signal. Multiple negative signals across momentum, quality, and insider activity. Risk outweighs remaining upside. Don't wait for a better price.</div>
+            <span class="tier-action action-sell">Exit position</span>
+            <div class="tier-condition">Composite &lt; 45 (where Reversion &lt; 75, to distinguish from HOLD).</div>
         </div>
-        <div class="tier-score">Score 20–33</div>
+        <div class="tier-score">Composite &lt; 45</div>
     </div>
+
     <div class="tier-card">
         <div class="tier-icon">⛔</div>
         <div class="tier-body">
             <div class="tier-name c-strong-sell">STRONG SELL</div>
-            <div class="tier-desc">High conviction exit — get out. Severe deterioration across all factors. Legal risk, insider selling, and momentum breakdown in confluence.</div>
+            <div class="tier-desc">Highest conviction exit — get out immediately. Severe deterioration across all factors. Legal risk, insider selling, and momentum breakdown in confluence. Consider shorting.</div>
+            <span class="tier-action action-strong-sell">Exit immediately — consider shorting</span>
+            <div class="tier-condition">Composite &lt; 25 AND Insider Score ≤ 20. Near-total collapse of all positive signals.</div>
         </div>
-        <div class="tier-score">Score &lt; 20</div>
+        <div class="tier-score">Composite &lt; 25<br>+ Insider ≤ 20</div>
+    </div>
+
+</div>
+
+<div class="section-title">Score Components (0–100)</div>
+<div class="score-grid">
+    <div class="score-card">
+        <div class="score-name">Momentum</div>
+        <div class="score-desc">Price trend strength based on RSI, moving average crossovers, and recent price performance. High = strong upward trend. A score above 70 suggests significant momentum.</div>
+    </div>
+    <div class="score-card">
+        <div class="score-name">Quality</div>
+        <div class="score-desc">Fundamental strength — P/E ratio, profit margins, ROE, EPS growth, and debt levels. High = strong business with solid financials. Sector-adjusted where possible.</div>
+    </div>
+    <div class="score-card">
+        <div class="score-name">Insider</div>
+        <div class="score-desc">Recent insider buying activity. 100 = significant cluster buying by company executives — the strongest conviction signal available. Required for STRONG BUY tier.</div>
+    </div>
+    <div class="score-card">
+        <div class="score-name">Reversion</div>
+        <div class="score-desc">Mean reversion opportunity. High = stock has deviated far from its historical mean and may snap back. A reversion score ≥ 75 triggers the HOLD rating regardless of composite.</div>
     </div>
 </div>
 
 <div class="section-title">Current Distribution</div>
+<p style="font-size:12px;color:var(--muted);margin-bottom:16px;">Click any card to view all tickers with that rating on the signals dashboard.</p>
 
 {% if distribution %}
 {% set total_tickers = distribution | sum(attribute='count') %}
 <div class="dist-grid">
 {% set tier_info = {
-    'STRONG_BUY':  ('🟢', 'c-strong-buy'),
-    'BUY':         ('🔵', 'c-buy'),
-    'STRONG_HOLD': ('🟡', 'c-strong-hold'),
-    'HOLD':        ('⚪', 'c-hold'),
-    'WEAK_HOLD':   ('🟠', 'c-weak-hold'),
-    'SELL':        ('🔴', 'c-sell'),
-    'STRONG_SELL': ('⛔', 'c-strong-sell'),
+    'STRONG_BUY':  ('🟢', 'c-strong-buy',  '#00ff88'),
+    'BUY':         ('🔵', 'c-buy',          '#00d4ff'),
+    'STRONG_HOLD': ('🟡', 'c-strong-hold',  '#facc15'),
+    'HOLD':        ('⚪', 'c-hold',          '#94a3b8'),
+    'WEAK_HOLD':   ('🟠', 'c-weak-hold',    '#fb923c'),
+    'SELL':        ('🔴', 'c-sell',          '#f87171'),
+    'STRONG_SELL': ('⛔', 'c-strong-sell',  '#ff3b5c'),
 } %}
 {% for row in distribution %}
-{% set info = tier_info.get(row.rating, ('●', 'c-hold')) %}
-<div class="dist-card">
+{% set info = tier_info.get(row.rating, ('●', 'c-hold', '#94a3b8')) %}
+<a href="/signals?rating={{ row.rating }}" class="dist-card">
     <div class="dist-rating {{ info[1] }}">{{ info[0] }} {{ row.rating | replace('_', ' ') }}</div>
     <div class="dist-count {{ info[1] }}">{{ row.count }}</div>
     <div class="dist-meta">
@@ -160,9 +225,10 @@
         Range: {{ row.min_score }} – {{ row.max_score }}
     </div>
     <div class="dist-bar-wrap">
-        <div class="dist-bar" style="width:{{ [(row.count / total_tickers * 100), 100] | min | round }}%;background:{% if row.rating == 'STRONG_BUY' %}#00ff88{% elif row.rating == 'BUY' %}#00d4ff{% elif row.rating == 'STRONG_HOLD' %}#facc15{% elif row.rating == 'HOLD' %}#94a3b8{% elif row.rating == 'WEAK_HOLD' %}#fb923c{% elif row.rating == 'SELL' %}#f87171{% else %}#ff3b5c{% endif %}"></div>
+        <div class="dist-bar" style="width:{{ [(row.count / total_tickers * 100), 100] | min | round }}%;background:{{ info[2] }}"></div>
     </div>
-</div>
+    <div class="dist-viewall">View all →</div>
+</a>
 {% endfor %}
 </div>
 {% else %}
