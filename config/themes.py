@@ -6,7 +6,7 @@ Single source of truth used by /api/theme-counts and /api/screener?theme=<id>.
 THEMES = [
     {
         "id": "strong_buy_momentum",
-        "label": "Strong Buy Momentum",
+        "label": "Top Signal Momentum",
         "emoji": "🚀",
         "color": "#00ff88",
         "description": "Highest conviction signals with strong composite scores",
@@ -26,7 +26,7 @@ THEMES = [
     },
     {
         "id": "buy_the_dip",
-        "label": "Buy the Dip",
+        "label": "Oversold Signals",
         "emoji": "📉",
         "color": "#00d4ff",
         "description": "RSI oversold stocks with positive signal ratings",
@@ -52,7 +52,7 @@ THEMES = [
     },
     {
         "id": "insider_buying_surge",
-        "label": "Insider Buying Surge",
+        "label": "Insider Accumulation",
         "emoji": "👤",
         "color": "#af52de",
         "description": "Stocks with significant insider accumulation",
