@@ -581,9 +581,11 @@ function sortTable(table, col) {
             if(typeof av === 'number') return state.asc ? av-bv : bv-av;
             return state.asc ? String(av).localeCompare(String(bv)) : String(bv).localeCompare(String(av));
         });
-        const activeBtn = document.querySelector('.filter-btn.active');
-        const rating = activeBtn ? activeBtn.textContent.trim() : 'All';
-        filterSignals(rating === 'All' ? 'ALL' : rating, activeBtn || document.querySelector('.filter-btn'));
+        const activeBtn = document.querySelector('#panel-signals .filter-btn.active');
+        const onclickStr = activeBtn ? activeBtn.getAttribute('onclick') : null;
+        const ratingMatch = onclickStr ? onclickStr.match(/'([^']+)'/) : null;
+        const rating = ratingMatch ? ratingMatch[1] : 'ALL';
+        filterSignals(rating, activeBtn || document.querySelector('#panel-signals .filter-btn'));
     }
     if(table === 'sector') {
         sectorSignals.sort((a,b) => {
