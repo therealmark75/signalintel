@@ -165,7 +165,11 @@ def scrape_all_sectors(sectors, delay=2.5):
     return results
 
 def scrape_analyst_recom_priority(db_path):
-    """Option B: scrape analyst recom for watchlist + top signal tickers."""
+    """Scrape individual FinViz ticker pages for watchlist + top signal tickers.
+
+    Captures fields the bulk screener views can't provide (Short Ratio,
+    Inst Own, Forward P/E, PEG, P/S, P/B) plus analyst recommendations.
+    """
     from finvizfinance.quote import finvizfinance
     from database.db import get_connection
     import time
@@ -174,7 +178,7 @@ def scrape_analyst_recom_priority(db_path):
     cur = conn.cursor()
     cur.execute("SELECT DISTINCT ticker FROM watchlists")
     watchlist = [r[0] for r in cur.fetchall()]
-    cur.execute("""SELECT DISTINCT ticker FROM top_signals_of_day 
+    cur.execute("""SELECT DISTINCT ticker FROM top_signals_of_day
                    WHERE signal_date = DATE('now') LIMIT 20""")
     top_signals = [r[0] for r in cur.fetchall()]
     conn.close()
@@ -187,22 +191,44 @@ def scrape_analyst_recom_priority(db_path):
     for ticker in tickers:
         try:
             data = finvizfinance(ticker).ticker_fundament()
-            recom = data.get('Recom', None)
+            row = {}
+            recom = data.get('Recom')
             if recom and recom != '-':
-                results[ticker] = float(recom)
+                try: row['analyst_recom'] = float(recom)
+                except: pass
+            for src_key, dst_col, parser in [
+                ('Insider Own',   'insider_own_pct',   _pct_field),
+                ('Insider Trans', 'insider_transactions', lambda v: str(v) if v else None),
+                ('Inst Own',      'inst_own_pct',      _pct_field),
+                ('Short Float',   'short_interest_pct', _pct_field),
+                ('Short Ratio',   'short_ratio',       _to_float),
+                ('Forward P/E',   'forward_pe',        _to_float),
+                ('PEG',           'peg_ratio',         _to_float),
+                ('P/S',           'price_to_sales',    _to_float),
+                ('P/B',           'price_to_book',     _to_float),
+            ]:
+                v = data.get(src_key)
+                if v and v not in ('-', '', 'N/A'):
+                    parsed = parser(v)
+                    if parsed is not None:
+                        row[dst_col] = parsed
+            if row:
+                results[ticker] = row
             time.sleep(0.5)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning(f"[PriorityRecom] {ticker}: {exc}")
 
     if results:
         conn = get_connection(db_path)
         cur = conn.cursor()
-        for ticker, recom in results.items():
-            cur.execute("""UPDATE screener_snapshots SET analyst_recom = ?
+        for ticker, row in results.items():
+            set_clause = ", ".join(f"{k} = ?" for k in row)
+            vals = list(row.values()) + [ticker, ticker]
+            cur.execute(f"""UPDATE screener_snapshots SET {set_clause}
                            WHERE ticker = ? AND scraped_at = (
                                SELECT MAX(scraped_at) FROM screener_snapshots WHERE ticker = ?)""",
-                        (recom, ticker, ticker))
+                        vals)
         conn.commit()
         conn.close()
-        print(f"  Option B: updated {len(results)} analyst recoms")
+        logger.info(f"  Priority scrape: updated {len(results)} tickers with short/insider/valuation data")
 

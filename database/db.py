@@ -49,7 +49,9 @@ def initialise_schema(db_path: str) -> None:
             roe                 REAL,
             insider_own_pct     REAL,
             insider_transactions TEXT,
+            inst_own_pct        REAL,    -- institutional ownership %
             short_interest_pct  REAL,
+            short_ratio         REAL,    -- days to cover
             analyst_recom       REAL,
             rsi_14              REAL,
             rel_volume          REAL,
@@ -58,7 +60,11 @@ def initialise_schema(db_path: str) -> None:
             sma_200_pct         REAL,    -- price vs 200-day SMA (%)
             high_52w_pct        REAL,    -- % from 52-week high
             low_52w_pct         REAL,    -- % from 52-week low
-            beta                REAL
+            beta                REAL,
+            forward_pe          REAL,
+            peg_ratio           REAL,
+            price_to_sales      REAL,
+            price_to_book       REAL
         )
     """)
 
@@ -218,22 +224,27 @@ def insert_screener_rows(db_path: str, rows: list[dict]) -> int:
             scraped_at, ticker, company, sector, industry, country,
             market_cap, pe_ratio, price, change_pct, volume,
             eps_growth_this_yr, eps_growth_next_yr, sales_growth_5yr,
-            roe, insider_own_pct, insider_transactions, short_interest_pct,
+            roe, insider_own_pct, insider_transactions, inst_own_pct,
+            short_interest_pct, short_ratio,
             analyst_recom, rsi_14, rel_volume, avg_volume,
-            sma_50_pct, sma_200_pct, high_52w_pct, low_52w_pct, beta, exchange
+            sma_50_pct, sma_200_pct, high_52w_pct, low_52w_pct, beta, exchange,
+            forward_pe, peg_ratio, price_to_sales, price_to_book
         ) VALUES (
             :scraped_at, :ticker, :company, :sector, :industry, :country,
             :market_cap, :pe_ratio, :price, :change_pct, :volume,
             :eps_growth_this_yr, :eps_growth_next_yr, :sales_growth_5yr,
-            :roe, :insider_own_pct, :insider_transactions, :short_interest_pct,
+            :roe, :insider_own_pct, :insider_transactions, :inst_own_pct,
+            :short_interest_pct, :short_ratio,
             :analyst_recom, :rsi_14, :rel_volume, :avg_volume,
             :sma_50_pct, :sma_200_pct, :high_52w_pct, :low_52w_pct, :beta,
-            :exchange
+            :exchange, :forward_pe, :peg_ratio, :price_to_sales, :price_to_book
         )
     """
     for row in rows:
         row["scraped_at"] = now
         row.setdefault("exchange", None)
+        for col in ("inst_own_pct","short_ratio","forward_pe","peg_ratio","price_to_sales","price_to_book"):
+            row.setdefault(col, None)
     cur.executemany(insert_sql, rows)
     conn.commit()
     inserted = cur.rowcount

@@ -85,7 +85,7 @@
         /* Grid layout */
         .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;}
         .grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:16px;}
-        @media(max-width:900px){.grid-2,.grid-3{grid-template-columns:1fr;}.hero{flex-direction:column;}.hero-right{text-align:left;}}
+        @media(max-width:900px){.grid-2,.grid-3,.stat-cards-2x2{grid-template-columns:1fr;}.hero{flex-direction:column;}.hero-right{text-align:left;}}
 
         /* Cards */
         .card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:20px;}
@@ -706,27 +706,39 @@ async function loadPage() {
             </div>
         </div>
 
-        <!-- Technicals + 52W + Short -->
-        <div class="grid-3">
+        <!-- Technicals + 52W + Short + Target — 2×2 grid -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px" class="stat-cards-2x2">
             <div class="card">
                 <div class="card-title">Technical</div>
                 <div class="stat-row" data-tip="Relative Strength Index — below 30 = oversold (buy signal), above 70 = overbought (sell signal). Below 30 = oversold (potential buy). Above 70 = overbought (potential sell). 50 = neutral."><span class="stat-row-label">RSI (14)</span><span class="stat-row-value ${(sc.rsi_14||50)>70?'bad':(sc.rsi_14||50)<30?'hi':'mid'}">${fmt(sc.rsi_14,1)}</span></div>
                 <div class="stat-row" data-tip="50-day moving average. Price above = bullish trend. Positive = price above trend (bullish). Negative = price below trend (bearish)."><span class="stat-row-label">50-Day SMA</span><span class="stat-row-value" style="color:${(sc.sma_50_pct||0)>=0?'var(--accent2)':'var(--danger)'}">${fmtP(sc.sma_50_pct)}</span></div>
                 <div class="stat-row" data-tip="200-day moving average. Price above = long-term bullish trend. The long-term trend indicator. Positive = long-term bullish."><span class="stat-row-label">200-Day SMA</span><span class="stat-row-value" style="color:${(sc.sma_200_pct||0)>=0?'var(--accent2)':'var(--danger)'}">${fmtP(sc.sma_200_pct)}</span></div>
-                <div class="stat-row" data-tip="Relative volume vs average. Above 1.5x = unusual activity. Above 1.5x = unusual activity, possible catalyst. Below 0.5x = low interest."><span class="stat-row-label">Rel. Volume</span><span class="stat-row-value">${fmt(sc.rel_volume,2)}x</span></div>
-                <div class="stat-row" data-tip="Beta measures volatility vs the market. Above 1 = more volatile than market. Below 1 = more stable. Negative = moves inversely."><span class="stat-row-label">Beta</span><span class="stat-row-value">${fmt(sc.beta,2)}</span></div>
+                <div class="stat-row" data-tip="Relative volume vs average. Above 1.5x = unusual activity. Possible catalyst. Below 0.5x = low interest."><span class="stat-row-label">Rel. Volume</span><span class="stat-row-value">${fmt(sc.rel_volume,2)}x</span></div>
+                <div class="stat-row" data-tip="Beta measures volatility vs the market. Above 1 = more volatile. Below 1 = more stable. Negative = moves inversely."><span class="stat-row-label">Beta</span><span class="stat-row-value">${fmt(sc.beta,2)}</span></div>
             </div>
             <div class="card">
                 <div class="card-title">52-Week Range</div>
-                <div class="stat-row" data-tip="% below 52-week high. Near 0% = at yearly peak. Near 0% = trading at or near its yearly peak. More negative = further from high."><span class="stat-row-label">vs 52W High</span><span class="stat-row-value" style="color:${(sc.high_52w_pct||0)>-5?'var(--accent2)':'var(--muted2)'}">${fmtP(sc.high_52w_pct)}</span></div>
-                <div class="stat-row" data-tip="% above 52-week low. Higher = stronger recovery from yearly floor. Higher = stronger recovery from its yearly floor. +50% means trading 50% above its lowest point."><span class="stat-row-label">vs 52W Low</span><span class="stat-row-value" style="color:${(sc.low_52w_pct||0)<10?'var(--purple)':'var(--muted2)'}">${fmtP(sc.low_52w_pct)}</span></div>
+                <div class="stat-row" data-tip="% below 52-week high. Near 0% = trading at yearly peak."><span class="stat-row-label">vs 52W High</span><span class="stat-row-value" style="color:${(sc.high_52w_pct||0)>-5?'var(--accent2)':'var(--muted2)'}">${fmtP(sc.high_52w_pct)}</span></div>
+                <div class="stat-row" data-tip="% above 52-week low. +50% means trading 50% above its yearly floor."><span class="stat-row-label">vs 52W Low</span><span class="stat-row-value" style="color:${(sc.low_52w_pct||0)<10?'var(--purple)':'var(--muted2)'}">${fmtP(sc.low_52w_pct)}</span></div>
                 <div class="stat-row"><span class="stat-row-label">Avg Volume</span><span class="stat-row-value">${sc.avg_volume?Number(sc.avg_volume).toLocaleString():'-'}</span></div>
             </div>
             <div class="card">
-                <div class="card-title">Short Data</div>
-                <div class="stat-row"><span class="stat-row-label">Short Interest</span><span class="stat-row-value" style="color:${(sc.short_interest_pct||0)>20?'var(--danger)':(sc.short_interest_pct||0)>10?'var(--warning)':'var(--text)'}">${fmtP(sc.short_interest_pct)}</span></div>
-                <div class="stat-row"><span class="stat-row-label">Insider Ownership</span><span class="stat-row-value">${fmtP(sc.insider_own_pct)}</span></div>
-                <div class="stat-row"><span class="stat-row-label">Insider Transactions</span><span class="stat-row-value">${sc.insider_transactions||'-'}</span></div>
+                <div class="card-title">Target &amp; Valuation</div>
+                <div class="stat-row" data-tip="SignalIntel 12-month blended price target (DCF 40%, analyst consensus 35%, technical 15%, quality/legal 10%)."><span class="stat-row-label">12-Month Target</span><span class="stat-row-value" style="color:var(--accent)">${s.target_price ? '$' + s.target_price.toFixed(2) : '<span style="color:var(--muted)">Pending</span>'}</span></div>
+                <div class="stat-row" data-tip="Potential upside or downside to the 12-month target from current price."><span class="stat-row-label">Upside / Downside</span><span class="stat-row-value" style="color:${s.target_upside>0?'var(--accent2)':s.target_upside<0?'var(--danger)':'var(--muted)'}">${s.target_upside!=null?(s.target_upside>0?'+':'')+s.target_upside.toFixed(1)+'%':'<span style="color:var(--muted)">-</span>'}</span></div>
+                <div class="stat-row" data-tip="Price-to-Earnings ratio. Lower = cheaper relative to earnings. Compare within same sector."><span class="stat-row-label">P/E Ratio</span><span class="stat-row-value">${fmt(sc.pe_ratio,1)}</span></div>
+                <div class="stat-row" data-tip="Forward P/E based on next-year earnings estimates. Better forward-looking valuation than trailing P/E."><span class="stat-row-label">Forward P/E</span><span class="stat-row-value">${sc.forward_pe!=null?fmt(sc.forward_pe,1):'-'}</span></div>
+                <div class="stat-row" data-tip="PEG ratio = P/E divided by earnings growth rate. Below 1 = potentially undervalued. Above 2 = priced for perfection."><span class="stat-row-label">PEG Ratio</span><span class="stat-row-value" style="color:${sc.peg_ratio!=null&&sc.peg_ratio<1?'var(--accent2)':sc.peg_ratio!=null&&sc.peg_ratio>2?'var(--danger)':'inherit'}">${sc.peg_ratio!=null?fmt(sc.peg_ratio,2):'-'}</span></div>
+                <div class="stat-row" data-tip="Price-to-Sales. Useful for unprofitable companies. Below 2 generally reasonable."><span class="stat-row-label">Price / Sales</span><span class="stat-row-value">${sc.price_to_sales!=null?fmt(sc.price_to_sales,2):'-'}</span></div>
+                <div class="stat-row" data-tip="Price-to-Book. Below 1 = trading below asset value. High P/B common in asset-light tech companies."><span class="stat-row-label">Price / Book</span><span class="stat-row-value">${sc.price_to_book!=null?fmt(sc.price_to_book,2):'-'}</span></div>
+            </div>
+            <div class="card">
+                <div class="card-title">Short &amp; Ownership</div>
+                <div class="stat-row" data-tip="% of float sold short. Above 20% = heavily shorted. High short interest + bullish signal = short squeeze potential."><span class="stat-row-label">Short Interest</span><span class="stat-row-value" style="color:${(sc.short_interest_pct||0)>20?'var(--danger)':(sc.short_interest_pct||0)>10?'#f59e0b':'var(--text)'}">${sc.short_interest_pct!=null?fmtP(sc.short_interest_pct):'-'}</span></div>
+                <div class="stat-row" data-tip="Days to Cover — how many days of average volume needed to cover all short positions. Above 5 days = high squeeze potential."><span class="stat-row-label">Short Ratio</span><span class="stat-row-value">${sc.short_ratio!=null?fmt(sc.short_ratio,1)+'d':'-'}</span></div>
+                <div class="stat-row" data-tip="% of shares owned by company insiders (executives, directors). Higher = more skin in the game."><span class="stat-row-label">Insider Ownership</span><span class="stat-row-value">${sc.insider_own_pct!=null?fmtP(sc.insider_own_pct):'-'}</span></div>
+                <div class="stat-row" data-tip="Insider transaction net change over ~6 months (positive = net buying, negative = net selling)."><span class="stat-row-label">Insider Transactions</span><span class="stat-row-value" style="color:${sc.insider_transactions&&sc.insider_transactions.startsWith('-')?'var(--danger)':'var(--accent2)'}">${sc.insider_transactions||'-'}</span></div>
+                <div class="stat-row" data-tip="% of shares owned by institutional investors (funds, ETFs). Above 70% common for large caps."><span class="stat-row-label">Inst. Ownership</span><span class="stat-row-value">${sc.inst_own_pct!=null?fmtP(sc.inst_own_pct):'-'}</span></div>
             </div>
         </div>
 
