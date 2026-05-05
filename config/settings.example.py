@@ -1,7 +1,7 @@
 # config/settings.py
 # ─────────────────────────────────────────────────
 # Central config for the trading system.
-# Edit these values to customise behaviour.
+# Copy this file to config/settings.py and fill in your values.
 # ─────────────────────────────────────────────────
 
 # ── Database ──────────────────────────────────────
@@ -27,8 +27,6 @@ SECTORS = [
 ]
 
 # ── Screener columns to capture ──────────────────
-# Full list: ticker, company, sector, industry, country, market cap,
-# P/E, price, change, volume and key technicals
 SCREENER_COLUMNS = [
     "Ticker", "Company", "Sector", "Industry", "Country",
     "Market Cap", "P/E", "Price", "Change", "Volume",
@@ -44,12 +42,11 @@ SCREENER_COLUMNS = [
 
 # ── Insider trading filters ───────────────────────
 INSIDER_TRANSACTION_TYPES = [
-    "Buy",          # open-market purchases (strongest signal)
-    "Sale",         # open-market sales
+    "Buy",
+    "Sale",
     "Option Exercise",
 ]
 
-# Flag a cluster buy signal when N insiders buy in X days
 INSIDER_CLUSTER_BUY_COUNT = 3
 INSIDER_CLUSTER_DAYS      = 10
 
@@ -57,39 +54,37 @@ INSIDER_CLUSTER_DAYS      = 10
 LOG_DIR   = "logs"
 LOG_LEVEL = "INFO"   # DEBUG | INFO | WARNING | ERROR
 
-# ── Request headers (rotate to avoid blocks) ─────
+# ── Request headers ───────────────────────────────
 USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Safari/605.1.15",
     "Mozilla/5.0 (X11; Linux x86_64; rv:125.0) Gecko/20100101 Firefox/125.0",
 ]
 
-REQUEST_DELAY_SECONDS = 2.5   # polite crawl delay between requests
+REQUEST_DELAY_SECONDS = 2.5
 REQUEST_TIMEOUT       = 20
 
 # ── Alert settings ────────────────────────────────
-# Fill these in to enable email alerts.
-# Use an App Password for Gmail (not your main password).
-# Gmail: myaccount.google.com → Security → App passwords
-
-ALERTS_ENABLED = False   # Set to True once email is configured
+ALERTS_ENABLED = False
 
 ALERT_CONFIG = {
     "smtp_host": "smtp.gmail.com",
     "smtp_port": 465,
-    "smtp_user": "",           # your Gmail address
-    "smtp_pass": "",           # your Gmail App Password
-    "from_addr": "",           # your Gmail address
-    "to_addrs":  [],           # list of recipient emails e.g. ["you@email.com"]
+    "smtp_user": "",
+    "smtp_pass": "",
+    "from_addr": "",
+    "to_addrs":  [],
 }
 
-# Alert thresholds - only alert when these conditions are met
-ALERT_MIN_COMPOSITE_SCORE = 68.0    # minimum score for signal alert
-ALERT_MIN_CLUSTER_INSIDERS = 5      # minimum insiders for cluster alert
-ALERT_STRONG_BUY_ONLY = False       # True = only alert STRONG_BUY, False = BUY too
+ALERT_MIN_COMPOSITE_SCORE  = 68.0
+ALERT_MIN_CLUSTER_INSIDERS = 5
+ALERT_STRONG_BUY_ONLY      = False
 
-NEWS_SCRAPE_TIMES     = ["08:30", "17:30"]          # market open + close
+NEWS_SCRAPE_TIMES = ["08:30", "17:30"]
 
 # ── Telegram alerts ───────────────────────────────
-TELEGRAM_BOT_TOKEN = "8630007499:AAE7udqE2MTwYjicGYBV2Y7Ik8Q1Jz76UXI"
-TELEGRAM_CHAT_ID   = "6137690887"
+TELEGRAM_BOT_TOKEN = ""
+TELEGRAM_CHAT_ID   = ""
+
+# ── Financial Modeling Prep API ───────────────────
+FMP_API_KEY = ""
