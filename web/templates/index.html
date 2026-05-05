@@ -142,22 +142,22 @@
 .sortable:hover { color: var(--accent); }
 
 /* Discovery Themes */
-.themes-section{margin-bottom:24px;}
+.themes-section{margin-bottom:36px;padding-bottom:32px;border-bottom:1px solid var(--border);}
 .themes-header{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:2px;
-    color:var(--muted);margin-bottom:12px;}
-.themes-scroll{display:flex;gap:12px;overflow-x:auto;padding-bottom:8px;scrollbar-width:thin;
+    color:var(--muted);margin-bottom:16px;}
+.themes-scroll{display:flex;gap:14px;overflow-x:auto;padding-bottom:10px;scrollbar-width:thin;
     scrollbar-color:var(--border) transparent;}
 .themes-scroll::-webkit-scrollbar{height:4px;}
 .themes-scroll::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px;}
-.theme-card{flex-shrink:0;width:200px;background:var(--surface);border:1px solid var(--border);
-    border-radius:10px;padding:16px;cursor:pointer;transition:all 0.2s;position:relative;overflow:hidden;}
+.theme-card{flex-shrink:0;width:210px;background:var(--surface);border:1px solid var(--border);
+    border-radius:10px;padding:20px 18px;cursor:pointer;transition:all 0.2s;position:relative;overflow:hidden;}
 .theme-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;}
-.theme-card:hover{transform:translateY(-2px);border-color:rgba(0,212,255,0.4);}
-.theme-icon{font-size:22px;margin-bottom:8px;}
+.theme-card:hover{transform:translateY(-3px);border-color:rgba(0,212,255,0.4);box-shadow:0 8px 24px rgba(0,0,0,0.3);}
+.theme-icon{font-size:26px;margin-bottom:10px;}
 .theme-name{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--text);
-    text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;}
-.theme-desc{font-size:11px;color:var(--muted);line-height:1.4;}
-.theme-count{font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:8px;}
+    text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;}
+.theme-desc{font-size:11px;color:var(--muted);line-height:1.5;}
+.theme-count{font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:10px;}
 
 /* Ratings Guide Modal */
 .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;
@@ -222,7 +222,7 @@
 <!-- TODAY'S TOP 10 -->
 <div id="panel-today" class="panel active">
     <!-- Discovery Themes -->
-    <div class="themes-section">
+    <div class="themes-section" style="margin-top:12px;">
         <div class="themes-header">Discovery Themes</div>
         <div class="themes-scroll" id="themes-row">
             <div class="theme-card" style="border-top-color:#00ff88" onclick="applyTheme('strong_buys')">
@@ -270,7 +270,7 @@
         </div>
     </div>
 
-    <div class="section-header" style="margin-bottom:20px">
+    <div class="section-header" style="margin-bottom:20px;padding-top:4px;">
         <div class="section-title">Today's Top 10 Signals —</div>
     </div>
     <div class="top10-grid">

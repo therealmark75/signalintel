@@ -72,7 +72,8 @@
         .chart-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;
             overflow:hidden;margin-bottom:16px;}
         .chart-header{padding:14px 20px;border-bottom:1px solid var(--border);
-            display:flex;align-items:center;justify-content:space-between;}
+            display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none;}
+        .chart-header:hover .chart-chevron{color:var(--accent);}
         .chart-title{font-family:var(--mono);font-size:10px;text-transform:uppercase;
             letter-spacing:2px;color:var(--muted2);}
         .chart-intervals{display:flex;gap:4px;}
@@ -637,9 +638,9 @@ async function loadPage() {
 
         <!-- Legal & Regulatory Risk Card -->
         <div class="card" id="legal-risk-card">
-            <div class="card-title" style="display:flex;align-items:center;justify-content:space-between;">
+            <div class="card-title" style="display:flex;align-items:center;gap:16px;">
                 <span>⚖️ Legal &amp; Regulatory Risk</span>
-                <a href="https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK={{ ticker }}&type=&dateb=&owner=include&count=10" target="_blank" style="font-size:11px;color:var(--accent);text-decoration:none;opacity:0.8;">SEC EDGAR ↗</a>
+                <a href="https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK={{ ticker }}&type=&dateb=&owner=include&count=10" target="_blank" style="font-size:11px;color:var(--accent);text-decoration:none;opacity:0.8;margin-left:auto;margin-right:4px;">SEC EDGAR ↗</a>
             </div>
             {% if legal_risk %}
             {% set lr = legal_risk %}
@@ -680,7 +681,7 @@ async function loadPage() {
         </div>
 
         <!-- TradingView Chart -->
-        <div class="chart-card">
+        <div class="chart-card" id="price-chart-card">
             <div class="chart-header">
                 <div class="chart-title">Price Chart — ${TICKER}</div>
                 <div class="chart-intervals">
@@ -690,6 +691,7 @@ async function loadPage() {
                     <button class="interval-btn" data-interval="D" onclick="initTradingViewChart('${TICKER}','D')">1D</button>
                     <button class="interval-btn" data-interval="W" onclick="initTradingViewChart('${TICKER}','W')">1W</button>
                 </div>
+                <span class="chart-chevron" id="chart-chevron" style="font-size:11px;color:var(--muted);cursor:pointer;padding-left:12px;transition:transform 0.2s;display:inline-block;">▾</span>
             </div>
             <div id="tv-chart-container"></div>
         </div>
@@ -999,6 +1001,39 @@ function initRadarChart(s, lr) {
 
 function initCollapsibleCards() {
     document.getElementById('page-toolbar').style.display = 'flex';
+
+    // Price chart card — manual collapse (separate structure from .card)
+    const chartCard = document.getElementById('price-chart-card');
+    const chartChevron = document.getElementById('chart-chevron');
+    const chartContainer = document.getElementById('tv-chart-container');
+    if (chartCard && chartChevron && chartContainer) {
+        const chartKey = 'wgt_price_chart';
+        const chartBody = chartContainer;
+        chartBody.style.overflow = 'hidden';
+        chartBody.style.transition = 'max-height 0.3s ease, opacity 0.3s ease';
+        chartBody.style.maxHeight = '2000px';
+        if (localStorage.getItem(chartKey) === 'collapsed') {
+            chartBody.style.maxHeight = '0';
+            chartBody.style.opacity = '0';
+            chartChevron.style.transform = 'rotate(-90deg)';
+        }
+        chartCard.querySelector('.chart-header').addEventListener('click', function(e) {
+            if (e.target.classList.contains('interval-btn')) return;
+            const collapsed = chartBody.style.maxHeight === '0px';
+            if (collapsed) {
+                chartBody.style.maxHeight = '2000px';
+                chartBody.style.opacity = '1';
+                chartChevron.style.transform = '';
+                localStorage.setItem(chartKey, 'expanded');
+            } else {
+                chartBody.style.maxHeight = '0';
+                chartBody.style.opacity = '0';
+                chartChevron.style.transform = 'rotate(-90deg)';
+                localStorage.setItem(chartKey, 'collapsed');
+            }
+        });
+    }
+
     document.querySelectorAll('#page-content .card').forEach(card => {
         const title = card.querySelector('.card-title');
         if (!title) return;
@@ -1050,8 +1085,14 @@ function toggleAllCards() {
 }
 
 loadPage();
+</script>
 
-// Floating tooltip for data-tip elements (event delegation for dynamic DOM)
+<!-- tip-box must be in DOM before the tooltip IIFE below -->
+<div id="tip-box" style="position:fixed;display:none;background:#0a1628;border:1px solid var(--border);color:var(--text);padding:7px 11px;border-radius:5px;font-family:var(--sans);font-size:11px;line-height:1.45;max-width:240px;z-index:9999;pointer-events:none;word-wrap:break-word;box-shadow:0 4px 16px rgba(0,0,0,0.4)"></div>
+
+<script>
+// Floating tooltip — #tip-box must exist before this IIFE runs,
+// so it is inserted above this script block in the HTML.
 (function(){
     const box = document.getElementById('tip-box');
     if (!box) return;
@@ -1070,8 +1111,6 @@ loadPage();
     });
 })();
 </script>
-
-<div id="tip-box" style="position:fixed;display:none;background:#0a1628;border:1px solid var(--border);color:var(--text);padding:7px 11px;border-radius:5px;font-family:var(--sans);font-size:11px;line-height:1.45;max-width:240px;z-index:9999;pointer-events:none;word-wrap:break-word;box-shadow:0 4px 16px rgba(0,0,0,0.4)"></div>
 
 <!-- Ratings Guide Modal -->
 <div class="modal-overlay" id="ratingsModal" onclick="if(event.target===this)this.classList.remove('open')">

@@ -783,6 +783,7 @@ def api_screener():
     rsi_min   = request.args.get("rsi_min", type=float)
     rsi_max   = request.args.get("rsi_max", type=float)
     upside_min = request.args.get("upside_min", type=float)
+    short_min  = request.args.get("short_min", type=float)
     sort_col  = request.args.get("sort", "composite_score")
     sort_dir  = request.args.get("dir", "desc").lower()
     page      = max(1, request.args.get("page", type=int, default=1))
@@ -793,6 +794,7 @@ def api_screener():
         "target_price", "target_upside", "price", "change_pct", "volume",
         "pe_ratio", "rsi_14", "rating", "high_52w_pct", "low_52w_pct",
         "momentum_score", "quality_score", "insider_score",
+        "short_interest_pct", "insider_transactions", "beta",
     }
     if sort_col not in allowed_sorts:
         sort_col = "composite_score"
@@ -852,9 +854,24 @@ def api_screener():
     if upside_min is not None:
         where.append("sig.target_upside >= ?")
         params.append(upside_min)
+    if short_min is not None:
+        where.append("ss.short_interest_pct >= ?")
+        params.append(short_min)
 
     where_sql = " AND ".join(where)
-    order_sql = f"{sort_col} {sort_dir.upper()} NULLS LAST"
+    # Map sort column to correct table prefix
+    _ss_cols = {"ticker","company","sector","market_cap","price","change_pct","volume",
+                "pe_ratio","rsi_14","high_52w_pct","low_52w_pct",
+                "short_interest_pct","insider_transactions","beta",
+                "eps_growth_this_yr","eps_growth_next_yr"}
+    _sig_cols = {"rating","composite_score","target_price","target_upside",
+                 "momentum_score","quality_score","insider_score"}
+    if sort_col in _ss_cols:
+        order_sql = f"ss.{sort_col} {sort_dir.upper()} NULLS LAST"
+    elif sort_col in _sig_cols:
+        order_sql = f"sig.{sort_col} {sort_dir.upper()} NULLS LAST"
+    else:
+        order_sql = f"sig.composite_score DESC NULLS LAST"
     offset    = (page - 1) * per_page
 
     sig_subq = """

@@ -38,9 +38,9 @@
 #wl-toast .toast-msg{flex:1;line-height:1.4;}
 #wl-toast .toast-link{color:#00d4ff;text-decoration:none;white-space:nowrap;}
 </style>
-<!-- Ticker tape (shared across all pages) -->
-<div id="si-tape" style="position:fixed;bottom:0;left:0;right:0;z-index:9998;
-    height:26px;background:rgba(8,12,20,0.97);border-top:1px solid var(--border,#1a2d45);
+<!-- Ticker tape — rendered here but JS moves it to <body> to escape backdrop-filter stacking context -->
+<div id="si-tape" style="position:fixed;top:56px;left:0;right:0;z-index:98;
+    height:26px;background:rgba(8,12,20,0.97);border-bottom:1px solid var(--border,#1a2d45);
     overflow:hidden;display:flex;align-items:center;font-family:var(--mono,monospace);font-size:11px;">
     <div id="si-tape-inner" style="display:flex;align-items:center;gap:0;white-space:nowrap;
         animation:tape-scroll 60s linear infinite;will-change:transform;"></div>
@@ -53,7 +53,8 @@
 .tape-up{color:#00ff88;}
 .tape-dn{color:#ff3b5c;}
 .tape-neu{color:#8aa4bf;}
-body{padding-bottom:32px;}
+/* Sticky sidebar (screener) must clear both header (56px) + tape (26px) */
+.sidebar{top:82px!important;max-height:calc(100vh - 82px)!important;}
 </style>
 <!-- Toast notification element (shared across all pages) -->
 <div id="wl-toast" onclick="this.style.display='none'">
@@ -100,8 +101,25 @@ window.trackRecentlyViewed = function(ticker) {
 
 // ── Ticker tape ──────────────────────────────────
 (function() {
+    const tape  = document.getElementById('si-tape');
     const inner = document.getElementById('si-tape-inner');
-    if (!inner) return;
+    if (!tape || !inner) return;
+
+    // Move tape to <body> so position:fixed is relative to viewport,
+    // not the backdrop-filter ancestor (sticky header).
+    document.body.appendChild(tape);
+
+    // Once DOM is fully parsed, push the element that sits directly
+    // after the header down by the tape's height (26px).
+    window.addEventListener('DOMContentLoaded', function() {
+        const hdr  = document.querySelector('header');
+        const next = hdr && hdr.nextElementSibling;
+        if (next && !next.dataset.tapeOffset) {
+            const cur = parseInt(getComputedStyle(next).marginTop) || 0;
+            next.style.marginTop = (cur + 26) + 'px';
+            next.dataset.tapeOffset = '1';
+        }
+    });
 
     function fmtTape(item) {
         const pct = item.change_pct;
@@ -122,9 +140,8 @@ window.trackRecentlyViewed = function(ticker) {
         fetch('/api/markets/tape').then(r => r.json()).then(data => {
             if (!data.items || !data.items.length) return;
             const html = data.items.map(fmtTape).join('');
-            inner.innerHTML = html + html; // duplicate for seamless loop
-            // Adjust animation duration based on content width
-            const tw = inner.scrollWidth / 2;
+            inner.innerHTML = html + html;
+            const tw  = inner.scrollWidth / 2;
             const dur = Math.max(30, Math.round(tw / 60)) + 's';
             inner.style.animationDuration = dur;
         }).catch(() => {});

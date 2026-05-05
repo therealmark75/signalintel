@@ -208,10 +208,12 @@ tr:hover td{background:rgba(0,212,255,0.03);cursor:pointer;}
 <!-- ── Main table ─────────────────────────────────── -->
 <div class="main">
     <div class="presets">
-        <button class="preset-btn" onclick="applyPreset('strong_buys')">Strong Buys</button>
-        <button class="preset-btn" onclick="applyPreset('momentum')">Top Momentum</button>
-        <button class="preset-btn" onclick="applyPreset('oversold')">Oversold</button>
-        <button class="preset-btn" onclick="applyPreset('high_short')">High Short Interest</button>
+        <button class="preset-btn" onclick="applyPreset('strong_buys')">🔥 Strong Buys</button>
+        <button class="preset-btn" onclick="applyPreset('momentum')">📊 Top Momentum</button>
+        <button class="preset-btn" onclick="applyPreset('oversold')">📉 Oversold</button>
+        <button class="preset-btn" onclick="applyPreset('high_short')">🔴 High Short Interest</button>
+        <button class="preset-btn" onclick="window.location='/dividends'">💰 High Yield</button>
+        <button class="preset-btn" onclick="window.location='/earnings'">⚡ Earnings Soon</button>
     </div>
     <div class="toolbar">
         <div class="toolbar-left">
@@ -268,7 +270,7 @@ let state = {
     sort: 'composite_score', dir: 'desc', page: 1, per_page: 50,
     sector: '', ratings: [], score_min: 0, score_max: 100,
     mcap: 'any', pe_min: '', pe_max: '', rsi_min: '', rsi_max: '',
-    upside_min: '',
+    upside_min: '', short_min: '',
 };
 let totalPages = 1;
 let watchlistSet = new Set();
@@ -330,6 +332,7 @@ function buildParams() {
     if(state.rsi_min !== '') p.set('rsi_min', state.rsi_min);
     if(state.rsi_max !== '') p.set('rsi_max', state.rsi_max);
     if(state.upside_min !== '') p.set('upside_min', state.upside_min);
+    if(state.short_min !== '') p.set('short_min', state.short_min);
     p.set('sort', state.sort);
     p.set('dir', state.dir);
     p.set('page', state.page);
@@ -339,8 +342,17 @@ function buildParams() {
 
 async function load() {
     const tbody = document.getElementById('screener-tbody');
-    tbody.innerHTML = '<tr class="loading-row"><td colspan="20">Loading...</td></tr>';
     updateSortIndicators();
+
+    // Bug B fix: require at least one rating selected
+    if (state.ratings.length === 0) {
+        tbody.innerHTML = '<tr class="loading-row"><td colspan="20" style="color:var(--warning)">Select at least one rating filter to show results.</td></tr>';
+        document.getElementById('result-count').textContent = '0 results';
+        document.getElementById('pagination').innerHTML = '';
+        return;
+    }
+
+    tbody.innerHTML = '<tr class="loading-row"><td colspan="20">Loading...</td></tr>';
 
     const data = await fetch('/api/screener?' + buildParams()).then(r => r.json()).catch(() => null);
     if (!data) {
@@ -448,11 +460,14 @@ function applyFilters() {
     state.rsi_min   = document.getElementById('f-rsi-min').value;
     state.rsi_max   = document.getElementById('f-rsi-max').value;
     state.upside_min = document.getElementById('f-upside-min').value;
+    state.short_min = '';
     state.page = 1;
     load();
 }
 
-function resetFilters() {
+// resetState: resets all state + DOM controls, does NOT call load().
+// Used by applyPreset to avoid double-fetch race condition.
+function resetState() {
     document.getElementById('f-sector').value = '';
     document.querySelectorAll('#f-ratings input').forEach(i => i.checked = true);
     document.getElementById('f-score-min').value = 0;
@@ -463,40 +478,55 @@ function resetFilters() {
     });
     Object.assign(state, {
         sector:'', ratings:[], score_min:0, score_max:100, mcap:'any',
-        pe_min:'', pe_max:'', rsi_min:'', rsi_max:'', upside_min:'', page:1,
+        pe_min:'', pe_max:'', rsi_min:'', rsi_max:'', upside_min:'', short_min:'',
+        sort:'composite_score', dir:'desc', page:1,
     });
+}
+
+function resetFilters() {
+    resetState();
+    // After reset, select all ratings so the grid shows everything
+    state.ratings = [...document.querySelectorAll('#f-ratings input')].map(i => i.value);
+    document.querySelectorAll('#f-ratings input').forEach(i => i.checked = true);
     load();
 }
 
+const ALL_RATINGS = ['STRONG_BUY','BUY','STRONG_HOLD','HOLD','WEAK_HOLD','SELL','STRONG_SELL'];
+
 function applyPreset(name) {
-    resetFilters();
+    // Reset state cleanly without triggering a fetch
+    resetState();
+
     if (name === 'strong_buys') {
+        // Only Strong Buy + Buy, score ≥ 68
         state.ratings = ['STRONG_BUY','BUY'];
-        state.score_min = 60;
-        document.querySelectorAll('#f-ratings input').forEach(i => { i.checked = state.ratings.includes(i.value); });
-        document.getElementById('f-score-min').value = 60;
+        state.score_min = 68;
+        document.getElementById('f-score-min').value = 68;
     } else if (name === 'momentum') {
-        state.sort = 'composite_score'; state.dir = 'desc';
-        state.score_min = 55;
-        state.rsi_min = 50; state.rsi_max = 70;
-        document.getElementById('f-score-min').value = 55;
-        document.getElementById('f-rsi-min').value = 50;
-        document.getElementById('f-rsi-max').value = 70;
+        // All ratings except Strong Sell, sort by momentum_score, score ≥ 60
+        state.ratings = ALL_RATINGS.filter(r => r !== 'STRONG_SELL');
+        state.sort    = 'momentum_score';
+        state.dir     = 'desc';
+        state.score_min = 60;
+        document.getElementById('f-score-min').value = 60;
     } else if (name === 'oversold') {
-        state.rsi_max = 35;
-        document.getElementById('f-rsi-max').value = 35;
+        // All ratings, RSI ≤ 30
+        state.ratings = [...ALL_RATINGS];
+        state.rsi_max = 30;
+        document.getElementById('f-rsi-max').value = 30;
     } else if (name === 'high_short') {
-        state.sort = 'short_interest_pct'; state.dir = 'desc';
-    } else if (name === 'high_insider') {
-        state.sort = 'insider_score'; state.dir = 'desc';
-        state.score_min = 55;
-        document.getElementById('f-score-min').value = 55;
-    } else if (name === 'undervalued' || name === 'legally_clean') {
-        state.ratings = ['STRONG_BUY','BUY'];
-        state.upside_min = name === 'undervalued' ? 15 : '';
-        document.querySelectorAll('#f-ratings input').forEach(i => { i.checked = state.ratings.includes(i.value); });
-        if (name === 'undervalued') document.getElementById('f-upside-min').value = 15;
+        // All ratings, short interest ≥ 20%, sort by short% desc
+        state.ratings  = [...ALL_RATINGS];
+        state.short_min = 20;
+        state.sort      = 'short_interest_pct';
+        state.dir       = 'desc';
     }
+
+    // Sync checkbox DOM state
+    document.querySelectorAll('#f-ratings input').forEach(i => {
+        i.checked = state.ratings.includes(i.value);
+    });
+
     state.page = 1;
     load();
 }
@@ -550,14 +580,19 @@ function exportCSV() {
     });
 }
 
-// Initial load — check for preset param in URL
-state.ratings = [...document.querySelectorAll('#f-ratings input:checked')].map(i => i.value);
+// Initial load — all ratings selected by default
+document.querySelectorAll('#f-ratings input').forEach(i => i.checked = true);
+state.ratings = [...document.querySelectorAll('#f-ratings input')].map(i => i.value);
+
 const _urlPreset = new URLSearchParams(window.location.search).get('preset');
 if (_urlPreset) {
-    // slight delay so DOM is ready
-    setTimeout(() => applyPreset(_urlPreset === 'high_insider' ? 'momentum' : _urlPreset), 0);
+    setTimeout(() => applyPreset(_urlPreset), 0);
+} else {
+    loadWatchlist().then(() => load());
 }
-loadWatchlist().then(() => load());
+if (_urlPreset) {
+    loadWatchlist().then(() => {}); // still load watchlist for WL toggle buttons
+}
 </script>
 </body>
 </html>
