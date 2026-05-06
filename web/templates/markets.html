@@ -200,11 +200,6 @@ function initLcGrid(tabId) {
     TAB_DATA[tabId].forEach(({label, yf, tv}) => {
         const card = document.createElement('div');
         card.className = 'chart-card';
-        if (tv) {
-            card.style.cursor = 'pointer';
-            card.title = 'Open full chart';
-            card.addEventListener('click', () => window.open('/markets/' + encodeURIComponent(tv), '_blank'));
-        }
 
         const lbl = document.createElement('div');
         lbl.className = 'card-label';
