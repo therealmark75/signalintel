@@ -1,0 +1,274 @@
+<!-- Shared watchlist picker — included once via _nav.html, used on every page -->
+<style>
+#wl-picker-drop{
+    position:fixed;z-index:9100;display:none;
+    background:#0d1520;border:1px solid #1a2d45;border-radius:6px;
+    box-shadow:0 8px 32px rgba(0,0,0,0.65);min-width:220px;max-width:320px;
+    overflow:hidden;font-family:'Space Mono',monospace;}
+.wl-picker-item{
+    display:flex;align-items:center;gap:8px;padding:8px 12px;
+    font-size:11px;color:#c2d4e8;cursor:pointer;
+    border-bottom:1px solid rgba(26,45,69,0.6);transition:background .1s;}
+.wl-picker-item:last-child{border-bottom:none;}
+.wl-picker-item:hover{background:#111d2e;}
+.wl-picker-item.wl-picker-in{color:#00ff88;}
+.wl-picker-check{width:12px;flex-shrink:0;font-size:10px;}
+.wl-picker-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.wl-picker-count{font-size:9px;color:#4a6380;flex-shrink:0;}
+.wl-picker-divider{height:1px;background:#1a2d45;margin:2px 0;}
+.wl-picker-create-row{
+    display:flex;align-items:center;gap:8px;padding:8px 12px;
+    font-size:11px;color:#00d4ff;cursor:pointer;transition:background .1s;}
+.wl-picker-create-row:hover{background:#111d2e;}
+.wl-picker-limit-row{
+    padding:8px 12px;font-size:10px;color:#4a6380;line-height:1.4;}
+.wl-picker-create-form{padding:8px 12px;border-top:1px solid #1a2d45;}
+.wl-picker-create-input{
+    width:100%;background:#080c14;border:1px solid #1a2d45;border-radius:4px;
+    padding:5px 8px;font-family:'Space Mono',monospace;font-size:11px;
+    color:#e2eaf4;outline:none;box-sizing:border-box;margin-bottom:6px;}
+.wl-picker-create-input:focus{border-color:#00d4ff;}
+.wl-picker-create-btns{display:flex;gap:6px;}
+.wl-picker-submit{
+    flex:1;background:#00d4ff;color:#080c14;border:none;border-radius:4px;
+    font-family:'Space Mono',monospace;font-size:10px;font-weight:700;
+    padding:5px 0;cursor:pointer;letter-spacing:0.5px;}
+.wl-picker-submit:hover{opacity:.85;}
+.wl-picker-cancel{
+    background:transparent;border:1px solid #1a2d45;border-radius:4px;
+    font-family:'Space Mono',monospace;font-size:10px;color:#4a6380;
+    padding:5px 8px;cursor:pointer;}
+.wl-picker-cancel:hover{border-color:#00d4ff;color:#00d4ff;}
+.wl-picker-err{font-size:10px;color:#ff3b5c;margin-top:4px;min-height:14px;}
+</style>
+
+<div id="wl-picker-drop">
+    <div id="wl-picker-list"></div>
+    <div class="wl-picker-divider"></div>
+    <div id="wl-picker-create-row" class="wl-picker-create-row">+ Create new watchlist</div>
+    <div id="wl-picker-create-form" style="display:none">
+        <input id="wl-picker-new-name" class="wl-picker-create-input"
+               type="text" placeholder="Watchlist name" maxlength="60">
+        <div class="wl-picker-create-btns">
+            <button class="wl-picker-submit" onclick="WlPicker._submitCreate()">Create &amp; Add</button>
+            <button class="wl-picker-cancel" onclick="WlPicker._hideCreate()">Cancel</button>
+        </div>
+        <div id="wl-picker-err" class="wl-picker-err"></div>
+    </div>
+</div>
+
+<script>
+window.WlPicker = (function(){
+    let _ticker = null, _triggerEl = null;
+    let _state  = {watchlists:[], limit:null, count:0, tier_name:''};
+
+    function _drop() { return document.getElementById('wl-picker-drop'); }
+
+    function _pos(el) {
+        const r = el.getBoundingClientRect();
+        const d = _drop();
+        const dw = 230;
+        let left = r.left;
+        if (left + dw > window.innerWidth - 8) left = window.innerWidth - dw - 8;
+        d.style.top  = (r.bottom + 4) + 'px';
+        d.style.left = Math.max(4, left) + 'px';
+    }
+
+    async function open(el, ticker) {
+        // Toggle closed if same element clicked again
+        if (_drop().style.display === 'block' && _ticker === ticker && _triggerEl === el) {
+            close(); return;
+        }
+        _ticker    = ticker;
+        _triggerEl = el;
+
+        const data = await fetch('/api/watchlists?ticker=' + encodeURIComponent(ticker))
+                           .then(r => r.json()).catch(() => null);
+        if (!data) return;
+        _state = data;
+        const wls = data.watchlists || [];
+
+        // 0 watchlists → auto-create 'My Watchlist' and add
+        if (!wls.length) { _doCreate('My Watchlist', true); return; }
+
+        // 1 watchlist → direct toggle, no picker
+        if (wls.length === 1) { _doToggle(wls[0].id, wls[0].contains_ticker, wls[0].name); return; }
+
+        // 2+ watchlists → show picker
+        _render();
+        _pos(el);
+        _drop().style.display = 'block';
+    }
+
+    function close() {
+        _drop().style.display = 'none';
+        document.getElementById('wl-picker-create-form').style.display = 'none';
+        document.getElementById('wl-picker-err').textContent = '';
+    }
+
+    function _render() {
+        const wls      = _state.watchlists || [];
+        const limit    = _state.limit;
+        const limitHit = limit !== null && wls.length >= limit;
+
+        document.getElementById('wl-picker-list').innerHTML = wls.map(wl => `
+            <div class="wl-picker-item${wl.contains_ticker ? ' wl-picker-in' : ''}"
+                 data-wlid="${wl.id}" onclick="WlPicker._itemClick(${wl.id})">
+                <span class="wl-picker-check">${wl.contains_ticker ? '✓' : ''}</span>
+                <span class="wl-picker-name">${wl.name}</span>
+                <span class="wl-picker-count">${wl.ticker_count || 0}</span>
+            </div>
+        `).join('');
+
+        const cr = document.getElementById('wl-picker-create-row');
+        if (limitHit) {
+            cr.className  = 'wl-picker-limit-row';
+            cr.onclick    = null;
+            cr.textContent = `Watchlist limit reached (${wls.length}/${limit} · ${_state.tier_name || ''})`;
+        } else {
+            cr.className  = 'wl-picker-create-row';
+            cr.onclick    = _showCreate;
+            cr.textContent = '+ Create new watchlist';
+        }
+        document.getElementById('wl-picker-create-form').style.display = 'none';
+        document.getElementById('wl-picker-err').textContent = '';
+    }
+
+    function _itemClick(wlId) {
+        const wl = (_state.watchlists || []).find(w => w.id === wlId);
+        if (wl) _doToggle(wlId, wl.contains_ticker, wl.name);
+    }
+
+    async function _doToggle(wlId, inIt, name) {
+        let ok = false;
+        if (inIt) {
+            const d = await fetch(`/api/watchlists/${wlId}/tickers/${_ticker}`, {method:'DELETE'})
+                           .then(r => r.json()).catch(() => ({}));
+            if (d.ok) {
+                const wl = (_state.watchlists||[]).find(w=>w.id===wlId);
+                if (wl) { wl.contains_ticker=false; wl.ticker_count=Math.max(0,(wl.ticker_count||1)-1); }
+                if (window.showWlToast) showWlToast(_ticker, true, name);
+                ok = true;
+            }
+        } else {
+            const d = await fetch(`/api/watchlists/${wlId}/tickers`, {
+                method:'POST', headers:{'Content-Type':'application/json'},
+                body: JSON.stringify({ticker:_ticker})
+            }).then(r => r.json()).catch(() => ({}));
+            if (d.ok) {
+                const wl = (_state.watchlists||[]).find(w=>w.id===wlId);
+                if (wl) { wl.contains_ticker=true; wl.ticker_count=(wl.ticker_count||0)+1; }
+                if (window.showWlToast) showWlToast(_ticker, false, name);
+                ok = true;
+            }
+        }
+        if (ok) {
+            _updateTrigger();
+            if ((_state.watchlists||[]).length > 1) _render(); else close();
+        }
+    }
+
+    function _showCreate() {
+        document.getElementById('wl-picker-create-form').style.display = 'block';
+        document.getElementById('wl-picker-new-name').value = '';
+        document.getElementById('wl-picker-err').textContent = '';
+        setTimeout(() => document.getElementById('wl-picker-new-name').focus(), 30);
+    }
+
+    function _hideCreate() {
+        document.getElementById('wl-picker-create-form').style.display = 'none';
+        document.getElementById('wl-picker-err').textContent = '';
+    }
+
+    async function _submitCreate() {
+        const name = document.getElementById('wl-picker-new-name').value.trim();
+        if (!name) return;
+        _doCreate(name, false);
+    }
+
+    async function _doCreate(name, isAuto) {
+        const cr = await fetch('/api/watchlists', {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({name})
+        }).then(r=>r.json()).catch(()=>({}));
+
+        if (!cr.ok) {
+            const err = cr.error || 'Error creating watchlist';
+            if (isAuto) { if (window.showWlToast) showWlToast(_ticker, false, name); return; }
+            document.getElementById('wl-picker-err').textContent = err;
+            return;
+        }
+        const wlId = cr.id;
+        const ar = await fetch(`/api/watchlists/${wlId}/tickers`, {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({ticker:_ticker})
+        }).then(r=>r.json()).catch(()=>({}));
+
+        if (ar.ok) {
+            _toastCreated(_ticker, name);
+            // Refresh state from server
+            const fresh = await fetch('/api/watchlists?ticker=' + encodeURIComponent(_ticker))
+                               .then(r=>r.json()).catch(()=>null);
+            if (fresh) _state = fresh;
+            _updateTrigger();
+            close();
+        }
+    }
+
+    function _toastCreated(ticker, name) {
+        const toast = document.getElementById('wl-toast');
+        const msg   = document.getElementById('wl-toast-msg');
+        if (!toast || !msg) return;
+        msg.innerHTML = `${ticker} added to '${name}' &nbsp;<a class="toast-link" href="/watchlist">View →</a>`;
+        toast.style.borderColor = 'rgba(0,255,136,0.35)';
+        toast.style.display = 'flex'; toast.style.opacity = '1';
+        clearTimeout(toast._timer);
+        toast._timer = setTimeout(() => {
+            toast.style.opacity = '0';
+            setTimeout(() => { toast.style.display='none'; toast.style.opacity='1'; }, 350);
+        }, 4000);
+    }
+
+    function _updateTrigger() {
+        if (!_triggerEl) return;
+        const wls    = _state.watchlists || [];
+        const inAny  = wls.some(w => w.contains_ticker);
+        const inNames = wls.filter(w => w.contains_ticker).map(w => w.name);
+
+        // Screener-style small button (has .wl-btn class)
+        if (_triggerEl.classList.contains('wl-btn')) {
+            _triggerEl.textContent = inAny ? '✓' : '+';
+            _triggerEl.className   = 'wl-picker-btn wl-btn ' + (inAny ? 'wl-btn-in' : 'wl-btn-add');
+        } else {
+            // Ticker-page large button
+            _triggerEl.textContent = inAny ? '✓ In Watchlist' : '+ Watchlist';
+            _triggerEl.className   = 'btn-wl ' + (inAny ? 'btn-remove' : 'btn-add');
+            const label = document.getElementById('wl-membership-label');
+            if (label) label.textContent = inNames.length ? 'In: ' + inNames.join(', ') : '';
+        }
+
+        // Notify any page-level watchlist set (screener / penny_screener)
+        if (typeof window._wlAllTickers !== 'undefined') {
+            if (inAny) window._wlAllTickers.add(_ticker);
+            else       window._wlAllTickers.delete(_ticker);
+        }
+    }
+
+    // Close on outside click
+    document.addEventListener('click', e => {
+        if (!e.target.closest('#wl-picker-drop') && !e.target.closest('.wl-picker-btn')) close();
+    });
+
+    // Close on Escape; submit create-form on Enter
+    document.addEventListener('keydown', e => {
+        if (e.key === 'Escape') { close(); return; }
+        if (e.key === 'Enter' &&
+            document.getElementById('wl-picker-create-form').style.display !== 'none' &&
+            document.activeElement === document.getElementById('wl-picker-new-name')) {
+            e.preventDefault(); _submitCreate();
+        }
+    });
+
+    return { open, close, _itemClick, _submitCreate, _hideCreate, _showCreate };
+})();
+</script>
