@@ -364,7 +364,7 @@ def api_signals_by_rating(rating):
                momentum_score, quality_score, insider_score,
                reversion_score, flags, MAX(scored_at) as scored_at
         FROM signal_scores
-        WHERE DATE(ss.scored_at) = DATE((SELECT MAX(scored_at) FROM signal_scores))
+        WHERE DATE(scored_at) = DATE((SELECT MAX(scored_at) FROM signal_scores))
           AND rating = ?
         GROUP BY ticker
         ORDER BY composite_score DESC
