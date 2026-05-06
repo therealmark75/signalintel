@@ -34,6 +34,18 @@
         .btn-add{background:var(--accent2);color:var(--bg);}
         .btn-remove{background:var(--danger);color:white;}
         .btn-add:hover,.btn-remove:hover{opacity:0.85;}
+        .wl-wrap{position:relative;display:inline-block;}
+        .wl-drop{display:none;position:absolute;top:calc(100% + 4px);left:0;min-width:180px;
+            background:#0d1520;border:1px solid #1a2d45;border-radius:6px;z-index:500;
+            box-shadow:0 8px 24px rgba(0,0,0,0.5);overflow:hidden;}
+        .wl-drop.open{display:block;}
+        .wl-drop-item{display:flex;align-items:center;gap:8px;padding:8px 12px;
+            font-family:var(--mono);font-size:11px;color:#c2d4e8;cursor:pointer;
+            border-bottom:1px solid #1a2d45;transition:background .1s;}
+        .wl-drop-item:last-child{border-bottom:none;}
+        .wl-drop-item:hover{background:#111d2e;}
+        .wl-drop-item.in-wl{color:#00ff88;}
+        .wl-drop-check{width:12px;flex-shrink:0;}
 
         main{max-width:1400px;margin:0 auto;padding:24px;}
 
@@ -233,7 +245,10 @@
     {% else %}
     <a href="/" class="btn-back">← Back to Dashboard</a>
     {% endif %}
-    <button id="wl-btn" class="btn-wl btn-add" onclick="toggleWatchlist()">+ Watchlist</button>
+    <div class="wl-wrap" id="wl-wrap">
+        <button id="wl-btn" class="btn-wl btn-add" onclick="wlBtnClick()">+ Watchlist</button>
+        <div class="wl-drop" id="wl-drop"></div>
+    </div>
 </div>
 
 <main>
@@ -253,7 +268,9 @@
 
 <script>
 const TICKER = '{{ ticker }}';
-let inWatchlist = false;
+const USER_WATCHLISTS = {{ user_watchlists | tojson }};
+let tickerWlIds = new Set({{ ticker_watchlist_ids | tojson }});
+let inWatchlist = tickerWlIds.size > 0;
 let tvWidget = null;
 let currentInterval = 'D';
 
@@ -346,27 +363,108 @@ function initTradingViewChart(symbol, interval) {
     });
 }
 
-async function toggleWatchlist() {
+function syncWlBtn() {
     const btn = document.getElementById('wl-btn');
-    if(inWatchlist) {
-        const res = await fetch('/api/watchlist/remove',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ticker:TICKER})});
+    if (tickerWlIds.size > 0) {
+        btn.textContent = '✓ In Watchlist';
+        btn.className = 'btn-wl btn-remove';
+    } else {
+        btn.textContent = '+ Watchlist';
+        btn.className = 'btn-wl btn-add';
+    }
+}
+
+function renderWlDrop() {
+    const drop = document.getElementById('wl-drop');
+    if (!USER_WATCHLISTS.length) { drop.innerHTML = ''; return; }
+    drop.innerHTML = USER_WATCHLISTS.map(wl => {
+        const inIt = tickerWlIds.has(wl.id);
+        return `<div class="wl-drop-item${inIt ? ' in-wl' : ''}" onclick="toggleWlItem(${wl.id}, ${inIt})">
+            <span class="wl-drop-check">${inIt ? '✓' : ''}</span>
+            <span>${wl.name}</span>
+        </div>`;
+    }).join('');
+}
+
+function wlBtnClick() {
+    if (USER_WATCHLISTS.length <= 1) {
+        toggleWlSimple();
+    } else {
+        const drop = document.getElementById('wl-drop');
+        if (drop.classList.contains('open')) {
+            drop.classList.remove('open');
+        } else {
+            renderWlDrop();
+            drop.classList.add('open');
+        }
+    }
+}
+
+document.addEventListener('click', e => {
+    if (!e.target.closest('#wl-wrap')) {
+        document.getElementById('wl-drop').classList.remove('open');
+    }
+});
+
+async function toggleWlSimple() {
+    const defaultWlId = USER_WATCHLISTS.length ? USER_WATCHLISTS[0].id : null;
+    if (tickerWlIds.size > 0) {
+        const wid = [...tickerWlIds][0];
+        const res = await fetch(`/api/watchlists/${wid}/tickers/${TICKER}`, {method:'DELETE'});
         const d = await res.json();
         if (d.ok) {
-            inWatchlist = false;
-            btn.textContent = '+ Watchlist';
-            btn.className = 'btn-wl btn-add';
+            tickerWlIds.delete(wid);
+            syncWlBtn();
             if (window.showWlToast) showWlToast(TICKER, true);
         }
+    } else if (defaultWlId) {
+        const res = await fetch(`/api/watchlists/${defaultWlId}/tickers`, {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({ticker: TICKER})
+        });
+        const d = await res.json();
+        if (d.ok) {
+            tickerWlIds.add(defaultWlId);
+            syncWlBtn();
+            if (window.showWlToast) showWlToast(TICKER, false);
+        }
     } else {
-        const res = await fetch('/api/watchlist/add',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ticker:TICKER})});
+        const res = await fetch('/api/watchlist/add', {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({ticker: TICKER})
+        });
         const d = await res.json();
         if (d.ok) {
             inWatchlist = true;
-            btn.textContent = '✓ In Watchlist';
-            btn.className = 'btn-wl btn-remove';
+            syncWlBtn();
             if (window.showWlToast) showWlToast(TICKER, false);
         }
     }
+}
+
+async function toggleWlItem(wlId, currentlyIn) {
+    if (currentlyIn) {
+        const res = await fetch(`/api/watchlists/${wlId}/tickers/${TICKER}`, {method:'DELETE'});
+        const d = await res.json();
+        if (d.ok) {
+            tickerWlIds.delete(wlId);
+            const wl = USER_WATCHLISTS.find(w => w.id === wlId);
+            if (window.showWlToast) showWlToast(TICKER, true, wl ? wl.name : null);
+        }
+    } else {
+        const res = await fetch(`/api/watchlists/${wlId}/tickers`, {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({ticker: TICKER})
+        });
+        const d = await res.json();
+        if (d.ok) {
+            tickerWlIds.add(wlId);
+            const wl = USER_WATCHLISTS.find(w => w.id === wlId);
+            if (window.showWlToast) showWlToast(TICKER, false, wl ? wl.name : null);
+        }
+    }
+    renderWlDrop();
+    syncWlBtn();
 }
 
 async function loadPage() {
@@ -374,13 +472,7 @@ async function loadPage() {
     const s  = data.signal     || {};
     const sc = data.screener   || {};
     const lr = data.legal_risk || {risk_label:'No data', risk_color:'#6b7280', penalty:0, risk_level:'NONE'};
-    inWatchlist = data.in_watchlist || false;
-
-    const wlBtn = document.getElementById('wl-btn');
-    if(inWatchlist) {
-        wlBtn.textContent = '✓ In Watchlist';
-        wlBtn.className = 'btn-wl btn-remove';
-    }
+    syncWlBtn();
 
     const TIER_LABELS = {
         STRONG_BUY:'Very Strong Signal', BUY:'Strong Signal',

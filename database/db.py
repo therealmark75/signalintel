@@ -167,16 +167,22 @@ def initialise_schema(db_path: str) -> None:
     # ── Signal scores (Phase 2) ───────────────────────────────────
     cur.execute("""
         CREATE TABLE IF NOT EXISTS signal_scores (
-            id               INTEGER PRIMARY KEY AUTOINCREMENT,
-            scored_at        TEXT    NOT NULL,
-            ticker           TEXT    NOT NULL,
-            composite_score  REAL,
-            momentum_score   REAL,
-            quality_score    REAL,
-            insider_score    REAL,
-            reversion_score  REAL,
-            rating           TEXT,
-            flags            TEXT
+            id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+            scored_at               TEXT    NOT NULL,
+            ticker                  TEXT    NOT NULL,
+            composite_score         REAL,
+            composite_score_raw     REAL,
+            momentum_score          REAL,
+            quality_score           REAL,
+            insider_score           REAL,
+            reversion_score         REAL,
+            sector_strength_score   REAL,
+            sector_modifier_applied REAL,
+            rating                  TEXT,
+            flags                   TEXT,
+            target_price            REAL,
+            target_upside           REAL,
+            target_calculated_at    TEXT
         )
     """)
 
@@ -551,16 +557,28 @@ def initialise_user_schema(db_path: str) -> None:
             email         TEXT    NOT NULL UNIQUE,
             password_hash TEXT    NOT NULL,
             created_at    TEXT    NOT NULL,
-            is_active     INTEGER DEFAULT 1
+            is_active     INTEGER DEFAULT 1,
+            tier          TEXT    DEFAULT 'free'
+        );
+
+        CREATE TABLE IF NOT EXISTS watchlists_meta (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id    INTEGER NOT NULL REFERENCES users(id),
+            name       TEXT    NOT NULL,
+            sort_order INTEGER DEFAULT 0,
+            created_at TEXT    DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT,
+            UNIQUE(user_id, name)
         );
 
         CREATE TABLE IF NOT EXISTS watchlists (
-            id         INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id    INTEGER NOT NULL REFERENCES users(id),
-            ticker     TEXT    NOT NULL,
-            added_at   TEXT    NOT NULL,
-            notes      TEXT,
-            UNIQUE(user_id, ticker)
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id      INTEGER NOT NULL REFERENCES users(id),
+            watchlist_id INTEGER NOT NULL REFERENCES watchlists_meta(id),
+            ticker       TEXT    NOT NULL,
+            added_at     TEXT    NOT NULL,
+            notes        TEXT,
+            UNIQUE(user_id, watchlist_id, ticker)
         );
 
         CREATE TABLE IF NOT EXISTS top_signals_of_day (
@@ -578,11 +596,66 @@ def initialise_user_schema(db_path: str) -> None:
         CREATE INDEX IF NOT EXISTS idx_watchlist_user
         ON watchlists (user_id);
 
+        CREATE INDEX IF NOT EXISTS idx_watchlist_meta_user
+        ON watchlists_meta (user_id);
+
         CREATE INDEX IF NOT EXISTS idx_top_signals_date
         ON top_signals_of_day (signal_date);
     """)
     conn.commit()
+
+    # Migration: add tier column to users if missing
+    cur = conn.cursor()
+    user_cols = {r[1] for r in cur.execute("PRAGMA table_info(users)").fetchall()}
+    if 'tier' not in user_cols:
+        cur.execute("ALTER TABLE users ADD COLUMN tier TEXT DEFAULT 'free'")
+        conn.commit()
+
+    # Migration: upgrade old single-watchlist schema if watchlist_id column is missing
+    wl_cols = {r[1] for r in cur.execute("PRAGMA table_info(watchlists)").fetchall()}
+    if 'watchlist_id' not in wl_cols:
+        _migrate_watchlists_to_multi(conn)
+
     conn.close()
+
+
+def _migrate_watchlists_to_multi(conn: sqlite3.Connection) -> None:
+    """Migrate watchlists from UNIQUE(user_id,ticker) to multi-watchlist schema."""
+    cur = conn.cursor()
+    user_ids = [r[0] for r in cur.execute(
+        "SELECT DISTINCT user_id FROM watchlists"
+    ).fetchall()]
+    wl_map = {}
+    for uid in user_ids:
+        cur.execute(
+            "INSERT OR IGNORE INTO watchlists_meta (user_id, name, sort_order) "
+            "VALUES (?, 'My Watchlist', 0)",
+            (uid,)
+        )
+        row = cur.execute(
+            "SELECT id FROM watchlists_meta WHERE user_id=? AND name='My Watchlist'",
+            (uid,)
+        ).fetchone()
+        wl_map[uid] = row[0]
+    cur.execute("""
+        CREATE TABLE watchlists_new (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id      INTEGER NOT NULL REFERENCES users(id),
+            watchlist_id INTEGER NOT NULL REFERENCES watchlists_meta(id),
+            ticker       TEXT    NOT NULL,
+            added_at     TEXT    NOT NULL,
+            notes        TEXT,
+            UNIQUE(user_id, watchlist_id, ticker)
+        )
+    """)
+    for uid, wid in wl_map.items():
+        cur.execute("""
+            INSERT INTO watchlists_new (user_id, watchlist_id, ticker, added_at, notes)
+            SELECT user_id, ?, ticker, added_at, notes FROM watchlists WHERE user_id = ?
+        """, (wid, uid))
+    cur.execute("DROP TABLE watchlists")
+    cur.execute("ALTER TABLE watchlists_new RENAME TO watchlists")
+    conn.commit()
 
 
 def create_user(db_path: str, username: str, email: str, password_hash: str) -> int:
@@ -625,7 +698,101 @@ def get_user_by_id(db_path: str, user_id: int):
     return dict(row) if row else None
 
 
-def get_watchlist(db_path: str, user_id: int) -> list[dict]:
+def get_watchlists_meta(db_path: str, user_id: int) -> list[dict]:
+    """Return all watchlists for a user, with ticker counts."""
+    conn = get_connection(db_path)
+    rows = conn.execute("""
+        SELECT wm.id, wm.name, wm.sort_order, wm.created_at,
+               COUNT(w.ticker) AS ticker_count
+        FROM watchlists_meta wm
+        LEFT JOIN watchlists w ON w.watchlist_id = wm.id
+        WHERE wm.user_id = ?
+        GROUP BY wm.id
+        ORDER BY wm.sort_order, wm.id
+    """, (user_id,)).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def get_or_create_default_watchlist(db_path: str, user_id: int) -> int:
+    """Return the id of the user's first watchlist, creating 'My Watchlist' if none exists."""
+    conn = get_connection(db_path)
+    row = conn.execute(
+        "SELECT id FROM watchlists_meta WHERE user_id = ? ORDER BY sort_order, id LIMIT 1",
+        (user_id,)
+    ).fetchone()
+    if row:
+        conn.close()
+        return row[0]
+    cur = conn.execute(
+        "INSERT INTO watchlists_meta (user_id, name, sort_order) VALUES (?, 'My Watchlist', 0)",
+        (user_id,)
+    )
+    conn.commit()
+    wid = cur.lastrowid
+    conn.close()
+    return wid
+
+
+def create_watchlist(db_path: str, user_id: int, name: str) -> dict:
+    """Create a new named watchlist. Returns {'id': int, 'name': str} or raises ValueError."""
+    conn = get_connection(db_path)
+    try:
+        cur = conn.execute(
+            "INSERT INTO watchlists_meta (user_id, name, sort_order) VALUES (?, ?, "
+            "(SELECT COALESCE(MAX(sort_order),0)+1 FROM watchlists_meta WHERE user_id=?))",
+            (user_id, name.strip(), user_id)
+        )
+        conn.commit()
+        return {"id": cur.lastrowid, "name": name.strip()}
+    except Exception as e:
+        if "UNIQUE" in str(e):
+            raise ValueError(f"A watchlist named '{name}' already exists")
+        raise
+    finally:
+        conn.close()
+
+
+def rename_watchlist(db_path: str, user_id: int, watchlist_id: int, new_name: str) -> bool:
+    """Rename a watchlist. Returns False if watchlist not owned by user."""
+    conn = get_connection(db_path)
+    try:
+        cur = conn.execute(
+            "UPDATE watchlists_meta SET name=?, updated_at=CURRENT_TIMESTAMP "
+            "WHERE id=? AND user_id=?",
+            (new_name.strip(), watchlist_id, user_id)
+        )
+        conn.commit()
+        return cur.rowcount > 0
+    except Exception as e:
+        if "UNIQUE" in str(e):
+            raise ValueError(f"A watchlist named '{new_name}' already exists")
+        raise
+    finally:
+        conn.close()
+
+
+def delete_watchlist(db_path: str, user_id: int, watchlist_id: int) -> bool:
+    """Delete a watchlist and all its tickers. Returns False if not owned by user."""
+    conn = get_connection(db_path)
+    # Verify ownership
+    row = conn.execute(
+        "SELECT id FROM watchlists_meta WHERE id=? AND user_id=?",
+        (watchlist_id, user_id)
+    ).fetchone()
+    if not row:
+        conn.close()
+        return False
+    conn.execute("DELETE FROM watchlists WHERE watchlist_id=?", (watchlist_id,))
+    conn.execute("DELETE FROM watchlists_meta WHERE id=?", (watchlist_id,))
+    conn.commit()
+    conn.close()
+    return True
+
+
+def get_watchlist(db_path: str, user_id: int, watchlist_id: int = None) -> list[dict]:
+    if watchlist_id is None:
+        watchlist_id = get_or_create_default_watchlist(db_path, user_id)
     conn = get_connection(db_path)
     cur  = conn.cursor()
     cur.execute("""
@@ -645,9 +812,9 @@ def get_watchlist(db_path: str, user_id: int) -> list[dict]:
             FROM screener_snapshots GROUP BY ticker
         ) lsnap ON lsnap.ticker = w.ticker
         LEFT JOIN screener_snapshots sn ON sn.ticker = w.ticker AND sn.scraped_at = lsnap.max_ts
-        WHERE w.user_id = ?
+        WHERE w.user_id = ? AND w.watchlist_id = ?
         ORDER BY ss.composite_score DESC NULLS LAST
-    """, (user_id,))
+    """, (user_id, watchlist_id))
     rows = [dict(r) for r in cur.fetchall()]
 
     # Compute pct_since_add: price closest to added_at vs current price
@@ -670,13 +837,16 @@ def get_watchlist(db_path: str, user_id: int) -> list[dict]:
     return rows
 
 
-def add_to_watchlist(db_path: str, user_id: int, ticker: str, notes: str = "") -> bool:
+def add_to_watchlist(db_path: str, user_id: int, ticker: str, notes: str = "",
+                     watchlist_id: int = None) -> bool:
+    if watchlist_id is None:
+        watchlist_id = get_or_create_default_watchlist(db_path, user_id)
     conn = get_connection(db_path)
     try:
         conn.execute("""
-            INSERT OR IGNORE INTO watchlists (user_id, ticker, added_at, notes)
-            VALUES (?, ?, ?, ?)
-        """, (user_id, ticker.upper(), datetime.now().isoformat(), notes))
+            INSERT OR IGNORE INTO watchlists (user_id, watchlist_id, ticker, added_at, notes)
+            VALUES (?, ?, ?, ?, ?)
+        """, (user_id, watchlist_id, ticker.upper(), datetime.now().isoformat(), notes))
         conn.commit()
         return True
     except Exception:
@@ -685,10 +855,15 @@ def add_to_watchlist(db_path: str, user_id: int, ticker: str, notes: str = "") -
         conn.close()
 
 
-def remove_from_watchlist(db_path: str, user_id: int, ticker: str) -> bool:
+def remove_from_watchlist(db_path: str, user_id: int, ticker: str,
+                          watchlist_id: int = None) -> bool:
+    if watchlist_id is None:
+        watchlist_id = get_or_create_default_watchlist(db_path, user_id)
     conn = get_connection(db_path)
-    conn.execute("DELETE FROM watchlists WHERE user_id = ? AND ticker = ?",
-                 (user_id, ticker.upper()))
+    conn.execute(
+        "DELETE FROM watchlists WHERE user_id = ? AND watchlist_id = ? AND ticker = ?",
+        (user_id, watchlist_id, ticker.upper())
+    )
     conn.commit()
     conn.close()
     return True

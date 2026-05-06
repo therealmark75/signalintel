@@ -31,15 +31,16 @@
 
 <script>
 // ── Global toast function ─────────────────────────────────
-window.showWlToast = function(ticker, removed) {
+window.showWlToast = function(ticker, removed, wlName) {
     const toast = document.getElementById('wl-toast');
     const msg   = document.getElementById('wl-toast-msg');
     if (!toast || !msg) return;
+    const listName = wlName || 'My Watchlist';
     if (removed) {
-        msg.innerHTML = `${ticker} removed from watchlist`;
+        msg.innerHTML = `${ticker} removed from ${listName}`;
         toast.style.borderColor = 'rgba(255,59,92,0.35)';
     } else {
-        msg.innerHTML = `${ticker} added to My Watchlist &nbsp;<a class="toast-link" href="/watchlist">View Watchlist →</a>`;
+        msg.innerHTML = `${ticker} added to ${listName} &nbsp;<a class="toast-link" href="/watchlist">View →</a>`;
         toast.style.borderColor = 'rgba(0,255,136,0.35)';
     }
     toast.style.display = 'flex';

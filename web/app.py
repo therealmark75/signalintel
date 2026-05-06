@@ -17,9 +17,12 @@ from database.db import (
     get_cluster_signals, get_top_signals, get_signal_summary,
     get_ticker_sentiment, initialise_user_schema,
     create_user, get_user_by_username, get_user_by_email, get_user_by_id,
-    get_watchlist, add_to_watchlist, remove_from_watchlist,
+    get_watchlist, get_watchlists_meta, get_or_create_default_watchlist,
+    create_watchlist, rename_watchlist, delete_watchlist,
+    add_to_watchlist, remove_from_watchlist,
     get_top_signals_of_day, generate_top_signals_of_day,
 )
+from config.tiers import can_create_watchlist, watchlist_limit, get_tier
 
 app = Flask(__name__, template_folder="templates", static_folder="static")
 app.secret_key = "signalintel-secret-change-in-production-2026"
@@ -111,7 +114,15 @@ def login_required(f):
 
 def current_user():
     if "user_id" in session:
-        return get_user_by_id(DATABASE_PATH, session["user_id"])
+        user = get_user_by_id(DATABASE_PATH, session["user_id"])
+        if user and user.get("username") == "markn" and user.get("tier", "free") == "free":
+            # Auto-upgrade dev account — this is a one-time fixup that also writes to DB
+            conn = get_connection(DATABASE_PATH)
+            conn.execute("UPDATE users SET tier='elite' WHERE id=?", (user["id"],))
+            conn.commit()
+            conn.close()
+            user["tier"] = "elite"
+        return user
     return None
 
 def db_query(sql, params=()):
@@ -214,8 +225,21 @@ def ticker_page(ticker):
                 'scraped_at': None,
             }
     from_page = request.args.get('from', '')
+    user = current_user()
+    page_user_watchlists = []
+    page_ticker_wl_ids = []
+    if user:
+        page_user_watchlists = get_watchlists_meta(DATABASE_PATH, user["id"])
+        wl_rows = db_query(
+            "SELECT watchlist_id FROM watchlists WHERE user_id=? AND ticker=?",
+            (user["id"], ticker.upper())
+        )
+        page_ticker_wl_ids = [r["watchlist_id"] for r in wl_rows]
     return render_template('ticker.html', ticker=ticker.upper(),
-                           legal_risk=legal_risk_data, from_page=from_page)
+                           legal_risk=legal_risk_data, from_page=from_page,
+                           user=user,
+                           user_watchlists=page_user_watchlists,
+                           ticker_watchlist_ids=page_ticker_wl_ids)
 
 
 
@@ -255,38 +279,131 @@ def signals_redirect():
 @login_required
 def watchlist():
     user  = current_user()
-    items = get_watchlist(DATABASE_PATH, user["id"])
-    return render_template("watchlist.html", user=user, items=items)
+    wls   = get_watchlists_meta(DATABASE_PATH, user["id"])
+    active_id = request.args.get("wl", type=int)
+    if not active_id and wls:
+        active_id = wls[0]["id"]
+    items = get_watchlist(DATABASE_PATH, user["id"], active_id) if active_id else []
+    tier  = get_tier(user.get("tier", "free"))
+    limit = tier["watchlist_limit"]
+    return render_template("watchlist.html", user=user, items=items,
+                           watchlists=wls, active_watchlist_id=active_id,
+                           tier=tier, watchlist_limit=limit)
 
 
 # ── Watchlist API ─────────────────────────────────
 
+@app.route("/api/watchlists", methods=["GET"])
+@login_required
+def api_watchlists_list():
+    user = current_user()
+    wls  = get_watchlists_meta(DATABASE_PATH, user["id"])
+    tier = get_tier(user.get("tier", "free"))
+    return jsonify({"watchlists": wls, "limit": tier["watchlist_limit"],
+                    "count": len(wls)})
+
+
+@app.route("/api/watchlists", methods=["POST"])
+@login_required
+def api_watchlists_create():
+    user = current_user()
+    name = (request.json or {}).get("name", "").strip()
+    if not name:
+        return jsonify({"ok": False, "error": "Name required"}), 400
+    wls = get_watchlists_meta(DATABASE_PATH, user["id"])
+    tier_key = user.get("tier", "free")
+    if not can_create_watchlist(tier_key, len(wls)):
+        limit = watchlist_limit(tier_key)
+        return jsonify({"ok": False, "error": f"Watchlist limit reached ({limit}). Upgrade to create more."}), 403
+    try:
+        result = create_watchlist(DATABASE_PATH, user["id"], name)
+        return jsonify({"ok": True, **result})
+    except ValueError as e:
+        return jsonify({"ok": False, "error": str(e)}), 409
+
+
+@app.route("/api/watchlists/<int:wl_id>", methods=["PATCH"])
+@login_required
+def api_watchlists_rename(wl_id):
+    user     = current_user()
+    new_name = (request.json or {}).get("name", "").strip()
+    if not new_name:
+        return jsonify({"ok": False, "error": "Name required"}), 400
+    try:
+        ok = rename_watchlist(DATABASE_PATH, user["id"], wl_id, new_name)
+        if not ok:
+            return jsonify({"ok": False, "error": "Not found"}), 404
+        return jsonify({"ok": True})
+    except ValueError as e:
+        return jsonify({"ok": False, "error": str(e)}), 409
+
+
+@app.route("/api/watchlists/<int:wl_id>", methods=["DELETE"])
+@login_required
+def api_watchlists_delete(wl_id):
+    user = current_user()
+    confirm = request.args.get("confirm") == "true"
+    if not confirm:
+        return jsonify({"ok": False, "error": "Pass ?confirm=true to delete"}), 400
+    wls = get_watchlists_meta(DATABASE_PATH, user["id"])
+    if len(wls) <= 1:
+        return jsonify({"ok": False, "error": "Cannot delete your only watchlist"}), 400
+    ok = delete_watchlist(DATABASE_PATH, user["id"], wl_id)
+    if not ok:
+        return jsonify({"ok": False, "error": "Not found"}), 404
+    return jsonify({"ok": True})
+
+
+@app.route("/api/watchlists/<int:wl_id>/tickers", methods=["POST"])
+@login_required
+def api_watchlists_add_ticker(wl_id):
+    user   = current_user()
+    ticker = (request.json or {}).get("ticker", "").upper()
+    notes  = (request.json or {}).get("notes", "")
+    if not ticker:
+        return jsonify({"ok": False, "error": "No ticker"}), 400
+    ok = add_to_watchlist(DATABASE_PATH, user["id"], ticker, notes, watchlist_id=wl_id)
+    return jsonify({"ok": ok, "ticker": ticker})
+
+
+@app.route("/api/watchlists/<int:wl_id>/tickers/<ticker>", methods=["DELETE"])
+@login_required
+def api_watchlists_remove_ticker(wl_id, ticker):
+    user = current_user()
+    remove_from_watchlist(DATABASE_PATH, user["id"], ticker.upper(), watchlist_id=wl_id)
+    return jsonify({"ok": True, "ticker": ticker.upper()})
+
+
 @app.route("/api/watchlist/add", methods=["POST"])
 @login_required
 def api_watchlist_add():
-    user   = current_user()
-    ticker = (request.json or {}).get("ticker","").upper()
-    notes  = (request.json or {}).get("notes","")
+    user        = current_user()
+    ticker      = (request.json or {}).get("ticker", "").upper()
+    notes       = (request.json or {}).get("notes", "")
+    watchlist_id = (request.json or {}).get("watchlist_id")
     if not ticker:
         return jsonify({"ok": False, "error": "No ticker"})
-    ok = add_to_watchlist(DATABASE_PATH, user["id"], ticker, notes)
+    ok = add_to_watchlist(DATABASE_PATH, user["id"], ticker, notes,
+                          watchlist_id=watchlist_id)
     return jsonify({"ok": ok, "ticker": ticker})
 
 
 @app.route("/api/watchlist/remove", methods=["POST"])
 @login_required
 def api_watchlist_remove():
-    user   = current_user()
-    ticker = (request.json or {}).get("ticker","").upper()
-    remove_from_watchlist(DATABASE_PATH, user["id"], ticker)
+    user        = current_user()
+    ticker      = (request.json or {}).get("ticker", "").upper()
+    watchlist_id = (request.json or {}).get("watchlist_id")
+    remove_from_watchlist(DATABASE_PATH, user["id"], ticker, watchlist_id=watchlist_id)
     return jsonify({"ok": True, "ticker": ticker})
 
 
 @app.route("/api/watchlist")
 @login_required
 def api_watchlist():
-    user  = current_user()
-    items = get_watchlist(DATABASE_PATH, user["id"])
+    user        = current_user()
+    watchlist_id = request.args.get("wl", type=int)
+    items = get_watchlist(DATABASE_PATH, user["id"], watchlist_id)
     return jsonify(items)
 
 
@@ -1223,12 +1340,18 @@ def api_ticker(ticker):
         else:
             tech['overall'] = 'NEUTRAL'
 
-    # Check if in watchlist
+    # Check watchlist membership
     in_watchlist = False
+    user_watchlists = []
+    ticker_watchlist_ids = set()
     if user:
-        wl = db_query("SELECT 1 FROM watchlists WHERE user_id=? AND ticker=?",
-                      (user["id"], ticker))
-        in_watchlist = len(wl) > 0
+        wl_rows = db_query(
+            "SELECT watchlist_id FROM watchlists WHERE user_id=? AND ticker=?",
+            (user["id"], ticker)
+        )
+        ticker_watchlist_ids = {r["watchlist_id"] for r in wl_rows}
+        in_watchlist = bool(ticker_watchlist_ids)
+        user_watchlists = get_watchlists_meta(DATABASE_PATH, user["id"])
 
     legal = get_legal_risk(ticker)
     if legal is None:
@@ -1270,6 +1393,8 @@ def api_ticker(ticker):
         "news":                 news,
         "history":              history,
         "in_watchlist":         in_watchlist,
+        "user_watchlists":      user_watchlists,
+        "ticker_watchlist_ids": list(ticker_watchlist_ids),
         "fair_value":           {"estimated": fair_value, "discount_pct": fv_discount, "label": fv_label} if fair_value else None,
         "technical":            tech,
         "legal_risk":           legal,

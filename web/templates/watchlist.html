@@ -3,13 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SignalIntel — My Watchlist</title>
+    <title>SignalIntel — Watchlist</title>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
     <style>
         :root {
             --bg:#080c14;--surface:#0d1520;--surface2:#111d2e;--border:#1a2d45;
             --accent:#00d4ff;--accent2:#00ff88;--warning:#ff9500;--danger:#ff3b5c;
-            --text:#e2eaf4;--muted:#4a6380;
+            --text:#e2eaf4;--muted:#4a6380;--muted2:#8aa4bf;
             --mono:'Space Mono',monospace;--sans:'DM Sans',sans-serif;
         }
         *{margin:0;padding:0;box-sizing:border-box;}
@@ -17,22 +17,26 @@
             background-image:linear-gradient(rgba(0,212,255,0.03) 1px,transparent 1px),
             linear-gradient(90deg,rgba(0,212,255,0.03) 1px,transparent 1px);
             background-size:40px 40px;}
-        header{position:sticky;top:0;z-index:100;background:rgba(8,12,20,0.95);
-            backdrop-filter:blur(12px);border-bottom:1px solid var(--border);
-            padding:0 24px;display:flex;align-items:center;justify-content:space-between;height:56px;}
-        .logo{font-family:var(--mono);font-size:15px;color:var(--accent);letter-spacing:2px;text-transform:uppercase;text-decoration:none;}
-        .logo span{color:var(--accent2);}
-        nav{display:flex;gap:4px;padding:12px 24px;border-bottom:1px solid var(--border);}
-        .tab{padding:6px 16px;border-radius:4px;font-size:12px;font-weight:500;letter-spacing:0.5px;
-            cursor:pointer;border:1px solid transparent;color:var(--muted);transition:all 0.15s;
-            font-family:var(--mono);text-transform:uppercase;text-decoration:none;display:inline-block;}
-        .tab:hover{color:var(--text);border-color:var(--border);}
-        .tab.active{background:rgba(0,212,255,0.08);border-color:rgba(0,212,255,0.3);color:var(--accent);}
-        .user-menu{display:flex;align-items:center;gap:12px;font-size:13px;color:var(--muted);}
-        .user-menu a{color:var(--accent);text-decoration:none;font-family:var(--mono);font-size:11px;}
         main{padding:24px;max-width:1500px;margin:0 auto;}
-        h1{font-family:var(--mono);font-size:14px;text-transform:uppercase;letter-spacing:2px;color:var(--muted);margin-bottom:20px;}
-        .add-bar{display:flex;gap:10px;margin-bottom:24px;}
+
+        /* ── Watchlist manager bar ── */
+        .wl-bar{display:flex;align-items:center;gap:8px;margin-bottom:16px;flex-wrap:wrap;}
+        .wl-tabs{display:flex;gap:4px;flex-wrap:wrap;}
+        .wl-tab{font-family:var(--mono);font-size:11px;padding:5px 12px;border-radius:4px;
+            border:1px solid var(--border);color:var(--muted2);background:transparent;
+            cursor:pointer;transition:all .15s;white-space:nowrap;}
+        .wl-tab:hover{color:var(--accent);border-color:var(--accent);}
+        .wl-tab.active{color:var(--accent);border-color:var(--accent);background:rgba(0,212,255,0.08);}
+        .wl-sep{width:1px;height:20px;background:var(--border);flex-shrink:0;}
+        .wl-action{font-family:var(--mono);font-size:11px;padding:5px 10px;border-radius:4px;
+            border:1px solid var(--border);color:var(--muted2);background:transparent;
+            cursor:pointer;transition:all .15s;white-space:nowrap;}
+        .wl-action:hover{color:var(--accent);border-color:var(--accent);}
+        .wl-action.danger:hover{color:var(--danger);border-color:var(--danger);}
+        .wl-tier{font-family:var(--mono);font-size:10px;color:var(--muted);margin-left:auto;}
+
+        /* ── Add ticker bar ── */
+        .add-bar{display:flex;gap:10px;margin-bottom:20px;}
         .add-bar input{flex:1;background:var(--surface);border:1px solid var(--border);border-radius:6px;
             padding:10px 14px;color:var(--text);font-family:var(--mono);font-size:13px;outline:none;
             text-transform:uppercase;}
@@ -43,6 +47,8 @@
             text-transform:uppercase;cursor:pointer;transition:opacity 0.15s;white-space:nowrap;}
         .btn:hover{opacity:0.85;}
         .btn-danger{background:var(--danger);}
+
+        /* ── Table ── */
         .table-wrap{background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden;}
         table{width:100%;border-collapse:collapse;min-width:1100px;}
         th{background:var(--surface2);padding:10px 14px;text-align:left;font-family:var(--mono);
@@ -68,17 +74,58 @@
         .msg{padding:10px 14px;border-radius:6px;margin-bottom:16px;font-size:13px;}
         .msg-ok{background:rgba(0,255,136,0.1);border:1px solid rgba(0,255,136,0.3);color:var(--accent2);}
         .msg-err{background:rgba(255,59,92,0.1);border:1px solid rgba(255,59,92,0.3);color:var(--danger);}
-        /* Floating tooltip */
+
+        /* ── Floating tooltip ── */
         #tip-box{position:fixed;display:none;background:#0a1628;border:1px solid var(--border);
             color:var(--text);padding:7px 11px;border-radius:5px;font-family:var(--sans);
             font-size:11px;line-height:1.45;max-width:230px;z-index:9999;pointer-events:none;
             word-wrap:break-word;box-shadow:0 4px 16px rgba(0,0,0,0.4);}
+
+        /* ── Modal ── */
+        .modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:1000;
+            align-items:center;justify-content:center;}
+        .modal-bg.open{display:flex;}
+        .modal{background:var(--surface);border:1px solid var(--border);border-radius:10px;
+            padding:28px 32px;min-width:340px;max-width:480px;width:100%;}
+        .modal h3{font-family:var(--mono);font-size:13px;text-transform:uppercase;letter-spacing:1px;
+            color:var(--accent);margin-bottom:16px;}
+        .modal input{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;
+            padding:10px 14px;color:var(--text);font-family:var(--mono);font-size:13px;outline:none;margin-bottom:14px;}
+        .modal input:focus{border-color:var(--accent);}
+        .modal-btns{display:flex;gap:10px;justify-content:flex-end;}
+        .modal-btns .btn-cancel{font-family:var(--mono);font-size:11px;padding:8px 16px;border-radius:4px;
+            border:1px solid var(--border);color:var(--muted2);background:transparent;cursor:pointer;}
+        .modal-btns .btn-cancel:hover{border-color:var(--accent);color:var(--accent);}
+        .modal-err{font-size:12px;color:var(--danger);margin-bottom:10px;font-family:var(--mono);}
     </style>
 </head>
 <body>
 {% include '_nav.html' %}
 <main>
-    <h1>My Watchlist</h1>
+    <!-- Watchlist selector + management -->
+    <div class="wl-bar">
+        <div class="wl-tabs" id="wl-tabs">
+            {% for wl in watchlists %}
+            <button class="wl-tab{% if wl.id == active_watchlist_id %} active{% endif %}"
+                    data-id="{{ wl.id }}" onclick="switchWatchlist({{ wl.id }})">
+                {{ wl.name }}{% if wl.ticker_count %} <span style="color:var(--muted);font-size:9px">({{ wl.ticker_count }})</span>{% endif %}
+            </button>
+            {% endfor %}
+        </div>
+        <div class="wl-sep"></div>
+        <button class="wl-action" onclick="openNewModal()">+ New</button>
+        {% if watchlists %}
+        <button class="wl-action" onclick="openRenameModal()">✎ Rename</button>
+        <button class="wl-action danger" onclick="deleteWatchlist()">✕ Delete</button>
+        {% endif %}
+        <span class="wl-tier">
+            {% if watchlist_limit is none %}
+                {{ watchlists|length }} watchlists · Unlimited (Elite)
+            {% else %}
+                {{ watchlists|length }} / {{ watchlist_limit }} watchlists ({{ tier.display_name }})
+            {% endif %}
+        </span>
+    </div>
 
     <div class="add-bar">
         <input type="text" id="add-ticker" placeholder="Enter ticker symbol (e.g. AAPL)" maxlength="10">
@@ -149,17 +196,51 @@
     {% else %}
     <div class="table-wrap">
         <div class="empty">
-            Your watchlist is empty.<br><br>
-            Search for tickers above or click any ticker on the Signals page to add it.
+            {% if watchlists %}
+            This watchlist is empty.<br><br>
+            Enter a ticker above to add it.
+            {% else %}
+            No watchlists yet. Click <strong>+ New</strong> to create one.
+            {% endif %}
         </div>
     </div>
     {% endif %}
 </main>
 
+<!-- Create watchlist modal -->
+<div class="modal-bg" id="new-modal">
+    <div class="modal">
+        <h3>New Watchlist</h3>
+        <input type="text" id="new-name" placeholder="Watchlist name" maxlength="60"
+               onkeydown="if(event.key==='Enter')submitNew()">
+        <div class="modal-err" id="new-err"></div>
+        <div class="modal-btns">
+            <button class="btn-cancel" onclick="closeModals()">Cancel</button>
+            <button class="btn" onclick="submitNew()">Create</button>
+        </div>
+    </div>
+</div>
+
+<!-- Rename watchlist modal -->
+<div class="modal-bg" id="rename-modal">
+    <div class="modal">
+        <h3>Rename Watchlist</h3>
+        <input type="text" id="rename-name" placeholder="New name" maxlength="60"
+               onkeydown="if(event.key==='Enter')submitRename()">
+        <div class="modal-err" id="rename-err"></div>
+        <div class="modal-btns">
+            <button class="btn-cancel" onclick="closeModals()">Cancel</button>
+            <button class="btn" onclick="submitRename()">Save</button>
+        </div>
+    </div>
+</div>
+
 <!-- Floating tooltip -->
 <div id="tip-box"></div>
 
 <script>
+const ACTIVE_WL_ID = {{ active_watchlist_id or 'null' }};
+
 // Column header tooltips
 (function() {
     const box = document.getElementById('tip-box');
@@ -180,45 +261,127 @@
     });
 })();
 
+function switchWatchlist(id) {
+    window.location.href = '/watchlist?wl=' + id;
+}
+
+function showMsg(html, isErr) {
+    const msg = document.getElementById('msg');
+    msg.innerHTML = `<div class="msg ${isErr ? 'msg-err' : 'msg-ok'}">${html}</div>`;
+}
+
 async function addTicker() {
+    if (!ACTIVE_WL_ID) { showMsg('Create a watchlist first', true); return; }
     const input  = document.getElementById('add-ticker');
     const ticker = input.value.trim().toUpperCase();
     if (!ticker) return;
-    const res  = await fetch('/api/watchlist/add', {
-        method:'POST', headers:{'Content-Type':'application/json'},
+    const res  = await fetch(`/api/watchlists/${ACTIVE_WL_ID}/tickers`, {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({ticker})
     });
     const data = await res.json();
-    const msg  = document.getElementById('msg');
     if (data.ok) {
-        msg.innerHTML = `<div class="msg msg-ok">${ticker} added to watchlist</div>`;
+        showMsg(`${ticker} added`, false);
         input.value = '';
-        setTimeout(() => location.reload(), 800);
+        setTimeout(() => location.reload(), 600);
     } else {
-        msg.innerHTML = `<div class="msg msg-err">Could not add ${ticker}</div>`;
+        showMsg(data.error || `Could not add ${ticker}`, true);
     }
 }
 
 async function removeTicker(ticker, btn) {
-    const res = await fetch('/api/watchlist/remove', {
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ticker})
+    if (!ACTIVE_WL_ID) return;
+    const res = await fetch(`/api/watchlists/${ACTIVE_WL_ID}/tickers/${ticker}`, {
+        method: 'DELETE'
     });
     const data = await res.json();
-    if(data.ok) {
+    if (data.ok) {
         btn.closest('tr').remove();
     } else {
         alert('Failed to remove ' + ticker);
     }
 }
 
-async function openTicker(ticker) {
+function openTicker(ticker) {
     window.location.href = `/ticker/${ticker}`;
 }
 
 document.getElementById('add-ticker').addEventListener('keypress', e => {
     if (e.key === 'Enter') addTicker();
 });
+
+// ── Watchlist management ──────────────────────
+
+function openNewModal() {
+    document.getElementById('new-name').value = '';
+    document.getElementById('new-err').textContent = '';
+    document.getElementById('new-modal').classList.add('open');
+    setTimeout(() => document.getElementById('new-name').focus(), 50);
+}
+
+function openRenameModal() {
+    document.getElementById('rename-name').value = '';
+    document.getElementById('rename-err').textContent = '';
+    document.getElementById('rename-modal').classList.add('open');
+    setTimeout(() => document.getElementById('rename-name').focus(), 50);
+}
+
+function closeModals() {
+    document.querySelectorAll('.modal-bg').forEach(m => m.classList.remove('open'));
+}
+
+document.querySelectorAll('.modal-bg').forEach(m => {
+    m.addEventListener('click', e => { if (e.target === m) closeModals(); });
+});
+
+async function submitNew() {
+    const name = document.getElementById('new-name').value.trim();
+    if (!name) return;
+    const res  = await fetch('/api/watchlists', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({name})
+    });
+    const data = await res.json();
+    if (data.ok) {
+        closeModals();
+        window.location.href = '/watchlist?wl=' + data.id;
+    } else {
+        document.getElementById('new-err').textContent = data.error || 'Error';
+    }
+}
+
+async function submitRename() {
+    if (!ACTIVE_WL_ID) return;
+    const name = document.getElementById('rename-name').value.trim();
+    if (!name) return;
+    const res  = await fetch(`/api/watchlists/${ACTIVE_WL_ID}`, {
+        method: 'PATCH', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({name})
+    });
+    const data = await res.json();
+    if (data.ok) {
+        closeModals();
+        location.reload();
+    } else {
+        document.getElementById('rename-err').textContent = data.error || 'Error';
+    }
+}
+
+async function deleteWatchlist() {
+    if (!ACTIVE_WL_ID) return;
+    const activeTab = document.querySelector('.wl-tab.active');
+    const name = activeTab ? activeTab.textContent.trim() : 'this watchlist';
+    if (!confirm(`Delete "${name}" and all its tickers?`)) return;
+    const res  = await fetch(`/api/watchlists/${ACTIVE_WL_ID}?confirm=true`, {
+        method: 'DELETE'
+    });
+    const data = await res.json();
+    if (data.ok) {
+        window.location.href = '/watchlist';
+    } else {
+        showMsg(data.error || 'Could not delete', true);
+    }
+}
 </script>
 {% include '_footer.html' %}
 </body>
