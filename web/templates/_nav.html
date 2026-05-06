@@ -38,3 +38,19 @@ header{position:sticky;top:0;z-index:100;background:rgba(8,12,20,0.95);backdrop-
         <a href="/logout" class="nav-link">Sign out</a>
     </div>
 </header>
+<style>
+/* Toast — must live outside header to avoid backdrop-filter fixed-positioning bug */
+#wl-toast{position:fixed;bottom:24px;right:24px;z-index:99999;
+    background:#0a1628;border:1px solid rgba(0,255,136,0.35);border-radius:8px;
+    padding:12px 18px;font-family:var(--mono,monospace);font-size:12px;
+    color:#e2eaf4;box-shadow:0 8px 32px rgba(0,0,0,0.5);
+    display:none;align-items:center;gap:10px;max-width:340px;cursor:pointer;
+    transition:opacity 0.3s;}
+#wl-toast .toast-icon{color:#00ff88;font-size:14px;flex-shrink:0;}
+#wl-toast .toast-msg{flex:1;line-height:1.4;}
+#wl-toast .toast-link{color:#00d4ff;text-decoration:none;white-space:nowrap;}
+</style>
+<div id="wl-toast" onclick="this.style.display='none'">
+    <span class="toast-icon">✓</span>
+    <span class="toast-msg" id="wl-toast-msg"></span>
+</div>

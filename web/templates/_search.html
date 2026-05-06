@@ -27,22 +27,7 @@
     letter-spacing:1px;color:var(--muted,#8aa4bf);background:var(--surface2,#111d2e);
     border-bottom:1px solid var(--border,#1a2d45);}
 
-/* Toast notification */
-#wl-toast{position:fixed;bottom:24px;right:24px;z-index:99999;
-    background:#0a1628;border:1px solid rgba(0,255,136,0.35);border-radius:8px;
-    padding:12px 18px;font-family:var(--mono,monospace);font-size:12px;
-    color:#e2eaf4;box-shadow:0 8px 32px rgba(0,0,0,0.5);
-    display:none;align-items:center;gap:10px;max-width:340px;cursor:pointer;
-    transition:opacity 0.3s;}
-#wl-toast .toast-icon{color:#00ff88;font-size:14px;flex-shrink:0;}
-#wl-toast .toast-msg{flex:1;line-height:1.4;}
-#wl-toast .toast-link{color:#00d4ff;text-decoration:none;white-space:nowrap;}
 </style>
-<!-- Toast notification element (shared across all pages) -->
-<div id="wl-toast" onclick="this.style.display='none'">
-    <span class="toast-icon">✓</span>
-    <span class="toast-msg" id="wl-toast-msg"></span>
-</div>
 
 <script>
 // ── Global toast function ─────────────────────────────────
