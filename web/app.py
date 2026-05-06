@@ -296,11 +296,34 @@ def watchlist():
 @app.route("/api/watchlists", methods=["GET"])
 @login_required
 def api_watchlists_list():
-    user = current_user()
-    wls  = get_watchlists_meta(DATABASE_PATH, user["id"])
-    tier = get_tier(user.get("tier", "free"))
+    user   = current_user()
+    ticker = request.args.get("ticker", "").upper() or None
+    wls    = get_watchlists_meta(DATABASE_PATH, user["id"])
+    tier   = get_tier(user.get("tier", "free"))
+    if ticker:
+        # Annotate each watchlist with contains_ticker flag
+        wl_ids_with_ticker = {
+            r["watchlist_id"]
+            for r in db_query(
+                "SELECT DISTINCT watchlist_id FROM watchlists WHERE user_id=? AND ticker=?",
+                (user["id"], ticker)
+            )
+        }
+        for wl in wls:
+            wl["contains_ticker"] = wl["id"] in wl_ids_with_ticker
     return jsonify({"watchlists": wls, "limit": tier["watchlist_limit"],
-                    "count": len(wls)})
+                    "count": len(wls), "tier_name": tier["display_name"]})
+
+
+@app.route("/api/watchlists/all-tickers")
+@login_required
+def api_watchlists_all_tickers():
+    """Return flat list of all ticker symbols across all user watchlists."""
+    user = current_user()
+    rows = db_query(
+        "SELECT DISTINCT ticker FROM watchlists WHERE user_id=?", (user["id"],)
+    )
+    return jsonify({"tickers": [r["ticker"] for r in rows]})
 
 
 @app.route("/api/watchlists", methods=["POST"])
