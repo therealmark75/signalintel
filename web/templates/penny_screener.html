@@ -116,6 +116,12 @@ tr:hover td{background:rgba(245,158,11,0.025);cursor:pointer;}
 .relvol-mid{color:#f59e0b;font-weight:700;}      /* 3-5× */
 .relvol-norm{color:var(--muted2);}
 
+/* Watchlist button (matches screener.html) */
+.wl-btn{padding:3px 8px;border-radius:3px;border:1px solid;font-family:var(--mono);font-size:10px;cursor:pointer;background:transparent;transition:all .15s;}
+.wl-btn-add{border-color:var(--border);color:var(--muted);}
+.wl-btn-add:hover{border-color:#00ff88;color:#00ff88;}
+.wl-btn-in{border-color:rgba(0,255,136,0.4);color:#00ff88;background:rgba(0,255,136,0.08);}
+
 /* Rating badges */
 .rating-pill{font-family:var(--mono);font-size:9px;padding:2px 7px;border-radius:3px;white-space:nowrap;}
 .r-SB{background:rgba(0,255,136,0.12);color:#00ff88;border:1px solid rgba(0,255,136,0.25);}
@@ -301,10 +307,11 @@ tr:hover td{background:rgba(245,158,11,0.025);cursor:pointer;}
                         <th onclick="sortBy('sector_strength_score')" title="Sector relative strength score 0-100 based on the ticker's sector ETF 7-day performance.">Sector<span class="arr" id="arr-sector_strength_score"></span></th>
                         <th onclick="sortBy('rating')">Signal<span class="arr" id="arr-rating"></span></th>
                         <th onclick="sortBy('target_upside')" title="% upside/downside to 12-month target">12M Upside<span class="arr" id="arr-target_upside"></span></th>
+                        <th title="Add or remove from your watchlist">WL</th>
                     </tr>
                 </thead>
                 <tbody id="results-body">
-                    <tr class="loading-row"><td colspan="12">Loading penny stocks…</td></tr>
+                    <tr class="loading-row"><td colspan="13">Loading penny stocks…</td></tr>
                 </tbody>
             </table>
         </div>
@@ -366,7 +373,15 @@ function boot() {
         syncUIFromState();
     }
     fetch('/api/screener');  // warm connection
+    _loadWatchlist();
     load();
+}
+
+async function _loadWatchlist() {
+    try {
+        const d = await fetch('/api/watchlists/all-tickers').then(r => r.json());
+        window._wlAllTickers = new Set(d.tickers || []);
+    } catch(e) { window._wlAllTickers = new Set(); }
 }
 
 function syncUIFromState() {
@@ -498,7 +513,7 @@ function updateSortArrows() {
 // ── API fetch ─────────────────────────────────────
 async function load() {
     const body = document.getElementById('results-body');
-    body.innerHTML = '<tr class="loading-row"><td colspan="11">Loading…</td></tr>';
+    body.innerHTML = '<tr class="loading-row"><td colspan="13">Loading…</td></tr>';
     document.getElementById('result-count').textContent = 'Loading…';
 
     const p = new URLSearchParams();
@@ -520,7 +535,7 @@ async function load() {
         .catch(() => null);
 
     if (!data) {
-        body.innerHTML = '<tr class="loading-row"><td colspan="11">Failed to load. Refresh to retry.</td></tr>';
+        body.innerHTML = '<tr class="loading-row"><td colspan="13">Failed to load. Refresh to retry.</td></tr>';
         return;
     }
 
@@ -606,10 +621,12 @@ function fmtUpside(v) {
 function renderTable(rows) {
     const body = document.getElementById('results-body');
     if (!rows.length) {
-        body.innerHTML = '<tr><td colspan="11" style="text-align:center;padding:40px;color:var(--muted);font-family:var(--mono);font-size:11px;">No penny stocks match these filters.</td></tr>';
+        body.innerHTML = '<tr><td colspan="13" style="text-align:center;padding:40px;color:var(--muted);font-family:var(--mono);font-size:11px;">No penny stocks match these filters.</td></tr>';
         return;
     }
-    body.innerHTML = rows.map(r => `
+    body.innerHTML = rows.map(r => {
+        const inWl = window._wlAllTickers && window._wlAllTickers.has(r.ticker);
+        return `
         <tr onclick="window.location='/ticker/${r.ticker}?from=penny_screener'">
             <td class="tc-ticker">${r.ticker}</td>
             <td class="tc-company">${r.company || '—'}</td>
@@ -623,8 +640,9 @@ function renderTable(rows) {
             <td style="font-family:var(--mono);color:${r.sector_strength_score >= 80 ? '#00d4ff' : r.sector_strength_score <= 20 ? '#ff3b5c' : 'inherit'}">${r.sector_strength_score != null ? Math.round(r.sector_strength_score) : '-'}</td>
             <td><span class="rating-pill ${ratingClass(r.rating)}">${TIER_SHORT[r.rating]||r.rating||''}</span></td>
             <td>${fmtUpside(r.target_upside)}</td>
-        </tr>
-    `).join('');
+            <td onclick="event.stopPropagation()"><button class="wl-picker-btn wl-btn ${inWl?'wl-btn-in':'wl-btn-add'}" data-ticker="${r.ticker}" onclick="event.stopPropagation();WlPicker.open(this,'${r.ticker}')">${inWl?'✓':'+'}</button></td>
+        </tr>`;
+    }).join('');
 }
 
 // ── Pagination ────────────────────────────────────

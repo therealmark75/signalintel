@@ -280,6 +280,7 @@ let state = {
 };
 let totalPages = 1;
 let watchlistSet = new Set();
+window._wlAllTickers = watchlistSet;
 
 function fmt(v, d=1){ return v == null ? '-' : parseFloat(v).toFixed(d); }
 function fmtP(v){ return v == null ? '-' : (v >= 0 ? '+' : '') + parseFloat(v).toFixed(1) + '%'; }
@@ -299,31 +300,10 @@ function fmtVol(v){
 
 async function loadWatchlist() {
     try {
-        const data = await fetch('/api/watchlist').then(r => r.json());
-        watchlistSet = new Set((data || []).map(i => i.ticker));
-    } catch(e) { watchlistSet = new Set(); }
-}
-
-async function toggleWatchlist(ticker, btn, e) {
-    e.stopPropagation();
-    const inWl = watchlistSet.has(ticker);
-    const endpoint = inWl ? '/api/watchlist/remove' : '/api/watchlist/add';
-    const res = await fetch(endpoint, {
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ticker})
-    });
-    const data = await res.json();
-    if (data.ok) {
-        if (inWl) {
-            watchlistSet.delete(ticker);
-            btn.textContent = '+'; btn.className = 'wl-btn wl-btn-add';
-            if (window.showWlToast) showWlToast(ticker, true);
-        } else {
-            watchlistSet.add(ticker);
-            btn.textContent = '✓'; btn.className = 'wl-btn wl-btn-in';
-            if (window.showWlToast) showWlToast(ticker, false);
-        }
-    }
+        const data = await fetch('/api/watchlists/all-tickers').then(r => r.json());
+        watchlistSet = new Set(data.tickers || []);
+        window._wlAllTickers = watchlistSet;
+    } catch(e) { watchlistSet = new Set(); window._wlAllTickers = watchlistSet; }
 }
 
 function buildParams() {
@@ -425,7 +405,7 @@ async function load() {
             <td class="mono" style="color:${r.rsi_14 > 70 ? 'var(--danger)' : r.rsi_14 < 30 ? 'var(--accent2)' : 'inherit'}">${fmt(r.rsi_14,1)}</td>
             <td class="mono" style="color:var(--muted)">${r.high_52w_pct != null ? (r.high_52w_pct > 0 ? '+' : '') + fmt(r.high_52w_pct,1) + '%' : '-'}</td>
             <td class="mono" style="color:var(--muted2)">${r.low_52w_pct != null ? '+' + fmt(r.low_52w_pct,1) + '%' : '-'}</td>
-            <td onclick="event.stopPropagation()"><button class="wl-btn ${inWl?'wl-btn-in':'wl-btn-add'}" onclick="toggleWatchlist('${r.ticker}',this,event)">${inWl?'✓':'+'}</button></td>
+            <td onclick="event.stopPropagation()"><button class="wl-picker-btn wl-btn ${inWl?'wl-btn-in':'wl-btn-add'}" data-ticker="${r.ticker}" onclick="event.stopPropagation();WlPicker.open(this,'${r.ticker}')">${inWl?'✓':'+'}</button></td>
         </tr>`;
     }).join('');
 
