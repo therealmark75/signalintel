@@ -214,6 +214,16 @@ function scoreClass(v) {
     return 's-bad';
 }
 
+function fmtMktCap(v) {
+    if (v == null) return null;
+    const n = parseFloat(v);
+    if (isNaN(n)) return null;
+    if (n >= 1e9) return '$' + (n / 1e9).toFixed(2) + 'B';
+    if (n >= 1e6) return '$' + (n / 1e6).toFixed(1) + 'M';
+    if (n >= 1e3) return '$' + (n / 1e3).toFixed(0) + 'K';
+    return '$' + n.toFixed(0);
+}
+
 function fmtChg(v) {
     if (v == null) return '<span class="neu">—</span>';
     const sign = v >= 0 ? '+' : '';
@@ -272,7 +282,7 @@ async function loadSOTD() {
             ${target}${upside}
             ${s.rsi_14 != null ? `<div class="meta-item"><span class="meta-key">RSI(14)</span><span class="meta-val">${Number(s.rsi_14).toFixed(0)}</span></div>` : ''}
             ${s.beta != null ? `<div class="meta-item"><span class="meta-key">Beta</span><span class="meta-val">${Number(s.beta).toFixed(2)}</span></div>` : ''}
-            ${s.market_cap ? `<div class="meta-item"><span class="meta-key">Mkt Cap</span><span class="meta-val">${s.market_cap}</span></div>` : ''}
+            ${fmtMktCap(s.market_cap) ? `<div class="meta-item"><span class="meta-key">Mkt Cap</span><span class="meta-val">${fmtMktCap(s.market_cap)}</span></div>` : ''}
         </div>
         ${legalHtml}
         <div class="why-box">
