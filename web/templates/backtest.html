@@ -145,13 +145,13 @@ async function load() {
         scEl.innerHTML = `
         <div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:12px">
             <div style="background:var(--card);border:1px solid var(--border);border-radius:6px;padding:16px;min-width:180px">
-                <div style="font-size:10px;color:var(--muted2);margin-bottom:4px;font-family:var(--mono)">TOP-3 SECTOR STRONG BUYS</div>
+                <div style="font-size:10px;color:var(--muted2);margin-bottom:4px;font-family:var(--mono)">TOP-3 SECTOR VERY STRONG</div>
                 <div style="font-size:11px;color:var(--muted);margin-bottom:8px">${(sc.top_sectors||[]).join(', ')}</div>
                 <div style="font-size:24px;font-weight:700;color:${sc.top_avg>=0?'var(--accent2)':'var(--danger)'};font-family:var(--mono)">${sc.top_avg>=0?'+':''}${sc.top_avg}%</div>
                 <div style="font-size:11px;color:var(--muted)">avg return · n=${sc.top_n}</div>
             </div>
             <div style="background:var(--card);border:1px solid var(--border);border-radius:6px;padding:16px;min-width:180px">
-                <div style="font-size:10px;color:var(--muted2);margin-bottom:4px;font-family:var(--mono)">BOTTOM-3 SECTOR STRONG BUYS</div>
+                <div style="font-size:10px;color:var(--muted2);margin-bottom:4px;font-family:var(--mono)">BOTTOM-3 SECTOR VERY STRONG</div>
                 <div style="font-size:11px;color:var(--muted);margin-bottom:8px">${(sc.bottom_sectors||[]).join(', ')}</div>
                 <div style="font-size:24px;font-weight:700;color:${sc.bottom_avg>=0?'var(--accent2)':'var(--danger)'};font-family:var(--mono)">${sc.bottom_avg>=0?'+':''}${sc.bottom_avg}%</div>
                 <div style="font-size:11px;color:var(--muted)">avg return · n=${sc.bottom_n}</div>

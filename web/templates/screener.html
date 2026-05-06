@@ -135,11 +135,13 @@ tr:hover td{background:rgba(0,212,255,0.03);cursor:pointer;}
     <div class="filter-section">
         <span class="filter-label">Rating</span>
         <div class="rating-checks" id="f-ratings">
-            {% for r, c in [('STRONG_BUY','#00ff88'),('BUY','#00d4ff'),('STRONG_HOLD','#94a3b8'),
-                            ('HOLD','#64748b'),('WEAK_HOLD','#ff9500'),('SELL','#ff3b5c'),('STRONG_SELL','#ff3b5c')] %}
+            {% for r, c, label in [('STRONG_BUY','#00ff88','Very Strong'),('BUY','#00d4ff','Strong'),
+                                   ('STRONG_HOLD','#94a3b8','Stable'),('HOLD','#64748b','Neutral'),
+                                   ('WEAK_HOLD','#ff9500','Soft'),('SELL','#ff3b5c','Bearish'),
+                                   ('STRONG_SELL','#ff3b5c','Very Bearish')] %}
             <label class="rating-check">
                 <input type="checkbox" value="{{ r }}" checked>
-                <span style="color:{{ c }};font-family:var(--mono);font-size:10px">{{ r.replace('_',' ') }}</span>
+                <span style="color:{{ c }};font-family:var(--mono);font-size:10px">{{ label }}</span>
             </label>
             {% endfor %}
         </div>
