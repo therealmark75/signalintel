@@ -322,7 +322,7 @@ def _send_rating_alerts(changes: list):
     if not changes:
         return
 
-    watchlist = get_watchlist_tickers(DATABASE_PATH)
+    watchlist = get_watchlist_tickers(DATABASE_PATH, alerts_only=True)
     relevant = [c for c in changes if c["ticker"] in watchlist]
     if not relevant:
         return

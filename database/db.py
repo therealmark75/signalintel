@@ -627,6 +627,12 @@ def initialise_user_schema(db_path: str) -> None:
     if 'watchlist_id' not in wl_cols:
         _migrate_watchlists_to_multi(conn)
 
+    # Migration: add alerts_enabled column to watchlists_meta if missing
+    wm_cols = {r[1] for r in cur.execute("PRAGMA table_info(watchlists_meta)").fetchall()}
+    if 'alerts_enabled' not in wm_cols:
+        cur.execute("ALTER TABLE watchlists_meta ADD COLUMN alerts_enabled INTEGER NOT NULL DEFAULT 1")
+        conn.commit()
+
     conn.close()
 
 
@@ -714,6 +720,7 @@ def get_watchlists_meta(db_path: str, user_id: int) -> list[dict]:
     conn = get_connection(db_path)
     rows = conn.execute("""
         SELECT wm.id, wm.name, wm.sort_order, wm.created_at,
+               wm.alerts_enabled,
                COUNT(w.ticker) AS ticker_count
         FROM watchlists_meta wm
         LEFT JOIN watchlists w ON w.watchlist_id = wm.id
@@ -1228,13 +1235,49 @@ def get_legal_risk_map(db_path: str) -> dict:
     } for r in rows}
 
 
-def get_watchlist_tickers(db_path: str) -> set:
-    """Return set of all distinct tickers present in any watchlist (any user)."""
+def get_watchlist_tickers(db_path: str, alerts_only: bool = False) -> set:
+    """Return set of all distinct tickers present in any watchlist (any user).
+
+    When alerts_only=True, only tickers from watchlists where alerts_enabled=1
+    are returned. OR semantics: a ticker qualifies if ANY of its containing
+    watchlists has alerts on.
+    """
     conn = get_connection(db_path)
     try:
         cur = conn.cursor()
-        cur.execute("SELECT DISTINCT ticker FROM watchlists")
+        if alerts_only:
+            cur.execute("""
+                SELECT DISTINCT w.ticker
+                FROM watchlists w
+                JOIN watchlists_meta wm ON wm.id = w.watchlist_id
+                WHERE wm.alerts_enabled = 1
+            """)
+        else:
+            cur.execute("SELECT DISTINCT ticker FROM watchlists")
         return {row[0] for row in cur.fetchall()}
+    finally:
+        conn.close()
+
+
+def toggle_watchlist_alerts(db_path: str, user_id: int, wl_id: int):
+    """Flip alerts_enabled for the given watchlist. Returns updated row or None if not found."""
+    conn = get_connection(db_path)
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT id, alerts_enabled FROM watchlists_meta WHERE id = ? AND user_id = ?",
+            (wl_id, user_id)
+        )
+        row = cur.fetchone()
+        if not row:
+            return None
+        new_val = 0 if row["alerts_enabled"] else 1
+        cur.execute(
+            "UPDATE watchlists_meta SET alerts_enabled = ? WHERE id = ?",
+            (new_val, wl_id)
+        )
+        conn.commit()
+        return {"watchlist_id": wl_id, "alerts_enabled": bool(new_val)}
     finally:
         conn.close()
 

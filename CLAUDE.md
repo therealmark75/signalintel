@@ -193,6 +193,14 @@ Very Strong  Strong  Stable  Neutral  Soft  Bearish  Very Bearish
 - Display labels never enter the database, queries, or scoring logic.
 - When adding new code that touches signals, identify which layer you're in and use the appropriate vocabulary. If you're writing a query or scorer condition, use `STRONG_BUY`. If you're rendering a template or composing a message, call `tier_short()`.
 
+## Per-Watchlist Alert Toggle
+
+- `watchlists_meta.alerts_enabled` (INTEGER, DEFAULT 1) controls whether Telegram alerts fire for a watchlist.
+- Users toggle it via `POST /api/watchlists/<id>/toggle_alerts`; the watchlist page shows a 🔔/🔕 bell inline in each tab.
+- `get_watchlist_tickers(db_path, alerts_only=True)` returns only tickers from watchlists where `alerts_enabled = 1`. OR semantics: a ticker on multiple watchlists fires alerts if **any** of its containing watchlists has alerts on.
+- `get_watchlist_tickers(alerts_only=False)` (default) returns all tickers regardless of alert state — used for non-alert UI surfaces.
+- If all watchlists are muted, `alerts_only=True` returns an empty set and no Telegram alerts fire.
+
 ## Notes for Claude Code Sessions
 - Always activate the venv before running Python scripts
 - SQLite DB path is relative: `data/signalintel.db` from project root

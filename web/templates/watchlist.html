@@ -34,6 +34,12 @@
         .wl-action:hover{color:var(--accent);border-color:var(--accent);}
         .wl-action.danger:hover{color:var(--danger);border-color:var(--danger);}
         .wl-tier{font-family:var(--mono);font-size:10px;color:var(--muted);margin-left:auto;}
+        .bell-btn{display:inline-flex;align-items:center;justify-content:center;
+            width:16px;height:16px;margin-left:5px;font-size:11px;cursor:pointer;
+            border:none;background:transparent;padding:0;vertical-align:middle;
+            color:var(--muted);transition:color .15s;flex-shrink:0;}
+        .bell-btn.on{color:var(--accent);}
+        .bell-btn:hover{opacity:0.8;}
 
         /* ── Add ticker bar ── */
         .add-bar{display:flex;gap:10px;margin-bottom:20px;}
@@ -109,6 +115,10 @@
             <button class="wl-tab{% if wl.id == active_watchlist_id %} active{% endif %}"
                     data-id="{{ wl.id }}" onclick="switchWatchlist({{ wl.id }})">
                 {{ wl.name }}{% if wl.ticker_count %} <span style="color:var(--muted);font-size:9px">({{ wl.ticker_count }})</span>{% endif %}
+                <span class="bell-btn {% if wl.alerts_enabled %}on{% endif %}"
+                      id="bell-{{ wl.id }}"
+                      data-tip="{% if wl.alerts_enabled %}Alerts on: Telegram notifications fire for signal changes on tickers in this watchlist.{% else %}Alerts off: this watchlist is muted. Tickers remain tracked.{% endif %}"
+                      onclick="toggleAlerts({{ wl.id }}, event)">{% if wl.alerts_enabled %}🔔{% else %}🔕{% endif %}</span>
             </button>
             {% endfor %}
         </div>
@@ -248,28 +258,43 @@
 <script>
 const ACTIVE_WL_ID = {{ active_watchlist_id or 'null' }};
 
-// Column header tooltips
+// Tooltips for column headers and bell toggles
 (function() {
     const box = document.getElementById('tip-box');
-    document.querySelectorAll('th[data-tip]').forEach(th => {
-        th.addEventListener('mouseenter', () => {
-            box.textContent = th.dataset.tip;
+    function wire(el) {
+        el.addEventListener('mouseenter', () => {
+            box.textContent = el.dataset.tip;
             box.style.display = 'block';
         });
-        th.addEventListener('mousemove', e => {
+        el.addEventListener('mousemove', e => {
             const x = e.clientX + 14;
             const y = e.clientY - 44;
             box.style.left = Math.min(x, window.innerWidth - 246) + 'px';
             box.style.top  = Math.max(y, 4) + 'px';
         });
-        th.addEventListener('mouseleave', () => {
+        el.addEventListener('mouseleave', () => {
             box.style.display = 'none';
         });
-    });
+    }
+    document.querySelectorAll('th[data-tip], .bell-btn[data-tip]').forEach(wire);
 })();
 
 function switchWatchlist(id) {
     window.location.href = '/watchlist?wl=' + id;
+}
+
+async function toggleAlerts(wlId, event) {
+    event.stopPropagation();
+    const res  = await fetch(`/api/watchlists/${wlId}/toggle_alerts`, { method: 'POST' });
+    const data = await res.json();
+    if (!data.ok) return;
+    const bell  = document.getElementById('bell-' + wlId);
+    const on    = data.alerts_enabled;
+    bell.textContent = on ? '🔔' : '🔕';
+    bell.classList.toggle('on', on);
+    bell.dataset.tip = on
+        ? 'Alerts on: Telegram notifications fire for signal changes on tickers in this watchlist.'
+        : 'Alerts off: this watchlist is muted. Tickers remain tracked.';
 }
 
 function showMsg(html, isErr) {

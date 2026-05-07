@@ -20,6 +20,7 @@ from database.db import (
     get_watchlist, get_watchlists_meta, get_or_create_default_watchlist,
     create_watchlist, rename_watchlist, delete_watchlist,
     add_to_watchlist, remove_from_watchlist,
+    toggle_watchlist_alerts,
     get_top_signals_of_day, generate_top_signals_of_day,
 )
 from config.tiers import can_create_watchlist, watchlist_limit, get_tier, next_tier
@@ -388,6 +389,16 @@ def api_watchlists_delete(wl_id):
     if not ok:
         return jsonify({"ok": False, "error": "Not found"}), 404
     return jsonify({"ok": True})
+
+
+@app.route("/api/watchlists/<int:wl_id>/toggle_alerts", methods=["POST"])
+@login_required
+def api_watchlists_toggle_alerts(wl_id):
+    user   = current_user()
+    result = toggle_watchlist_alerts(DATABASE_PATH, user["id"], wl_id)
+    if result is None:
+        return jsonify({"ok": False, "error": "Not found"}), 404
+    return jsonify({"ok": True, **result})
 
 
 @app.route("/api/watchlists/<int:wl_id>/tickers", methods=["POST"])
