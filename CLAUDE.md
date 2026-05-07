@@ -212,6 +212,22 @@ Very Strong  Strong  Stable  Neutral  Soft  Bearish  Very Bearish
 - **Surfaces with WL column:** Screener, Penny Screener, Dashboard (All Signals, Sector drilldown, Insiders, Today's Top 10). Ticker detail page has its own dedicated WL button.
 - **Surfaces without WL:** Search results (navigational dropdown, not a data table), Events/Earnings/Dividends (read-only `wl-dot` indicator only), Watchlist page itself (recursive), News, System.
 
+## Scope Discipline
+
+CC must not modify code outside the explicit scope of the prompt. If you discover something during the work that seems like it should be fixed, surface it as a finding in your audit table or response. Do not silently include it in the diff.
+
+Diff hygiene matters: a commit titled "X" must contain only changes that implement X. Out-of-scope modifications, even small ones, even helpful ones, must be raised to the user before being made.
+
+This applies especially to security-sensitive areas:
+- Authentication and session handling (web/app.py login routes, current_user, session writes)
+- Tier checking and access control
+- Database schema modifications
+- User table modifications
+
+If a prompt's stated scope is "X" and you believe a change to one of these areas would help, STOP and ask. Do not commit the change unprompted.
+
+Origin: BUG-001-REOPENED (7 May 2026). A "watchlist picker UI" commit included an unprompted modification to `current_user()` that hardcoded `tier='elite'` for a specific username, with a comment acknowledging it was wrong ("one-time fixup that also writes to DB"). The change was disclosed in the diff but not raised to the user before commit. Out-of-scope modifications, even when disclosed, violate this principle.
+
 ## Notes for Claude Code Sessions
 - Always activate the venv before running Python scripts
 - SQLite DB path is relative: `data/signalintel.db` from project root

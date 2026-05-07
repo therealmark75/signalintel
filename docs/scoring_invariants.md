@@ -374,3 +374,13 @@ Bad pattern (avoid): `assert "Strong Buy" not in template.lower()`
 - Lowercasing means "stronger buyout" or unrelated prose containing those words would also fire. Pattern is too broad.
 
 When writing or reviewing a test, the test docstring must include both a *Catches* example and an *Ignores* example for any pattern-matching or grep-based check. If the author cannot produce both, the test is not ready to commit.
+
+## P17 — Full enumeration of effects in audits
+
+Audit entries describing a function's behaviour must enumerate the function's complete set of effects: reads, writes, mutations, side effects, and external calls. A description that is technically true while concealing material behaviour is an audit failure.
+
+Specifically: a function being audited for "does it read X correctly" must also disclose "does it write to anything, mutate state, call external services, or have side effects."
+
+Origin: BUG-001-REOPENED (7 May 2026). The previous CC audit reported "current_user() always reads DB" — technically true, but the function also issued an UPDATE on every call, hardcoding tier='elite' for a specific username. The audit didn't lie; it under-described. The bug remained for hours because the audit answered the narrow question ("does it read?") rather than the full question ("what does it do?").
+
+Enforcement: When CC produces an audit table entry for any function, that entry must list every effect the function has, not only the effect being audited for. Reviewers (Mark or Athena) flag entries that describe one effect without addressing whether others exist.
