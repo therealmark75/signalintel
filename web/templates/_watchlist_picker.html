@@ -190,9 +190,10 @@ window.WlPicker = (function(){
     }
 
     async function _doCreate(name, isAuto) {
+        // Create watchlist and add ticker in one request via add_ticker param
         const cr = await fetch('/api/watchlists', {
             method:'POST', headers:{'Content-Type':'application/json'},
-            body: JSON.stringify({name})
+            body: JSON.stringify({name, add_ticker: _ticker})
         }).then(r=>r.json()).catch(()=>({}));
 
         if (!cr.ok) {
@@ -209,21 +210,13 @@ window.WlPicker = (function(){
             }
             return;
         }
-        const wlId = cr.id;
-        const ar = await fetch(`/api/watchlists/${wlId}/tickers`, {
-            method:'POST', headers:{'Content-Type':'application/json'},
-            body: JSON.stringify({ticker:_ticker})
-        }).then(r=>r.json()).catch(()=>({}));
-
-        if (ar.ok) {
-            _toastCreated(_ticker, name);
-            // Refresh state from server
-            const fresh = await fetch('/api/watchlists?ticker=' + encodeURIComponent(_ticker))
-                               .then(r=>r.json()).catch(()=>null);
-            if (fresh) _state = fresh;
-            _updateTrigger();
-            close();
-        }
+        _toastCreated(_ticker, name);
+        // Refresh state from server
+        const fresh = await fetch('/api/watchlists?ticker=' + encodeURIComponent(_ticker))
+                           .then(r=>r.json()).catch(()=>null);
+        if (fresh) _state = fresh;
+        _updateTrigger();
+        close();
     }
 
     function _toastCreated(ticker, name) {

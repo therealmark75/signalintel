@@ -129,6 +129,10 @@
     
 .sortable { cursor: pointer; user-select: none; }
 .sortable:hover { color: var(--accent); }
+.wl-btn{padding:3px 8px;border-radius:3px;border:1px solid;font-family:var(--mono);font-size:10px;cursor:pointer;background:transparent;transition:all .15s;}
+.wl-btn-add{border-color:var(--border);color:var(--muted);}
+.wl-btn-add:hover{border-color:var(--accent2);color:var(--accent2);}
+.wl-btn-in{border-color:rgba(0,255,136,0.4);color:var(--accent2);background:rgba(0,255,136,0.08);}
 
 /* Discovery Themes */
 .themes-section{margin-bottom:36px;padding-bottom:32px;border-bottom:1px solid var(--border);}
@@ -296,6 +300,9 @@
                         <div class="top10-reason">{{ s.reason or 'Strong momentum' }}</div>
                     </div>
                     <div class="top10-score" style="color:var(--accent2)">{{ "%.1f"|format(s.composite_score) }}</div>
+                    <button class="wl-picker-btn wl-btn {{ 'wl-btn-in' if s.ticker in watchlist_tickers else 'wl-btn-add' }}"
+                            onclick="event.stopPropagation();WlPicker.open(this,'{{ s.ticker }}')"
+                            data-tip="Add or remove from your watchlists">{{ '✓' if s.ticker in watchlist_tickers else '+' }}</button>
                 </div>
                 {% endfor %}
             </div>
@@ -313,6 +320,9 @@
                         <div class="top10-reason">{{ s.reason or 'Multi-factor SHORT signal' }}</div>
                     </div>
                     <div class="top10-score" style="color:var(--danger)">{{ "%.1f"|format(s.composite_score) }}</div>
+                    <button class="wl-picker-btn wl-btn {{ 'wl-btn-in' if s.ticker in watchlist_tickers else 'wl-btn-add' }}"
+                            onclick="event.stopPropagation();WlPicker.open(this,'{{ s.ticker }}')"
+                            data-tip="Add or remove from your watchlists">{{ '✓' if s.ticker in watchlist_tickers else '+' }}</button>
                 </div>
                 {% endif %}
                 {% endfor %}
@@ -404,6 +414,9 @@ let sectorSignals = [];
 let insiderSignals = [];
 let currentSector = '';
 let signalSectorFilter = null;
+
+// Watchlist set — seeded from server on page load, updated in-place by WlPicker
+window._wlAllTickers = new Set({{ watchlist_tickers | list | tojson }});
 
 const SECTOR_COLORS = {
     'Technology':             '#00d4ff',
@@ -694,6 +707,7 @@ function renderSignalTable(signals, page) {
         const sectorCell = s.sector
             ? `<span onclick="filterSignalsBySector('${s.sector}')" title="${s.sector}" style="font-size:11px;cursor:pointer;color:${sc};font-family:var(--mono);white-space:nowrap;padding:2px 5px;border-radius:3px;background:${sc}18;border:1px solid ${sc}30;${signalSectorFilter===s.sector?'border-color:'+sc+';background:'+sc+'30;':''}">${shortSector(s.sector)}</span>`
             : '<span style="color:var(--muted)">-</span>';
+        const inWl = window._wlAllTickers.has(s.ticker);
         return `<tr>
             <td><span class="ticker-cell" onclick="openTicker('${s.ticker}')">${s.ticker}</span></td>
             <td><span class="rating rating-${s.rating}">${TIER_SHORT[s.rating]||s.rating}</span></td>
@@ -704,6 +718,7 @@ function renderSignalTable(signals, page) {
             <td><span class="${scoreC(s.insider_score)}" style="font-family:var(--mono);font-size:12px">${fmt(s.insider_score)}</span></td>
             <td><span class="${scoreC(s.reversion_score)}" style="font-family:var(--mono);font-size:12px">${fmt(s.reversion_score)}</span></td>
             <td style="font-size:12px">${flags||'<span style="color:var(--muted2)">-</span>'}</td>
+            <td onclick="event.stopPropagation()"><button class="wl-picker-btn wl-btn ${inWl?'wl-btn-in':'wl-btn-add'}" onclick="event.stopPropagation();WlPicker.open(this,'${s.ticker}')">${inWl?'✓':'+'}</button></td>
         </tr>`;
     }).join('');
 
@@ -729,6 +744,7 @@ function renderSignalTable(signals, page) {
             <th onclick="sortTable('signals','insider_score')" class="sortable">Insider ⇅</th>
             <th onclick="sortTable('signals','reversion_score')" class="sortable">Rev ⇅</th>
             <th>Flags</th>
+            <th data-tip="Add or remove from your watchlists">WL</th>
         </tr></thead>
         <tbody>${rows}</tbody>
     </table>${pageInfo}`;
@@ -825,7 +841,9 @@ function renderSectorTable(signals) {
     if(!signals.length){
         document.getElementById('sector-ticker-content').innerHTML='<div class="loading">No signals for this sector</div>';return;
     }
-    const rows = signals.map(s => `<tr>
+    const rows = signals.map(s => {
+        const inWl = window._wlAllTickers.has(s.ticker);
+        return `<tr>
         <td><span class="ticker-cell" onclick="openTicker('${s.ticker}')">${s.ticker}</span></td>
         <td style="color:var(--muted2);font-size:12px">${s.industry||'-'}</td>
         <td><span class="rating rating-${s.rating}">${TIER_SHORT[s.rating]||s.rating}</span></td>
@@ -833,10 +851,12 @@ function renderSectorTable(signals) {
         <td><span class="${scoreC(s.momentum_score)}" style="font-family:var(--mono);font-size:12px">${fmt(s.momentum_score)}</span></td>
         <td><span class="${scoreC(s.quality_score)}" style="font-family:var(--mono);font-size:12px">${fmt(s.quality_score)}</span></td>
         <td><span class="${scoreC(s.insider_score)}" style="font-family:var(--mono);font-size:12px">${fmt(s.insider_score)}</span></td>
-    </tr>`).join('');
+        <td onclick="event.stopPropagation()"><button class="wl-picker-btn wl-btn ${inWl?'wl-btn-in':'wl-btn-add'}" onclick="event.stopPropagation();WlPicker.open(this,'${s.ticker}')">${inWl?'✓':'+'}</button></td>
+    </tr>`;
+    }).join('');
 
     document.getElementById('sector-ticker-content').innerHTML = `<table>
-        <thead><tr><th onclick="sortTable('sector','ticker')" class="sortable">Ticker ⇅</th><th>Industry</th><th>Rating</th><th onclick="sortTable('sector','composite_score')" class="sortable">Score ⇅</th><th onclick="sortTable('sector','momentum_score')" class="sortable">Mom ⇅</th><th onclick="sortTable('sector','quality_score')" class="sortable">Qual ⇅</th><th onclick="sortTable('sector','insider_score')" class="sortable">Insider ⇅</th></tr></thead>
+        <thead><tr><th onclick="sortTable('sector','ticker')" class="sortable">Ticker ⇅</th><th>Industry</th><th>Rating</th><th onclick="sortTable('sector','composite_score')" class="sortable">Score ⇅</th><th onclick="sortTable('sector','momentum_score')" class="sortable">Mom ⇅</th><th onclick="sortTable('sector','quality_score')" class="sortable">Qual ⇅</th><th onclick="sortTable('sector','insider_score')" class="sortable">Insider ⇅</th><th data-tip="Add or remove from your watchlists">WL</th></tr></thead>
         <tbody>${rows}</tbody>
     </table>`;
 }
@@ -857,18 +877,20 @@ async function loadInsiders() {
     insiderSignals = signals;
     const paged = signals;
     const rows = paged.map(s => {
-        const buy = s.signal_type?.includes('BUY');
-        const c   = buy?'var(--accent2)':'var(--danger)';
+        const buy  = s.signal_type?.includes('BUY');
+        const c    = buy?'var(--accent2)':'var(--danger)';
+        const inWl = window._wlAllTickers.has(s.ticker);
         return `<tr>
             <td><span class="ticker-cell" onclick="openTicker('${s.ticker}')">${s.ticker}</span></td>
             <td><span style="color:${c};font-family:var(--mono);font-size:11px;font-weight:700">${s.signal_type}</span></td>
             <td style="font-family:var(--mono)">${s.insider_count}</td>
             <td style="font-family:var(--mono);color:${c}">${fmtK(s.total_value)}</td>
             <td style="color:var(--muted2);font-size:11px">${ago(s.detected_at)}</td>
+            <td onclick="event.stopPropagation()"><button class="wl-picker-btn wl-btn ${inWl?'wl-btn-in':'wl-btn-add'}" onclick="event.stopPropagation();WlPicker.open(this,'${s.ticker}')">${inWl?'✓':'+'}</button></td>
         </tr>`;
     }).join('');
     document.getElementById('insider-table-content').innerHTML=`<table>
-        <thead><tr><th data-tip="Stock ticker symbol" onclick="sortTable('insiders','ticker')" class="sortable">Ticker ⇅</th><th data-tip="Type of insider activity detected. Cluster Buy = multiple insiders buying within 14 days (bullish). Cluster Sale = multiple insiders selling (bearish)" onclick="sortTable('insiders','signal_type')" class="sortable">Signal ⇅</th><th data-tip="Number of individual insiders involved in this cluster of transactions" onclick="sortTable('insiders','insider_count')" class="sortable">Insiders ⇅</th><th data-tip="Total combined dollar value of all transactions in this cluster" onclick="sortTable('insiders','total_value')" class="sortable">Value ⇅</th><th data-tip="How long ago this cluster signal was first detected" onclick="sortTable('insiders','detected_at')" class="sortable">Detected ⇅</th></tr></thead>
+        <thead><tr><th data-tip="Stock ticker symbol" onclick="sortTable('insiders','ticker')" class="sortable">Ticker ⇅</th><th data-tip="Type of insider activity detected. Cluster Buy = multiple insiders buying within 14 days (bullish). Cluster Sale = multiple insiders selling (bearish)" onclick="sortTable('insiders','signal_type')" class="sortable">Signal ⇅</th><th data-tip="Number of individual insiders involved in this cluster of transactions" onclick="sortTable('insiders','insider_count')" class="sortable">Insiders ⇅</th><th data-tip="Total combined dollar value of all transactions in this cluster" onclick="sortTable('insiders','total_value')" class="sortable">Value ⇅</th><th data-tip="How long ago this cluster signal was first detected" onclick="sortTable('insiders','detected_at')" class="sortable">Detected ⇅</th><th data-tip="Add or remove from your watchlists">WL</th></tr></thead>
         <tbody>${rows}</tbody></table>`;
 }
 

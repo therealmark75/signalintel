@@ -201,6 +201,17 @@ Very Strong  Strong  Stable  Neutral  Soft  Bearish  Very Bearish
 - `get_watchlist_tickers(alerts_only=False)` (default) returns all tickers regardless of alert state — used for non-alert UI surfaces.
 - If all watchlists are muted, `alerts_only=True` returns an empty set and no Telegram alerts fire.
 
+## Watchlist-Add UX: Picker
+
+- Watchlist-add is via a shared dropdown picker (`_watchlist_picker.html`), included once in `_nav.html` — available on every page.
+- Trigger: any element with class `wl-picker-btn` calling `WlPicker.open(el, ticker)`. Clicking outside or pressing Escape closes it. Only one picker open at a time.
+- Picker lists the user's watchlists with per-watchlist checked/unchecked state; each click is an immediate add or remove. Inline "Create new watchlist" expands a form in-place.
+- `POST /api/watchlists` accepts an optional `add_ticker` body param — creates the watchlist and adds the ticker in one round trip.
+- `GET /api/watchlists/membership?ticker=<TICKER>` returns per-watchlist membership for a single ticker.
+- **Watchlist membership set:** pages load a `window._wlAllTickers` Set (either from server-passed JSON or via `GET /api/watchlists/all-tickers`). Picker mutations update this set in-place so re-rendered tables reflect the current state without a reload.
+- **Surfaces with WL column:** Screener, Penny Screener, Dashboard (All Signals, Sector drilldown, Insiders, Today's Top 10). Ticker detail page has its own dedicated WL button.
+- **Surfaces without WL:** Search results (navigational dropdown, not a data table), Events/Earnings/Dividends (read-only `wl-dot` indicator only), Watchlist page itself (recursive), News, System.
+
 ## Notes for Claude Code Sessions
 - Always activate the venv before running Python scripts
 - SQLite DB path is relative: `data/signalintel.db` from project root

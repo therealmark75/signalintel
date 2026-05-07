@@ -157,9 +157,12 @@ def index():
     """)
     stats = dict(cur.fetchone())
     conn.close()
+    wl_rows = db_query("SELECT DISTINCT ticker FROM watchlists WHERE user_id=?", (user["id"],)) if user else []
+    watchlist_tickers = {r["ticker"] for r in wl_rows}
     return render_template("index.html", user=user, top_signals=top,
                            total_tickers=stats["total_tickers"],
-                           last_scored=stats["last_scored"])
+                           last_scored=stats["last_scored"],
+                           watchlist_tickers=watchlist_tickers)
 
 
 @app.route("/login", methods=["GET","POST"])
@@ -319,6 +322,29 @@ def api_watchlists_list():
                     "count": len(wls), "tier_name": tier["display_name"]})
 
 
+@app.route("/api/watchlists/membership")
+@login_required
+def api_watchlists_membership():
+    """Return per-watchlist membership for a specific ticker. Used by the watchlist picker on open."""
+    user   = current_user()
+    ticker = request.args.get("ticker", "").upper()
+    if not ticker:
+        return jsonify({"error": "ticker param required"}), 400
+    wls = get_watchlists_meta(DATABASE_PATH, user["id"])
+    member_ids = {
+        r["watchlist_id"]
+        for r in db_query(
+            "SELECT DISTINCT watchlist_id FROM watchlists WHERE user_id=? AND ticker=?",
+            (user["id"], ticker)
+        )
+    }
+    return jsonify({
+        "ticker": ticker,
+        "watchlists": [{"id": wl["id"], "name": wl["name"], "contains_ticker": wl["id"] in member_ids}
+                       for wl in wls],
+    })
+
+
 @app.route("/api/watchlists/all-tickers")
 @login_required
 def api_watchlists_all_tickers():
@@ -333,8 +359,10 @@ def api_watchlists_all_tickers():
 @app.route("/api/watchlists", methods=["POST"])
 @login_required
 def api_watchlists_create():
-    user = current_user()
-    name = (request.json or {}).get("name", "").strip()
+    user       = current_user()
+    body       = request.json or {}
+    name       = body.get("name", "").strip()
+    add_ticker = body.get("add_ticker", "").strip().upper()
     if not name:
         return jsonify({"ok": False, "error": "Name required"}), 400
     wls = get_watchlists_meta(DATABASE_PATH, user["id"])
@@ -354,6 +382,8 @@ def api_watchlists_create():
         }), 403
     try:
         result = create_watchlist(DATABASE_PATH, user["id"], name)
+        if add_ticker:
+            add_to_watchlist(DATABASE_PATH, user["id"], add_ticker, "", watchlist_id=result["id"])
         return jsonify({"ok": True, **result})
     except ValueError as e:
         return jsonify({"ok": False, "error": str(e)}), 409
