@@ -244,6 +244,43 @@ def score_mean_reversion(row: dict) -> float:
     return _clamp(score)
 
 
+def _compute_volume(rvol, pct):
+    """
+    Returns (score, band) for internal use and testing.
+    Bands: 'null' | 'climax' | 'confirmed' | 'mild' | 'low'
+    NULL inputs always return (50, 'null') — P5: NULL = neutral.
+    """
+    if rvol is None or pct is None:
+        return 50.0, "null"
+
+    if rvol >= 4.0:
+        # Climax/exhaustion zone: extreme volume often precedes reversal
+        if pct >= 1.0:        return 65.0, "climax"
+        elif pct <= -1.0:     return 35.0, "climax"
+        else:                 return 50.0, "climax"
+
+    if rvol >= 1.5:
+        # Standard confirmed breakout/breakdown zone
+        if pct >= 1.0:        return 80.0, "confirmed"
+        elif pct <= -1.0:     return 20.0, "confirmed"
+        else:                 return 50.0, "confirmed"
+
+    if rvol >= 0.8:
+        # Average volume zone: directional but mild
+        if pct >= 1.0:        return 60.0, "mild"
+        elif pct <= -1.0:     return 40.0, "mild"
+        else:                 return 50.0, "mild"
+
+    # Low conviction — no signal regardless of direction
+    return 50.0, "low"
+
+
+def score_volume(rvol, pct) -> float:
+    """Score 0-100 based on relative volume × price-change direction."""
+    score, _ = _compute_volume(rvol, pct)
+    return score
+
+
 # ── Composite scorer ──────────────────────────────
 
 @dataclass
@@ -258,6 +295,7 @@ class TickerSignal:
     quality_score:    float = 0.0
     insider_score:    float = 0.0
     reversion_score:  float = 0.0
+    volume_score:     float = 50.0
     legal_penalty:    int   = 0
     legal_risk_level: str   = "NONE"
     composite_score:  float = 0.0      # sector-adjusted final score
@@ -280,26 +318,32 @@ class TickerSignal:
 
 
 def compute_composite(
-    momentum: float,
-    quality:  float,
-    insider:  float,
-    reversion:float,
-    weights:  dict = None,
+    momentum:  float,
+    quality:   float,
+    insider:   float,
+    reversion: float,
+    volume:    float = 50.0,
+    weights:   dict  = None,
 ) -> float:
-    """Weighted composite. Default weights favour momentum + quality."""
+    """Weighted composite. Normalises by sum(weights) so adding new
+    components without changing existing weight values remains valid."""
     if weights is None:
         weights = {
             "momentum":  0.35,
             "quality":   0.30,
             "insider":   0.25,
             "reversion": 0.10,
+            "volume":    0.10,
         }
-    return _clamp(
+    total_w = sum(weights.values())
+    raw = (
         momentum  * weights["momentum"]  +
         quality   * weights["quality"]   +
         insider   * weights["insider"]   +
-        reversion * weights["reversion"]
+        reversion * weights["reversion"] +
+        volume    * weights.get("volume", 0.0)
     )
+    return _clamp(raw / total_w)
 
 
 def assign_rating(composite: float, reversion: float,
@@ -409,6 +453,7 @@ def score_all_tickers(
         q_score = score_quality(row)
         i_score = score_insider(ticker, insider_trades)
         r_score = score_mean_reversion(row)
+        v_score = score_volume(row.get("rel_volume"), row.get("change_pct"))
 
         legal_data = legal_risk_map.get(ticker)
         if legal_data is None:
@@ -419,7 +464,7 @@ def score_all_tickers(
             legal_penalty    = legal_data.get("penalty", 0)
             legal_risk_level = legal_data.get("risk_level", "NONE")
 
-        raw_composite    = compute_composite(m_score, q_score, i_score, r_score, weights)
+        raw_composite    = compute_composite(m_score, q_score, i_score, r_score, v_score, weights)
         c_score_raw      = _clamp(raw_composite + legal_penalty)
 
         # ── Sector relative strength modifier ────────────────────────────────
@@ -443,6 +488,7 @@ def score_all_tickers(
             quality_score           = round(q_score, 1),
             insider_score           = round(i_score, 1),
             reversion_score         = round(r_score, 1),
+            volume_score            = round(v_score, 1),
             legal_penalty           = legal_penalty,
             legal_risk_level        = legal_risk_level,
             composite_score         = round(c_score, 1),

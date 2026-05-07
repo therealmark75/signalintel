@@ -319,6 +319,7 @@ def insert_signal_scores(db_path: str, rows: list[dict]) -> int:
         ("sector_strength_score",   "REAL"),
         ("sector_modifier_applied", "REAL"),
         ("scoring_version",         "TEXT NOT NULL DEFAULT '0.9.0'"),
+        ("volume_score",            "REAL"),
     ]:
         try:
             cur.execute(f"ALTER TABLE signal_scores ADD COLUMN {col} {typ}")
@@ -333,13 +334,13 @@ def insert_signal_scores(db_path: str, rows: list[dict]) -> int:
         INSERT INTO signal_scores
             (scored_at, ticker, composite_score, composite_score_raw,
              momentum_score, quality_score, insider_score, reversion_score,
-             rating, flags, sector_strength_score, sector_modifier_applied,
-             scoring_version)
+             volume_score, rating, flags, sector_strength_score,
+             sector_modifier_applied, scoring_version)
         VALUES
             (:scored_at, :ticker, :composite_score, :composite_score_raw,
              :momentum_score, :quality_score, :insider_score, :reversion_score,
-             :rating, :flags, :sector_strength_score, :sector_modifier_applied,
-             :scoring_version)
+             :volume_score, :rating, :flags, :sector_strength_score,
+             :sector_modifier_applied, :scoring_version)
     """, rows)
     conn.commit()
     inserted = cur.rowcount
