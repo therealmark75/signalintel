@@ -383,6 +383,7 @@ async function loadPage() {
         {label:'Quality',   val:s.quality_score},
         {label:'Insider',   val:s.insider_score},
         {label:'Reversion', val:s.reversion_score},
+        {label:'Volume',    val:s.volume_score},
     ].map(b => `
         <div class="score-bar-row">
             <div class="score-bar-header">
@@ -503,6 +504,7 @@ async function loadPage() {
                 <div class="score-item" data-tip="Fundamental quality score based on P/E ratio vs sector average, EPS growth and return on equity"><div class="score-item-label">Quality</div><div class="score-item-value ${scoreC(s.quality_score)}">${fmt(s.quality_score,1)}</div></div>
                 <div class="score-item" data-tip="Insider activity score based on recent buying and selling by company directors, officers and major shareholders. 100 = strong cluster buying"><div class="score-item-label">Insider</div><div class="score-item-value ${scoreC(s.insider_score)}">${fmt(s.insider_score,1)}</div></div>
                 <div class="score-item" data-tip="Mean reversion signal. Low score = price has moved far from average and may revert. High = trending strongly"><div class="score-item-label">Reversion</div><div class="score-item-value ${scoreC(s.reversion_score)}">${fmt(s.reversion_score,1)}</div></div>
+                <div class="score-item" data-tip="Volume Confirmation score. High score = strong volume confirming price move. Low = price move on weak or declining volume."><div class="score-item-label">Volume</div><div class="score-item-value ${scoreC(s.volume_score)}">${fmt(s.volume_score,1)}</div></div>
                 <div class="score-item" data-tip="SEC EDGAR legal risk assessment. Penalises composite score for active enforcement actions, investigations or class actions"><div class="score-item-label">Legal</div><div class="score-item-value" style="color:${lr.risk_color}">${lr.risk_label}</div></div>
                 <div class="score-item" data-tip="Value score derived from 12-month price target upside. Above 50 = priced below target (upside), below 50 = priced above target (downside)."><div class="score-item-label">Value</div><div class="score-item-value ${scoreC(valueScore)}">${fmt(valueScore,1)}</div></div>
                 ${(()=>{
@@ -543,6 +545,10 @@ async function loadPage() {
                 <div class="radar-dim">
                     <div class="radar-dim-name"><div class="radar-dim-dot" style="background:#facc15"></div>Reversion</div>
                     <div class="radar-dim-score hi" id="rd-reversion">-</div>
+                </div>
+                <div class="radar-dim">
+                    <div class="radar-dim-name"><div class="radar-dim-dot" style="background:#8b5cf6"></div>Volume</div>
+                    <div class="radar-dim-score hi" id="rd-volume">-</div>
                 </div>
                 <div class="radar-dim">
                     <div class="radar-dim-name"><div class="radar-dim-dot" style="background:#ff9500"></div>Legal</div>
@@ -937,6 +943,7 @@ function initRadarChart(s, lr) {
     const qual = s.quality_score   || 0;
     const ins  = s.insider_score   || 0;
     const rev  = s.reversion_score || 0;
+    const vol  = s.volume_score    || 0;
 
     const scoreColor = v => v >= 70 ? '#00ff88' : v >= 55 ? '#00d4ff' : v >= 40 ? '#ff9500' : '#ff3b5c';
     const fmtS = v => v !== null && v !== undefined ? v.toFixed(1) : '-';
@@ -949,6 +956,8 @@ function initRadarChart(s, lr) {
     document.getElementById('rd-insider').style.color   = scoreColor(ins);
     document.getElementById('rd-reversion').textContent = fmtS(rev);
     document.getElementById('rd-reversion').style.color = scoreColor(rev);
+    document.getElementById('rd-volume').textContent    = fmtS(vol);
+    document.getElementById('rd-volume').style.color    = scoreColor(vol);
     document.getElementById('rd-legal').textContent     = lr.risk_label || '-';
     document.getElementById('rd-legal').style.color     = lr.risk_color || '#94a3b8';
     document.getElementById('rd-value').textContent     = fmtS(Math.round(valueScore * 10) / 10);
@@ -963,7 +972,7 @@ function initRadarChart(s, lr) {
     const ctx = document.getElementById('radar-chart');
     if (!ctx) return;
 
-    const data = [mom, qual, ins, rev, legalScore, valueScore, sectorScore];
+    const data = [mom, qual, ins, rev, vol, legalScore, valueScore, sectorScore];
     const gradient = ctx.getContext('2d');
 
     const fillGrad = gradient.createLinearGradient(0, 0, 0, 280);
@@ -973,14 +982,14 @@ function initRadarChart(s, lr) {
     new Chart(ctx, {
         type: 'radar',
         data: {
-            labels: ['Momentum', 'Quality', 'Insider', 'Reversion', 'Legal', 'Value', 'Sector'],
+            labels: ['Momentum', 'Quality', 'Insider', 'Reversion', 'Volume', 'Legal', 'Value', 'Sector'],
             datasets: [{
                 data,
                 fill: true,
                 backgroundColor: fillGrad,
                 borderColor: 'rgba(0,212,255,0.85)',
                 borderWidth: 2,
-                pointBackgroundColor: ['#00d4ff','#00ff88','#af52de','#facc15','#ff9500','#ff6b35','#fbbf24'],
+                pointBackgroundColor: ['#00d4ff','#00ff88','#af52de','#facc15','#8b5cf6','#ff9500','#ff6b35','#fbbf24'],
                 pointBorderColor: '#080c14',
                 pointBorderWidth: 2,
                 pointRadius: 5,
