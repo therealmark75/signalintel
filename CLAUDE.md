@@ -146,6 +146,20 @@ Margin call mechanic:
 3. Short squeeze detector — high short interest + STRONG_BUY confluence
 4. Legal risk scoring via SEC EDGAR feeds into composite score as penalty
 
+## Scoring Engine Versioning
+- **`SCORING_ENGINE_VERSION`** lives in `config/settings.py`
+- Every `signal_scores` row and every `rating_changes` row is stamped with the version that produced it
+- The `/backtest` page filters all stats by version; a dropdown appears automatically when multiple versions exist in the data
+- **Bump policy:**
+  - `PATCH` (0.9.0 → 0.9.1): bug fixes that do NOT change scoring output
+  - `MINOR` (0.9.0 → 0.10.0): new component added OR weight adjustment
+  - `MAJOR` (0.9.x → 1.0.0): engine frozen for production launch
+  - `MAJOR` (1.0.0 → 2.0.0): post-launch, breaking changes to scoring methodology
+- **⚠ Bump the version BEFORE shipping any change that affects scoring output.** New data tagged with the old version is permanently mis-stamped and will pollute backtest comparisons.
+
+### Before committing scoring changes
+- [ ] Did this change affect signal scoring output? If yes, bump `SCORING_ENGINE_VERSION` in `config/settings.py` first.
+
 ## Signal Universe Constraints
 - **`MIN_PRICE_FOR_SIGNAL = 1.00`** (defined in `config/settings.py`)
 - Tickers below this price are excluded from new signal scoring. The filter lives in `signals/scorer.py` — tickers with `price < MIN_PRICE_FOR_SIGNAL` are skipped before any sub-score is computed.

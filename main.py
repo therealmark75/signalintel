@@ -9,7 +9,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from config.settings import (DATABASE_PATH, SECTORS, SCREENER_SCRAPE_TIMES, NEWS_SCRAPE_TIMES,
     INSIDER_SCRAPE_TIMES, INSIDER_CLUSTER_BUY_COUNT, INSIDER_CLUSTER_DAYS,
-    LOG_DIR, LOG_LEVEL, REQUEST_DELAY_SECONDS)
+    LOG_DIR, LOG_LEVEL, REQUEST_DELAY_SECONDS, SCORING_ENGINE_VERSION)
 from notifications.telegram import send_alert
 from signals.signal_labels import tier_label
 from database.db import (get_connection, initialise_schema, insert_screener_rows, generate_top_signals_of_day, prune_old_snapshots,
@@ -112,6 +112,7 @@ def job_generate_signals(sector=None):
             "flags": "|".join(s.flags),
             "sector_strength_score": s.sector_strength_score,
             "sector_modifier_applied": s.sector_modifier_applied,
+            "scoring_version": SCORING_ENGINE_VERSION,
         } for s in signals]
         insert_signal_scores(DATABASE_PATH, score_rows)
 

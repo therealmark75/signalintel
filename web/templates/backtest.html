@@ -67,6 +67,23 @@
 <main>
     <h1>SIGNAL BACKTESTING</h1>
     <p class="subtitle">Historical accuracy of each signal strength tier — measured over the <strong>12-month target horizon</strong></p>
+
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:20px;flex-wrap:wrap">
+        <span style="font-size:12px;color:var(--muted2)">Scoring engine:</span>
+        <span title="Backtest data is only comparable within a single engine version. Adding components or changing weights creates a new version."
+              style="font-family:var(--mono);font-size:12px;font-weight:700;padding:3px 10px;border-radius:4px;background:rgba(0,212,255,0.1);border:1px solid rgba(0,212,255,0.3);color:var(--accent);cursor:help">v{{ scoring_version }}</span>
+        <span style="font-size:11px;color:var(--muted)">(pre-launch, in active development)</span>
+        {% if available_versions|length > 1 %}
+        <select id="version-select"
+                onchange="loadVersion(this.value)"
+                style="margin-left:8px;background:var(--surface);border:1px solid var(--border);color:var(--text);font-family:var(--mono);font-size:11px;padding:3px 8px;border-radius:4px;cursor:pointer">
+            {% for v in available_versions %}
+            <option value="{{ v }}" {% if v == scoring_version %}selected{% endif %}>v{{ v }}</option>
+            {% endfor %}
+        </select>
+        {% endif %}
+    </div>
+
     <div class="note" style="margin-bottom:8px">⚡ Data grows daily. Win rates and sample sizes will strengthen significantly after 30+ days of signal history.</div>
     <div class="note" title="SignalIntel targets a 12-month price horizon matching industry standard (Bloomberg, Morningstar, sell-side research). Ratings held for less than 12 months are marked INTERIM — stats update as positions mature to the full horizon. Return measures price change from rating change date to 12 months later (or current price for open positions).">📅 Backtest measures return from rating-change date to 12 months forward, aligning with the SignalIntel 12-month price target. Ratings under 12 months old are marked <strong>INTERIM</strong>. <span style="cursor:help;color:var(--accent)" title="Backtest measures price change from rating change to 12 months later, matching the SignalIntel 12-month target horizon. For open positions (no exit yet), current price is used. Past performance does not guarantee future returns.">(?) more</span></div>
     <div class="section-title">Performance by Signal Strength</div>
@@ -82,8 +99,17 @@ const TIER_SHORT = {STRONG_BUY:'Very Strong',BUY:'Strong',STRONG_HOLD:'Stable',H
 
 function retColor(v) { return v > 0 ? 'pos' : v < 0 ? 'neg' : 'neu'; }
 
+let _activeVersion = '{{ scoring_version }}';
+
+function loadVersion(v) {
+    _activeVersion = v;
+    document.getElementById('stats-grid').innerHTML = '<div class="loading">Loading stats...</div>';
+    document.getElementById('recent-table').innerHTML = '<div class="loading">Loading...</div>';
+    load();
+}
+
 async function load() {
-    const data = await fetch('/api/backtest/stats').then(r => r.json());
+    const data = await fetch('/api/backtest/stats?version=' + encodeURIComponent(_activeVersion)).then(r => r.json());
 
     // Stats cards
     const grid = document.getElementById('stats-grid');

@@ -11,7 +11,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from config.settings import DATABASE_PATH, MIN_PRICE_FOR_SIGNAL
+from config.settings import DATABASE_PATH, MIN_PRICE_FOR_SIGNAL, SCORING_ENGINE_VERSION
 from database.db import (
     get_connection, get_latest_screener, get_recent_insiders,
     get_cluster_signals, get_top_signals, get_signal_summary,
@@ -1719,7 +1719,24 @@ def api_check_margins(portfolio_id):
 @login_required
 def backtest():
     user = current_user()
-    return render_template("backtest.html", user=user)
+    try:
+        conn = get_connection(DATABASE_PATH)
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT DISTINCT scoring_version FROM rating_changes "
+            "WHERE scoring_version IS NOT NULL ORDER BY scoring_version"
+        )
+        available_versions = [r[0] for r in cur.fetchall()]
+        conn.close()
+    except Exception:
+        available_versions = []
+    if not available_versions:
+        available_versions = [SCORING_ENGINE_VERSION]
+    return render_template(
+        "backtest.html", user=user,
+        scoring_version=SCORING_ENGINE_VERSION,
+        available_versions=available_versions,
+    )
 
 @app.route("/api/backtest/stats")
 @login_required
@@ -1734,10 +1751,11 @@ def api_backtest_stats():
 
 def _api_backtest_stats_inner():
     from collections import defaultdict
+    version = request.args.get("version", SCORING_ENGINE_VERSION)
     conn = get_connection(DATABASE_PATH)
     cur = conn.cursor()
     cur.execute("""
-        SELECT 
+        SELECT
             rc1.new_rating,
             rc1.ticker,
             rc1.price_at_change as entry_price,
@@ -1747,8 +1765,8 @@ def _api_backtest_stats_inner():
             ROUND(((rc2.price_at_change - rc1.price_at_change) / rc1.price_at_change) * 100, 2) as return_pct,
             CAST(julianday(rc2.change_date) - julianday(rc1.change_date) AS INTEGER) as days_held
         FROM rating_changes rc1
-        JOIN rating_changes rc2 
-            ON rc1.ticker = rc2.ticker 
+        JOIN rating_changes rc2
+            ON rc1.ticker = rc2.ticker
             AND rc2.change_date > rc1.change_date
             AND NOT EXISTS (
                 SELECT 1 FROM rating_changes rc3
@@ -1756,10 +1774,11 @@ def _api_backtest_stats_inner():
                 AND rc3.change_date > rc1.change_date
                 AND rc3.change_date < rc2.change_date
             )
-        WHERE rc1.price_at_change IS NOT NULL 
+        WHERE rc1.price_at_change IS NOT NULL
         AND rc2.price_at_change IS NOT NULL
         AND rc1.price_at_change > 0
-    """)
+        AND COALESCE(rc1.scoring_version, '0.9.0') = ?
+    """, (version,))
     periods = cur.fetchall()
 
     stats = defaultdict(lambda: {'returns':[], 'wins':0, 'total':0, 'days':[], 'trades':[]})
@@ -1785,9 +1804,10 @@ def _api_backtest_stats_inner():
         SELECT ticker, old_rating, new_rating, price_at_change, change_date, composite_score
         FROM rating_changes
         WHERE old_rating IS NOT NULL
+          AND COALESCE(scoring_version, '0.9.0') = ?
         ORDER BY change_date DESC, id DESC
         LIMIT 50
-    """)
+    """, (version,))
     recent = [dict(r) for r in cur.fetchall()]
     conn.close()
 
@@ -1858,7 +1878,13 @@ def _api_backtest_stats_inner():
     except Exception as e:
         sector_comparison["note"] = f"Sector comparison unavailable: {e}"
 
-    return jsonify({'stats': result, 'recent': recent, 'sector_comparison': sector_comparison})
+    return jsonify({
+        'stats': result,
+        'recent': recent,
+        'sector_comparison': sector_comparison,
+        'version': version,
+        'current_version': SCORING_ENGINE_VERSION,
+    })
 
 
 

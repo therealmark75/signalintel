@@ -313,11 +313,12 @@ def insert_signal_scores(db_path: str, rows: list[dict]) -> int:
         return 0
     conn = get_connection(db_path)
     cur  = conn.cursor()
-    # Ensure sector modifier columns exist (idempotent)
+    # Ensure new columns exist (idempotent; SQLite ignores duplicate ADD COLUMN)
     for col, typ in [
         ("composite_score_raw",     "REAL"),
         ("sector_strength_score",   "REAL"),
         ("sector_modifier_applied", "REAL"),
+        ("scoring_version",         "TEXT NOT NULL DEFAULT '0.9.0'"),
     ]:
         try:
             cur.execute(f"ALTER TABLE signal_scores ADD COLUMN {col} {typ}")
@@ -332,11 +333,13 @@ def insert_signal_scores(db_path: str, rows: list[dict]) -> int:
         INSERT INTO signal_scores
             (scored_at, ticker, composite_score, composite_score_raw,
              momentum_score, quality_score, insider_score, reversion_score,
-             rating, flags, sector_strength_score, sector_modifier_applied)
+             rating, flags, sector_strength_score, sector_modifier_applied,
+             scoring_version)
         VALUES
             (:scored_at, :ticker, :composite_score, :composite_score_raw,
              :momentum_score, :quality_score, :insider_score, :reversion_score,
-             :rating, :flags, :sector_strength_score, :sector_modifier_applied)
+             :rating, :flags, :sector_strength_score, :sector_modifier_applied,
+             :scoring_version)
     """, rows)
     conn.commit()
     inserted = cur.rowcount
@@ -1050,6 +1053,16 @@ def detect_rating_changes(db_path: str) -> list:
     cur = conn.cursor()
     changes = []
     try:
+        # Ensure scoring_version column exists on rating_changes
+        try:
+            cur.execute(
+                "ALTER TABLE rating_changes ADD COLUMN "
+                "scoring_version TEXT NOT NULL DEFAULT '0.9.0'"
+            )
+            conn.commit()
+        except Exception:
+            pass
+
         # Watermark guard: skip if this signal_scores batch was already processed
         cur.execute("SELECT MAX(scored_at) as max_ts FROM signal_scores")
         row = cur.fetchone()
@@ -1073,7 +1086,8 @@ def detect_rating_changes(db_path: str) -> list:
 
         # Get the latest signal for each ticker (one row per ticker after dedup)
         cur.execute("""
-            SELECT ss.ticker, ss.rating, ss.composite_score, DATE(ss.scored_at) as day
+            SELECT ss.ticker, ss.rating, ss.composite_score, DATE(ss.scored_at) as day,
+                   COALESCE(ss.scoring_version, '0.9.0') as scoring_version
             FROM signal_scores ss
             WHERE ss.scored_at = (
                 SELECT MAX(s2.scored_at) FROM signal_scores s2 WHERE s2.ticker = ss.ticker
@@ -1085,6 +1099,7 @@ def detect_rating_changes(db_path: str) -> list:
             ticker = sig['ticker']
             new_rating = sig['rating']
             day = sig['day']
+            scoring_version = sig['scoring_version']
 
             # Get last recorded rating for this ticker
             cur.execute("""
@@ -1106,9 +1121,11 @@ def detect_rating_changes(db_path: str) -> list:
 
                 cur.execute("""
                     INSERT INTO rating_changes
-                    (ticker, old_rating, new_rating, price_at_change, change_date, composite_score)
-                    VALUES (?, ?, ?, ?, ?, ?)
-                """, (ticker, old_rating, new_rating, price, day, sig['composite_score']))
+                    (ticker, old_rating, new_rating, price_at_change, change_date,
+                     composite_score, scoring_version)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, (ticker, old_rating, new_rating, price, day,
+                      sig['composite_score'], scoring_version))
 
                 changes.append({
                     "ticker": ticker,
@@ -1116,6 +1133,7 @@ def detect_rating_changes(db_path: str) -> list:
                     "new_rating": new_rating,
                     "price": price,
                     "composite_score": sig['composite_score'],
+                    "scoring_version": scoring_version,
                 })
 
         # Advance watermark so re-runs of the same batch are no-ops
