@@ -11,7 +11,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from config.settings import DATABASE_PATH
+from config.settings import DATABASE_PATH, MIN_PRICE_FOR_SIGNAL
 from database.db import (
     get_connection, get_latest_screener, get_recent_insiders,
     get_cluster_signals, get_top_signals, get_signal_summary,
@@ -290,7 +290,8 @@ def watchlist():
     limit = tier["watchlist_limit"]
     return render_template("watchlist.html", user=user, items=items,
                            watchlists=wls, active_watchlist_id=active_id,
-                           tier=tier, watchlist_limit=limit)
+                           tier=tier, watchlist_limit=limit,
+                           min_price_for_signal=MIN_PRICE_FOR_SIGNAL)
 
 
 # ── Watchlist API ─────────────────────────────────

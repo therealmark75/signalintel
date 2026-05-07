@@ -1208,3 +1208,13 @@ def get_legal_risk_map(db_path: str) -> dict:
         "risk_label": r["risk_label"],
         "risk_color": r["risk_color"],
     } for r in rows}
+
+
+def is_below_signal_threshold(current_price) -> bool:
+    """Return True if current_price is below MIN_PRICE_FOR_SIGNAL.
+    Used by templates and routes to flag mark-and-hold watchlist entries.
+    """
+    from config.settings import MIN_PRICE_FOR_SIGNAL
+    if current_price is None:
+        return False
+    return float(current_price) < MIN_PRICE_FOR_SIGNAL

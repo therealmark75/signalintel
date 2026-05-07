@@ -17,6 +17,8 @@ import logging
 from datetime import datetime, timezone, timedelta
 from dataclasses import dataclass, field
 
+from config.settings import MIN_PRICE_FOR_SIGNAL
+
 logger = logging.getLogger(__name__)
 
 # ── Insider title conviction weights ─────────────
@@ -390,6 +392,11 @@ def score_all_tickers(
     for row in screener_rows:
         ticker = row.get("ticker", "")
         if not ticker:
+            continue
+
+        price = row.get("price")
+        if price is not None and price < MIN_PRICE_FOR_SIGNAL:
+            logger.debug("Skipped %s — price $%.4f below MIN_PRICE_FOR_SIGNAL", ticker, price)
             continue
 
         # Count recent insider transactions for this ticker

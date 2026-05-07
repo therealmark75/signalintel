@@ -157,11 +157,18 @@
             <tbody>
             {% set TIER_SHORT = {'STRONG_BUY':'Very Strong','BUY':'Strong','STRONG_HOLD':'Stable','HOLD':'Neutral','WEAK_HOLD':'Soft','SELL':'Bearish','STRONG_SELL':'Very Bearish'} %}
             {% for item in items %}
+            {% set below_threshold = item.price is not none and item.price < min_price_for_signal %}
             <tr>
-                <td><span class="ticker" onclick="openTicker('{{ item.ticker }}')">{{ item.ticker }}</span></td>
+                <td>
+                    <span class="ticker" onclick="openTicker('{{ item.ticker }}')">{{ item.ticker }}</span>
+                    {% if below_threshold %}
+                    <span title="Price below ${{ '%.2f'|format(min_price_for_signal) }} floor. No new signals are generated, but the position remains tracked."
+                          style="display:inline-block;margin-left:5px;padding:1px 5px;font-size:9px;font-weight:600;letter-spacing:0.04em;border-radius:3px;background:var(--bg);border:1px solid var(--muted);color:var(--muted);vertical-align:middle;cursor:default">BELOW $1</span>
+                    {% endif %}
+                </td>
                 <td>
                     {% if item.rating %}
-                    <span class="rating rating-{{ item.rating }}">{{ TIER_SHORT.get(item.rating, item.rating) }}</span>
+                    <span class="rating rating-{{ item.rating }}" {% if below_threshold %}style="opacity:0.45"{% endif %}>{{ TIER_SHORT.get(item.rating, item.rating) }}</span>
                     {% else %}<span style="color:var(--muted)">-</span>{% endif %}
                 </td>
                 <td class="score {% if item.composite_score and item.composite_score >= 70 %}hi{% elif item.composite_score and item.composite_score >= 55 %}mid{% elif item.composite_score and item.composite_score >= 45 %}lo{% else %}bad{% endif %}">

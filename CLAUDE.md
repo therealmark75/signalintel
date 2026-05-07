@@ -146,6 +146,13 @@ Margin call mechanic:
 3. Short squeeze detector — high short interest + STRONG_BUY confluence
 4. Legal risk scoring via SEC EDGAR feeds into composite score as penalty
 
+## Signal Universe Constraints
+- **`MIN_PRICE_FOR_SIGNAL = 1.00`** (defined in `config/settings.py`)
+- Tickers below this price are excluded from new signal scoring. The filter lives in `signals/scorer.py` — tickers with `price < MIN_PRICE_FOR_SIGNAL` are skipped before any sub-score is computed.
+- Existing watchlist entries that fall below threshold are **mark-and-hold**: visible on the watchlist with a greyed "BELOW $1" badge, no new signals generated.
+- Rationale: sub-$1 percentage returns are mathematically distorting (penny-stock asymmetry). VEEE at $0.15 was producing +4,380% theoretical returns that are untradeable due to bid-ask spreads and liquidity.
+- Threshold is provisional and may be raised. To change it: update `MIN_PRICE_FOR_SIGNAL` in `config/settings.py`, then re-run `scripts/purge_sub_threshold_rating_changes.py` to clean historical data, then re-run `scripts/rebuild_rating_changes.py` to regenerate transitions.
+
 ## Notes for Claude Code Sessions
 - Always activate the venv before running Python scripts
 - SQLite DB path is relative: `data/signalintel.db` from project root
