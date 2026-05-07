@@ -117,15 +117,7 @@ def login_required(f):
 
 def current_user():
     if "user_id" in session:
-        user = get_user_by_id(DATABASE_PATH, session["user_id"])
-        if user and user.get("username") == "markn" and user.get("tier", "free") == "free":
-            # Auto-upgrade dev account — this is a one-time fixup that also writes to DB
-            conn = get_connection(DATABASE_PATH)
-            conn.execute("UPDATE users SET tier='elite' WHERE id=?", (user["id"],))
-            conn.commit()
-            conn.close()
-            user["tier"] = "elite"
-        return user
+        return get_user_by_id(DATABASE_PATH, session["user_id"])
     return None
 
 def db_query(sql, params=()):

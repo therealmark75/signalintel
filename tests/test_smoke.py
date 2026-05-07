@@ -261,8 +261,8 @@ def test_api_watchlists_create_tier_limit_returns_structured_error(client):
     from database.db import get_connection
     from config.settings import DATABASE_PATH as DB
 
-    # Use 'starter' (limit=5) so current_user()'s markn auto-upgrade doesn't
-    # trigger (it only fires for tier='free').
+    # Set tier='starter' (watchlist_limit=5) so the limit check in
+    # /api/watchlists fires when we attempt to create a 6th watchlist.
     conn = get_connection(DB)
     conn.execute("UPDATE users SET tier='starter' WHERE id=2")
     conn.execute("DELETE FROM watchlists WHERE user_id=2")
@@ -309,6 +309,106 @@ def test_no_literal_unauthorized_in_user_facing_html(client):
         assert resp.status_code == 200
         assert b'unauthorized' not in resp.data.lower(), \
             f"{path} contains literal 'unauthorized' in HTML body"
+
+
+# ── BUG-001-REOPENED: tier display reads stale snapshot, not live DB ──
+#
+# Mechanism: web/app.py:118-129 had a hardcoded auto-upgrade in current_user()
+# that fired UPDATE users SET tier='elite' for username='markn' if tier=='free'
+# on every request. The result was that any DB write of tier='free' would be
+# silently overwritten on the very next page render, and the nav badge would
+# always display 'ELITE' for that account regardless of DB state.
+#
+# These tests pin the contract: the rendered nav badge value must reflect what
+# is in the DB at request time, not what current_user() prefers.
+
+def _set_user_tier(user_id, tier):
+    from database.db import get_connection
+    from config.settings import DATABASE_PATH as DB
+    conn = get_connection(DB)
+    conn.execute("UPDATE users SET tier=? WHERE id=?", (tier, user_id))
+    conn.commit()
+    conn.close()
+
+
+def _get_user_tier(user_id):
+    from database.db import get_connection
+    from config.settings import DATABASE_PATH as DB
+    conn = get_connection(DB)
+    row = conn.execute("SELECT tier FROM users WHERE id=?", (user_id,)).fetchone()
+    conn.close()
+    return row[0] if row else None
+
+
+def test_bug001_reopened_nav_renders_db_tier_not_hardcoded_elite(client):
+    """
+    BUG-001-REOPENED reproduction.
+
+    With DB tier='free' for the logged-in user, the nav badge MUST render
+    'FREE' — not 'ELITE' — and the DB row MUST still read 'free' after the
+    request (no silent re-upgrade).
+
+    Catches: any current_user() / before_request hook / template global that
+             overrides tier away from the DB value (the original bug was a
+             hardcoded auto-upgrade for username='markn').
+    Ignores: badge styling, whitespace, surrounding markup.
+    """
+    original = _get_user_tier(2)
+    try:
+        _set_user_tier(2, 'free')
+        resp = client.get("/screener")
+        assert resp.status_code == 200
+        body = resp.data.decode('utf-8')
+        assert 'ELITE' not in body, (
+            "Nav rendered 'ELITE' despite DB tier='free' — current_user() or "
+            "another hook is overriding the live DB value"
+        )
+        assert 'FREE' in body, "Nav badge should render 'FREE' for tier='free'"
+        # Confirm the request did not silently mutate the DB back to elite
+        assert _get_user_tier(2) == 'free', (
+            "DB tier was silently overwritten during the request — a hook is "
+            "writing tier behind the user's back"
+        )
+    finally:
+        _set_user_tier(2, original)
+
+
+def test_bug001_p15_elite_string_absent_across_surfaces_when_tier_free(client):
+    """
+    P15 absence test for BUG-001-REOPENED.
+
+    Across every authenticated page route, the literal string 'ELITE' MUST
+    NOT appear in the rendered HTML when DB tier='free' for the logged-in
+    user. This asserts the SILENCE — the badge should never fabricate a
+    higher tier than the DB indicates, on any surface, regardless of which
+    template renders the nav.
+
+    Catches: a fix that patches one render path but leaves another
+             (e.g. fixes /screener but a stale value still leaks via /watchlist
+             or /backtest), or a future regression that re-introduces a
+             tier override anywhere in the request lifecycle.
+    Ignores: legitimate 'Elite' / 'elite' lowercase appearances in pricing
+             copy or tier comparison docs (this test only forbids the
+             uppercase badge form 'ELITE').
+    """
+    original = _get_user_tier(2)
+    try:
+        _set_user_tier(2, 'free')
+        for path in PAGE_ROUTES:
+            resp = client.get(path)
+            assert resp.status_code == 200, f"{path} returned {resp.status_code}"
+            body = resp.data.decode('utf-8')
+            assert 'ELITE' not in body, (
+                f"{path} rendered 'ELITE' badge despite DB tier='free' — "
+                f"tier display is not reading live DB on this surface"
+            )
+        # And the DB must still read 'free' after touching every page
+        assert _get_user_tier(2) == 'free', (
+            "After rendering all PAGE_ROUTES, DB tier was silently mutated — "
+            "some request handler is writing tier behind the user's back"
+        )
+    finally:
+        _set_user_tier(2, original)
 
 
 def test_api_session_expired_returns_structured_error(flask_app):
