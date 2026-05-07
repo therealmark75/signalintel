@@ -92,10 +92,7 @@ window.WlPicker = (function(){
         // 0 watchlists → auto-create 'My Watchlist' and add
         if (!wls.length) { _doCreate('My Watchlist', true); return; }
 
-        // 1 watchlist → direct toggle, no picker
-        if (wls.length === 1) { _doToggle(wls[0].id, wls[0].contains_ticker, wls[0].name); return; }
-
-        // 2+ watchlists → show picker
+        // Always show picker (regardless of watchlist count)
         _render();
         _pos(el);
         _drop().style.display = 'block';
