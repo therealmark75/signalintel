@@ -1,5 +1,5 @@
 # main.py - Phase 1 + Phase 2
-import sys, time, logging, argparse
+import sys, time, logging, argparse, signal
 from datetime import datetime, timezone
 from pathlib import Path
 from apscheduler.schedulers.blocking import BlockingScheduler
@@ -641,10 +641,23 @@ def main():
             logger.info(f"  {job.name}")
         logger.info("Scheduler running. Press Ctrl+C to stop.")
 
+        def _handle_shutdown_signal(signum, frame):
+            signal_name = signal.Signals(signum).name
+            logger.info(f"Received {signal_name}, shutting down scheduler gracefully...")
+            # wait=True: APScheduler stops accepting new jobs and waits
+            # for currently-running jobs to complete before returning.
+            scheduler.shutdown(wait=True)
+            logger.info("Scheduler shutdown complete.")
+
+        signal.signal(signal.SIGTERM, _handle_shutdown_signal)
+        signal.signal(signal.SIGINT, _handle_shutdown_signal)
+
         try:
             scheduler.start()
         except (KeyboardInterrupt, SystemExit):
-            logger.info("Scheduler stopped.")
+            pass  # signal handler already logged
+        finally:
+            logger.info("Scheduler exited.")
 
 if __name__ == "__main__":
     main()
