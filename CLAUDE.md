@@ -14,7 +14,7 @@ SignalIntel is a stock signal intelligence web application. Currently used as a 
 - **Port:** 5001
 - **Virtual environment:** `~/Documents/trading-system/venv`
 - **Activate venv:** `source ~/Documents/trading-system/venv/bin/activate`
-- **Database:** `data/signalintel.db` (SQLite)
+- **Database:** `data/trading_system.db` (SQLite)
 - **Run app:** `python web/app.py`
 - **Run scheduler:** `python main.py`
 
@@ -37,7 +37,7 @@ trading-system/
 ├── config/
 │   └── settings.py                  # Constants and configuration (NEWS_SCRAPE_TIMES etc.)
 └── data/
-    └── signalintel.db               # SQLite database
+    └── trading_system.db            # SQLite database
 ```
 
 ## Tech Stack
