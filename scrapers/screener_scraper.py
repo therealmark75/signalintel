@@ -73,7 +73,6 @@ def _normalise_technical(df):
         if not t: continue
         result[t] = {
             "rsi_14":       _to_float(row.get("RSI")),
-            "rel_volume":   _to_float(row.get("Rel Volume")),
             "avg_volume":   _to_int(row.get("Avg Volume")),
             "sma_50_pct":   _pct_field(row.get("SMA50")),
             "sma_200_pct":  _pct_field(row.get("SMA200")),
@@ -87,7 +86,12 @@ def _fetch_with_retry(view_obj, filters_dict, retries=3, delay=5.0, columns=None
     for attempt in range(retries):
         try:
             view_obj.set_filter(filters_dict=filters_dict)
-            df = view_obj.screener_view(columns=columns) if columns else view_obj.screener_view()
+            # Custom.screener_view defaults limit=-1 (one page); pass explicit limit to
+            # fetch all pages when column overrides are in use.
+            if columns:
+                df = view_obj.screener_view(columns=columns, limit=100000)
+            else:
+                df = view_obj.screener_view()
             return df
         except Exception as e:
             logger.warning(f"Attempt {attempt+1}/{retries} failed: {e}")
@@ -115,10 +119,10 @@ def scrape_sector(sector, delay=2.5):
     technical = _normalise_technical(tech_df) if tech_df is not None and not tech_df.empty else {}
     time.sleep(delay + random.uniform(0,1))
 
-    # Fetch analyst recom + insider/short data via custom view
-    # Columns: 0=Ticker, 26=Insider Own, 27=Insider Trans, 30=Float Short, 62=Recom
+    # Fetch analyst recom + insider/short + rel_volume via custom view
+    # Columns: 1=Ticker, 26=Insider Own, 27=Insider Trans, 30=Float Short, 62=Recom, 64=Rel Volume
     from finvizfinance.screener.custom import Custom
-    custom_df = _fetch_with_retry(Custom(), filters, columns=[0, 26, 27, 30, 62])
+    custom_df = _fetch_with_retry(Custom(), filters, columns=[1, 26, 27, 30, 62, 64])
     custom_data = {}
     if custom_df is not None and not custom_df.empty:
         for _, row in custom_df.iterrows():
@@ -128,7 +132,8 @@ def scrape_sector(sector, delay=2.5):
                     "analyst_recom":       _to_float(row.get("Recom")),
                     "insider_own_pct":     _pct_field(row.get("Insider Own")),
                     "insider_transactions": str(row.get("Insider Trans") or ""),
-                    "short_interest_pct":  _pct_field(row.get("Float Short")),
+                    "short_interest_pct":  _pct_field(row.get("Short Float")),
+                    "rel_volume":          _to_float(row.get("Rel Volume")),
                 }
     time.sleep(delay + random.uniform(0,1))
 
