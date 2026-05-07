@@ -230,7 +230,7 @@ Origin: BUG-001-REOPENED (7 May 2026). A "watchlist picker UI" commit included a
 
 ## Notes for Claude Code Sessions
 - Always activate the venv before running Python scripts
-- SQLite DB path is relative: `data/signalintel.db` from project root
+- SQLite DB path is relative: `data/trading_system.db` from project root
 - Flask runs on port 5001
 - When editing scrapers, be mindful of FinViz rate limits — add delays between requests
 - `rating_changes` table should be populated via `detect_rating_changes()` called after every signal run, not as a standalone job
