@@ -227,6 +227,7 @@ tr:hover td{background:rgba(0,212,255,0.03);cursor:pointer;}
             <thead>
                 <tr>
                     <th data-tip="Stock ticker symbol">TICKER<span class="sort-arrow" id="sa-ticker"></span></th>
+                    <th data-tip="Listing exchange: NASDAQ, NYSE, AMEX, OTC" onclick="setSort('exchange')">EXCHANGE<span class="sort-arrow" id="sa-exchange"></span></th>
                     <th data-tip="Company name" onclick="setSort('company')">COMPANY<span class="sort-arrow" id="sa-company"></span></th>
                     <th data-tip="Market sector classification" onclick="setSort('sector')">SECTOR<span class="sort-arrow" id="sa-sector"></span></th>
                     <th data-tip="Total market capitalisation. Micro <$300M, Small $300M-$2B, Mid $2-10B, Large >$10B" onclick="setSort('market_cap')">MKT CAP<span class="sort-arrow" id="sa-market_cap"></span></th>
@@ -251,7 +252,7 @@ tr:hover td{background:rgba(0,212,255,0.03);cursor:pointer;}
                 </tr>
             </thead>
             <tbody id="screener-tbody">
-                <tr class="loading-row"><td colspan="21">Loading screener data...</td></tr>
+                <tr class="loading-row"><td colspan="22">Loading screener data...</td></tr>
             </tbody>
         </table>
     </div>
@@ -341,17 +342,17 @@ async function load() {
 
     // Bug B fix: require at least one rating selected
     if (state.ratings.length === 0) {
-        tbody.innerHTML = '<tr class="loading-row"><td colspan="20" style="color:var(--warning)">Select at least one rating filter to show results.</td></tr>';
+        tbody.innerHTML = '<tr class="loading-row"><td colspan="21" style="color:var(--warning)">Select at least one rating filter to show results.</td></tr>';
         document.getElementById('result-count').textContent = '0 results';
         document.getElementById('pagination').innerHTML = '';
         return;
     }
 
-    tbody.innerHTML = '<tr class="loading-row"><td colspan="20">Loading...</td></tr>';
+    tbody.innerHTML = '<tr class="loading-row"><td colspan="21">Loading...</td></tr>';
 
     const data = await fetch('/api/screener?' + buildParams()).then(r => r.json()).catch(() => null);
     if (!data) {
-        tbody.innerHTML = '<tr class="loading-row"><td colspan="20">Error loading data.</td></tr>';
+        tbody.innerHTML = '<tr class="loading-row"><td colspan="21">Error loading data.</td></tr>';
         return;
     }
 
@@ -366,7 +367,7 @@ async function load() {
     }
 
     if (!data.rows.length) {
-        tbody.innerHTML = '<tr class="loading-row"><td colspan="20">No results match the current filters.</td></tr>';
+        tbody.innerHTML = '<tr class="loading-row"><td colspan="21">No results match the current filters.</td></tr>';
         renderPagination();
         return;
     }
@@ -385,6 +386,7 @@ async function load() {
         const siColor = si > 20 ? 'var(--danger)' : si > 10 ? 'var(--warning)' : 'inherit';
         return `<tr onclick="window.location='/ticker/${r.ticker}'">
             <td class="ticker-cell">${r.ticker}</td>
+            <td class="mono" style="color:var(--muted);font-size:11px">${r.exchange || '-'}</td>
             <td class="company-cell">${r.company || '-'}</td>
             <td class="mono" style="color:var(--muted);font-size:11px">${r.sector || '-'}</td>
             <td class="mono">${fmtMC(r.market_cap)}</td>

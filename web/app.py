@@ -1121,7 +1121,7 @@ def api_screener():
         "pe_ratio", "rsi_14", "rating", "high_52w_pct", "low_52w_pct",
         "momentum_score", "quality_score", "insider_score",
         "short_interest_pct", "insider_transactions", "beta",
-        "rel_volume", "avg_volume", "sector_strength_score",
+        "rel_volume", "avg_volume", "sector_strength_score", "exchange",
     }
     if sort_col not in allowed_sorts:
         sort_col = "composite_score"
@@ -1231,7 +1231,7 @@ def api_screener():
                 "pe_ratio","rsi_14","high_52w_pct","low_52w_pct",
                 "short_interest_pct","insider_transactions","beta",
                 "eps_growth_this_yr","eps_growth_next_yr",
-                "rel_volume","avg_volume","exchange"}
+                "rel_volume","avg_volume"}
     _sig_cols = {"rating","composite_score","target_price","target_upside",
                  "momentum_score","quality_score","insider_score","reversion_score",
                  "sector_strength_score"}
@@ -1244,6 +1244,8 @@ def api_screener():
             order_sql = f"ss.{sort_col} {sort_dir.upper()} NULLS LAST"
     elif sort_col in _sig_cols:
         order_sql = f"sig.{sort_col} {sort_dir.upper()} NULLS LAST"
+    elif sort_col == "exchange":
+        order_sql = f"tm.exchange {sort_dir.upper()} NULLS LAST"
     else:
         order_sql = f"sig.composite_score DESC NULLS LAST"
     offset    = (page - 1) * per_page
@@ -1274,13 +1276,14 @@ def api_screener():
                ss.high_52w_pct, ss.low_52w_pct,
                ss.eps_growth_this_yr, ss.eps_growth_next_yr,
                ss.short_interest_pct, ss.insider_transactions, ss.beta,
-               ss.rel_volume, ss.avg_volume, ss.exchange,
+               ss.rel_volume, ss.avg_volume, tm.exchange,
                sig.rating, sig.composite_score,
                sig.momentum_score, sig.quality_score, sig.insider_score,
                sig.reversion_score, sig.target_price, sig.target_upside,
                sig.sector_strength_score
         FROM ({latest_ss}) ss
         LEFT JOIN ({sig_subq}) sig ON ss.ticker = sig.ticker
+        LEFT JOIN ticker_metadata tm ON ss.ticker = tm.ticker
         {extra_joins_sql}
         WHERE {where_sql}
         ORDER BY {order_sql}

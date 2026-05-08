@@ -296,6 +296,7 @@ tr:hover td{background:rgba(245,158,11,0.025);cursor:pointer;}
                 <thead>
                     <tr>
                         <th onclick="sortBy('ticker')">Ticker<span class="arr" id="arr-ticker"></span></th>
+                        <th onclick="sortBy('exchange')">Exch<span class="arr" id="arr-exchange"></span></th>
                         <th onclick="sortBy('company')">Company<span class="arr" id="arr-company"></span></th>
                         <th onclick="sortBy('sector')">Sector<span class="arr" id="arr-sector"></span></th>
                         <th onclick="sortBy('price')">Price<span class="arr" id="arr-price"></span></th>
@@ -311,7 +312,7 @@ tr:hover td{background:rgba(245,158,11,0.025);cursor:pointer;}
                     </tr>
                 </thead>
                 <tbody id="results-body">
-                    <tr class="loading-row"><td colspan="13">Loading penny stocks…</td></tr>
+                    <tr class="loading-row"><td colspan="14">Loading penny stocks…</td></tr>
                 </tbody>
             </table>
         </div>
@@ -513,7 +514,7 @@ function updateSortArrows() {
 // ── API fetch ─────────────────────────────────────
 async function load() {
     const body = document.getElementById('results-body');
-    body.innerHTML = '<tr class="loading-row"><td colspan="13">Loading…</td></tr>';
+    body.innerHTML = '<tr class="loading-row"><td colspan="14">Loading…</td></tr>';
     document.getElementById('result-count').textContent = 'Loading…';
 
     const p = new URLSearchParams();
@@ -535,7 +536,7 @@ async function load() {
         .catch(() => null);
 
     if (!data) {
-        body.innerHTML = '<tr class="loading-row"><td colspan="13">Failed to load. Refresh to retry.</td></tr>';
+        body.innerHTML = '<tr class="loading-row"><td colspan="14">Failed to load. Refresh to retry.</td></tr>';
         return;
     }
 
@@ -621,7 +622,7 @@ function fmtUpside(v) {
 function renderTable(rows) {
     const body = document.getElementById('results-body');
     if (!rows.length) {
-        body.innerHTML = '<tr><td colspan="13" style="text-align:center;padding:40px;color:var(--muted);font-family:var(--mono);font-size:11px;">No penny stocks match these filters.</td></tr>';
+        body.innerHTML = '<tr><td colspan="14" style="text-align:center;padding:40px;color:var(--muted);font-family:var(--mono);font-size:11px;">No penny stocks match these filters.</td></tr>';
         return;
     }
     body.innerHTML = rows.map(r => {
@@ -629,6 +630,7 @@ function renderTable(rows) {
         return `
         <tr onclick="window.location='/ticker/${r.ticker}?from=penny_screener'">
             <td class="tc-ticker">${r.ticker}</td>
+            <td class="tc-sector">${r.exchange || '—'}</td>
             <td class="tc-company">${r.company || '—'}</td>
             <td class="tc-sector">${r.sector || '—'}</td>
             <td>${fmtPrice(r.price)}</td>
