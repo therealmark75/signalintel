@@ -53,6 +53,8 @@ def job_scrape_screener(sectors=None):
         duration = time.time() - start
         log_run(DATABASE_PATH, "screener_scrape", "SUCCESS", total, duration_s=duration)
         prune_old_snapshots(DATABASE_PATH)
+        logger.info("Chained: invoking job_generate_signals after scrape completion")
+        job_generate_signals()
         logger.info(f"JOB DONE: Screener | {total} rows | {duration:.1f}s")
     except Exception as e:
         logger.error(f"Screener FAILED: {e}", exc_info=True)
@@ -501,16 +503,6 @@ def main():
                 job_scrape_insiders,
                 CronTrigger(hour=int(h), minute=int(m), day_of_week="mon-fri"),
                 id=f"insider_{t}", name=f"Insider {t}",
-            )
-
-        for t in SCREENER_SCRAPE_TIMES:
-            h, m = t.split(":")
-            m2   = (int(m) + 30) % 60
-            h2   = int(h) + (1 if int(m) + 30 >= 60 else 0)
-            scheduler.add_job(
-                job_generate_signals,
-                CronTrigger(hour=h2, minute=m2, day_of_week="mon-fri"),
-                id=f"signals_{t}", name=f"Signals {h2:02d}:{m2:02d}",
             )
 
         for t in SCREENER_SCRAPE_TIMES:
