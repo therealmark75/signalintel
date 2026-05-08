@@ -1,5 +1,5 @@
 SIGNALINTEL — SESSION HANDOFF
-End of Fri 8 May 2026, ~13:30 BST → Pickup later today or tomorrow
+End of Fri 8 May 2026, ~23:15 BST → Pickup next session
 
 ==========================================================
 WHO YOU ARE
@@ -15,271 +15,162 @@ the product, tech stack, communication preferences, and process
 invariants.
 
 ==========================================================
-SESSION SUMMARY (THIS CHAT, MORNING + EARLY AFTERNOON)
+SESSION SUMMARY (THIS CHAT)
 ==========================================================
 
-Mark woke up to verify last night's bulk exchange backfill. The
-backfill completed cleanly (10:06h runtime, 11,109 tickers updated,
-0 NULL_RESULTs, 55 errors all delisted 404s). But verification 
-surfaced two architectural problems that stacked:
+Two tracks completed this session:
 
-1. Exchange data was being stored on screener_snapshots (per-snapshot
-   table). Every scheduler scrape created new rows with exchange=NULL,
-   superseding backfilled data. Ticker pages still showed "—" for
-   non-priority tickers despite 11,109 rows of metadata sitting in
-   the DB.
+TRACK 1 — Reversion scorer + UX (from previous session, committed
+earlier today):
+- score_mean_reversion: P5 NULL inputs now score neutral (50.0)
+  per-component rather than 0.0 penalty. All-NULL tickers score 50.0.
+- SCORING_ENGINE_VERSION bumped 0.11.0 → 0.12.0
+- Radar: Legal axis dropped (8 → 7 axes). Reversion null overlay
+  retained at index 3 (grey dashed indicator when reversion_score
+  is null).
+- Commits: e20f41c (scorer fix), 189e641 (version bump),
+  4064c8e (drop Legal from radar), ba02258 + 46a18bb (Legal UX
+  attempt + revert)
 
-2. The scheduler running in the GREEN terminal was started yesterday
-   ~16:00 BST, before any of yesterday's commits (Volume Confirmation,
-   rel_volume fix, config refactor) were on disk. It had been running
-   stale in-memory code for ~24 hours, invisible in logs.
+TRACK 2 — Legal rendering cleanup (this chat, four commits):
 
-Both diagnosed, both fixed. Plus discovered a third structural issue
-(scoring trigger fires mid-scrape) and fixed that too.
+1. ✅ 4064c8e — Drop Legal axis from radar (already listed above)
 
-ACCOMPLISHED (in chronological order):
+2. ✅ e6535fd — Scorecard Legal row redesigned
+   - .score-item Legal row now uses scraped_at as State 1/2
+     discriminator
+   - State 1 (no DB row, no scraped_at): "Not analysed" in grey
+   - State 2 (scraped, NONE level): "Clean" in green
+   - State 3 (scraped, non-NONE): risk_label in risk_color
 
-1. ✅ ticker_metadata table architectural fix (commit e83d8d6)
-   - New ticker_metadata table keyed on ticker (PK), exchange + 
-     timestamps
-   - Migration backfills from existing screener_snapshots rows
-   - api_screener route updated to LEFT JOIN ticker_metadata
-   - api_ticker route updated to return tm.exchange
-   - ticker.html template reads tm.exchange (not sc.exchange)
-   - screener_snapshots.exchange column left in place but no longer
-     written to (deprecation cleanup deferred)
-   - 11,122 ticker_metadata rows post-migration, all populated
-   - Verified: F (Ford, non-priority) renders NYSE on ticker page,
-     proving the architectural fix works for the population that
-     wasn't covered by yesterday's priority scrape
+3. ✅ 988b4b3 — Signal strip Legal bar fixed (combined C+D)
+   - lrIsNone changed from `!lr.risk_level || risk_level==='NONE'
+     || risk_label==='None'` to `lr.scraped_at && risk_level==='NONE'`
+   - lrDisplayLabel + lrDisplayColor variables added
+   - State 1: "Not analysed" in grey, no ✓, no penalty sub-row
+   - State 2: "Clean ✓" in green, no penalty sub-row
+   - State 3: risk_label in risk_color, penalty sub-row shown
+   - Penalty sub-row gated on `lr.scraped_at && !lrIsNone`
+     (was `!lrIsNone` alone — would have shown for State 1)
 
-2. ✅ Scheduler restart at 10:59 BST
-   - The 24-hour staleness was diagnosed by CC after Mark noticed
-     volume_score was uniformly 50.0 (P5 default) across all tickers
-   - Empirical proof: today's signal_scores rows stamped 0.9.0
-     (pre-refactor), confirming the scheduler was running
-     pre-yesterday code
-   - Restart picked up f84b552 (Volume), 0977594 (rel_volume), 
-     01e1e53 (config), e83d8d6 (ticker_metadata) commits
+4. No fifth commit — header ribbon Legal (line 511, .signal-scores
+   div) was already fixed by e6535fd (Part B). The "header ribbon"
+   and "scorecard" are the same rendering surface.
 
-3. ✅ Volume rendering on ticker page (verified post-restart)
-   - Reload of NVDA/F/SPY ticker pages showed Volume populated
-     correctly (was rendering "-" before restart)
+DESIGN DECISION CAPTURED:
+- Header ribbon shows "Clean" (no ✓); signal strip shows "Clean ✓"
+- Asymmetry is intentional: header ribbon is compact summary,
+  signal strip is detail surface. Mirrors State 3 pattern where
+  header shows "Criminal / DOJ" alone; signal strip adds penalty
+  sub-row. Position B confirmed by Mark.
 
-4. ✅ EXCHANGE column on main + penny screeners (commit before
-   chaining commit; HEAD~2 from current)
-   - api_screener LEFT JOIN ticker_metadata
-   - Position 2 (after TICKER) per Mark's choice
-   - Sort wired (header click → ASC/DESC, sort arrow updates)
-   - Filter deferred to separate session
-   - Both web/templates/screener.html and 
-     web/templates/penny_screener.html updated
-   - Verified: AAPL→NASDAQ, F→NYSE, KO→NYSE, NVDA→NASDAQ, SPY→NYSE
-     populating correctly in browser
+EMPIRICAL VERIFICATION (browser walks by Mark):
+- Radar: 7 axes, no Legal label on AAPL, MKSI, RGS, DAL, EME ✓
+- Scorecard Legal: AAPL "Clean" green, MKSI "Criminal / DOJ" dark
+  red, RGS "Not analysed" grey ✓
+- Signal strip: AAPL "Clean ✓" green, DAL "Criminal / DOJ" dark red
+  (DAL scraped today at 22:40 BST, CRIMINAL), AA "Not analysed" grey ✓
+- Header ribbon (line 511): same fix as scorecard, confirmed correct ✓
 
-5. ✅ Job chaining: scoring chained to scrape completion 
-   (commit HEAD~1)
-   - Removed +30-min cron registrations for job_generate_signals
-   - Added direct call to job_generate_signals() at end of 
-     job_scrape_screener's success path, inside the existing try
-     block, after prune_old_snapshots, before "JOB DONE" log
-   - Startup DateTrigger registration (5 sec post-boot, fires once)
-     preserved as fresh-data scoring path on scheduler start
-   - Two-line addition + nine-line deletion
-   - Standalone test with mocked scrape verified the chain produces
-     correct log sequence
-   - Root cause this fixes: scrape takes ~52 minutes end-to-end
-     (sectors scraped sequentially, DB write at end), so the +30 min
-     cron was firing scoring against the previous batch's data, not
-     the current batch
-
-6. ✅ Scheduler startup banner logging (commit HEAD)
-   - New _log_startup_banner() function in main.py
-   - Logs SCORING_ENGINE_VERSION, git HEAD short hash, ISO 8601
-     process start timestamp
-   - Subprocess call to git rev-parse --short HEAD with try/except
-     fallback to "unknown"
-   - Called as first statement in scheduler command branch, before
-     any job registration
-   - Boot-only logging (no per-job lines) per the design rationale
-     that a process running stale code was born stale and cannot
-     become stale mid-run
-   - Verified: scheduler restart at 13:25 BST produced banner
-     showing 0.11.0 on 1ea7cf6 in logs/trading_system.log
-
-PUSHED TO origin/main (in order):
-- e83d8d6 — Introduce ticker_metadata table; migrate exchange off
-  screener_snapshots
-- (commit hash) — Add EXCHANGE column to main and penny screeners
-- 1d753c5 — Chain job_generate_signals to scrape completion
-- 1ea7cf6 — Add scheduler startup banner logging version and git HEAD
+NOTE ON LEGAL SCRAPER ACTIVITY:
+The EDGAR scraper has been running live during this session.
+Several tickers that were State 1 earlier today (KSPI, SCZM, DAL)
+now have legal_risk rows. AA confirmed State 1 as of session close.
+The State 1 population is shrinking as the scraper covers more
+tickers.
 
 ==========================================================
-EMPIRICAL VERIFICATION (END OF SESSION)
+INFLIGHT
 ==========================================================
 
-Three architectural fixes shipped today, all empirically verified:
-
-1. ticker_metadata: F (Ford) renders NYSE on ticker page, was "—"
-   yesterday. Architectural fix delivered.
-
-2. Causal chaining: scheduler restart's startup signal generation
-   ran at 13:25:33, scored against the 12:00 BST scrape's data
-   (rel_volume populated correctly post-rel_volume-fix), produced
-   diverse volume_score values.
-
-3. Scheduler banner: grep "Scheduler boot" logs/trading_system.log
-   returns the banner with SCORING_ENGINE_VERSION=0.11.0, git
-   HEAD=1ea7cf6.
-
-Volume Confirmation (component 8) producing real production scores
-for the first time:
-- avg volume_score = 48.5 (not 50.0)
-- min = 20.0 (full "confirmed down" rubric floor)
-- max = 80.0 (full "confirmed up" rubric ceiling)
-- null_vs = 0 across 10,773 scored tickers
-
-This is the first time in the project's history that scheduled
-production scoring has produced diverse Volume Confirmation values.
-Yesterday's "diverse 23.8-78.6" was a manual run during the session,
-not the scheduler's behaviour.
-
-==========================================================
-INFLIGHT (carried over to next session)
-==========================================================
-
-NONE. Today's session closed cleanly with all four commits pushed,
-scheduler restarted, banner verified, volume scoring verified.
-
-Next session can pick from the queue below in any order.
+NONE. Legal rendering session closed cleanly. Four commits (three
+meaningful + one revert) pushed to origin/main. 181 tests passing.
 
 ==========================================================
 QUEUED SESSIONS (in priority order)
 ==========================================================
 
-1. EXCHANGE filter UI on screener (small, 30-45 min)
+1. REVERSION 0.0 prevalence investigation (urgent, pre-launch)
+   v0.11.0 data showed 33% of rows scoring 0.0 on Reversion.
+   v0.12.0 fix deployed but no v0.12.0 scoring rows yet (scheduler
+   hasn't completed a full run with the new version). First v0.12.0
+   scoring run will confirm the fix is producing diverse values.
+   Verify: SELECT MIN(reversion_score), MAX(reversion_score),
+   AVG(reversion_score), COUNT(*) FROM signal_scores WHERE
+   scoring_version='0.12.0';
+
+2. EXCHANGE filter UI on screener (small, 30-45 min)
    Sort already shipped; filter is a separate UI decision (dropdown,
-   text input, multi-select). UX decisions before implementation.
+   text input, multi-select). UX decision before implementation.
 
-2. Trailing-cron cleanup (small, 30-45 min)
-   job_compute_target_prices (+33 min) and job_recom_priority 
-   (+35 min) cron jobs duplicate work that job_generate_signals now
-   does inline via the chained call. Both can be removed.
+3. Trailing-cron cleanup (small, 30-45 min)
+   job_compute_target_prices (+33 min) and job_recom_priority
+   (+35 min) cron jobs duplicate work that job_generate_signals
+   now does inline via chained call. Both can be removed.
 
-3. REVERSION 0.0 prevalence investigation (urgent, pre-launch)
-   33% of v0.11.0 rows score 0.0 on Reversion (P5 violation or
-   genuine domain output, needs diagnosis). Reversion has weight
-   0.10, so the difference between 0.0 and P5-correct 50.0 is
-   ~5 composite points across a third of the universe.
-
-4. LEGAL NULL UX decision (small, pre-launch)
-   With 99.7% of tickers having NULL legal data, the radar plots
-   Legal at axis-100 ("clean") for nearly every ticker. False
-   confidence. Pick one of: leave at 100, render at 50 (P5-strict),
-   visual distinction (greyed/dashed). Decision before launch.
-
-5. Yahoo Finance pipeline + components 9-16 (FRESH CHAT)
+4. Yahoo Finance pipeline + components 9-16 (FRESH CHAT)
    Mark explicitly requested fresh chat for context cleanliness.
    4-6 hours for pipeline alone before any of components 9-16 are
    written.
 
-6. Component rendering refactor (post-Yahoo, pre-launch)
+5. Component rendering refactor (post-Yahoo, pre-launch)
    Convert hardcoded 8-component rendering on ticker page (radar,
    scorecard, top strip) to array-driven before adding components
    9-16. Natural batch boundary.
 
-7. Scraper substrate audit (post-Yahoo, 90-min hard cap)
-   Inventory only, no fixes. Eight scraper-layer issues surfaced in
-   the last 48 hours. Document the debt before deciding fix order.
+6. Scraper substrate audit (post-Yahoo, 90-min hard cap)
+   Inventory only, no fixes. Eight scraper-layer issues surfaced
+   in the last 48 hours. Document the debt before deciding fix order.
 
 ==========================================================
 KEY ARCHITECTURAL FACTS LEARNED THIS SESSION
 ==========================================================
 
-- screener_snapshots.exchange was 100% NULL across 903,037 historical
-  rows. Backfill last night populated it. This morning's architectural
-  fix moved exchange to a dedicated ticker_metadata table (write-once,
-  read-forever pattern).
+- The "header ribbon" (COMPOSITE SCORE + component strip) and the
+  "scorecard" (.signal-scores div) are the same rendering surface.
+  Line 511 in ticker.html is the Legal element for both. There is
+  no separate header ribbon code path.
 
-- Long-lived scheduler processes silently run stale in-memory code.
-  Today's banner logging makes this visible going forward. The class
-  of bug was previously invisible.
+- legal_risk.scraped_at is the correct State 1/2 discriminator.
+  The API always returns a non-null object; the fallback dict for
+  no-row tickers has no scraped_at field. Risk_level alone cannot
+  discriminate (both State 1 and State 2 resolve to NONE). The
+  string "None" stored in risk_label is the scraper's output for
+  verified-clean tickers, not Python None.
 
-- The +30-minute scoring offset was structurally wrong (scrape takes
-  ~52 minutes end-to-end). Causal chaining replaces time-based
-  triggering, so scoring fires when scrape data is actually available.
+- The EDGAR scraper is actively running. State 1 population is
+  shrinking. Tickers assumed State 1 at query time may be State 2
+  or 3 by browser walk time. Always re-verify with a live DB query.
 
-- Volume Confirmation has been producing real scheduled production
-  scores only since today's scheduler restart at 10:59 BST. Yesterday's
-  "diverse values 23.8-78.6" was a one-off manual test run, not the
-  scheduler's behaviour. PROJECT_CONTEXT updated to reflect.
-
-- The 12:00 BST scrape's data shows rel_volume now populating from
-  the Custom view fix (post-restart scheduler), confirming yesterday's
-  rel_volume fix is in production for the first time today.
-
-==========================================================
-PROCESS LESSONS CAPTURED THIS SESSION
-==========================================================
-
-1. CC's verification gate predictions ("renders after server restart")
-   are not the same as verifications ("here is the rendered page").
-   This morning's Volume regression was caught by Mark's manual
-   browser walk, not by CC's gate output. Going forward, gate output
-   that says "will render after restart" is incomplete; the empirical
-   walk is required before commit.
-
-2. The runtime-code drift problem is real and hits invisibly. Today
-   it surfaced twice in different forms (volume_score=50.0 from
-   stale scoring engine, then volume_score=50.0 from stale scrape
-   substrate). Both were the same root cause: long-lived scheduler
-   running pre-commit code. Mitigation now shipped: startup banner.
-
-3. CC's "single 404, error handling working" pattern (twice today)
-   is a soft drift from showing empirical evidence (the actual log
-   line) to summarising it. P16 hedge. Worth naming when it happens.
-
-4. CC offered a carry-forward fix as the obvious solution to the
-   exchange-NULL-on-every-snapshot problem. The carry-forward was
-   the patch on a patch. The architectural fix (ticker_metadata) is
-   the right answer. Devil's advocate framing surfaced this; pure
-   "ship the fast fix" mode would have missed it.
-
-5. The Phase 1/Phase 2 split pattern continues to be load-bearing.
-   Five Phase 1 diagnostics today (exchange field corrections,
-   ticker_metadata, screener column, volume_score=50.0, scheduler
-   logging, job chaining), all surfaced material findings before
-   Phase 2 implementation. The pattern is now proven across ten+
-   sessions.
+- ✓ suffix on "Clean" is signal-strip-only by design. Header ribbon
+  is compact summary; signal strip is detail surface. This asymmetry
+  is intentional and confirmed.
 
 ==========================================================
 CURRENT WORKSPACE STATE
 ==========================================================
 
 Tests: 181 passing
-Branch: main, all today's code work pushed to origin
-HEAD: 1ea7cf6 (Add scheduler startup banner logging)
-SCORING_ENGINE_VERSION: 0.11.0 (in config/constants.py, in git)
+Branch: main, all commits pushed to origin
+HEAD: 988b4b3 (Fix signal strip Legal rendering)
+SCORING_ENGINE_VERSION: 0.12.0
 
 Web server: running on port 5001 (RED terminal)
-Scheduler: restarted at 13:25 BST (GREEN terminal), PID rotated, banner
-  visible in logs/trading_system.log, scoring 11,184 tickers cleanly
-  on the chained startup run
+Scheduler: running (started ~13:25 BST), GREEN terminal
 markn DB tier: ELITE
-DB row counts: signal_scores has new v0.11.0 rows from this morning's
-  restart producing diverse volume_score values for the first time
+
+v0.12.0 signal_scores rows: 0 (scheduler has not yet completed
+  a full scoring run with the new version)
+legal_risk rows: growing (EDGAR scraper active)
 
 If new chat resumes:
 - git status (clean expected)
 - pytest --tb=no -q (181 expected)
-- ps aux | grep main.py (scheduler should be running, started 13:25 BST)
-- tail -7 logs/trading_system.log | head -7 (should show banner if 
-  scheduler hasn't restarted; if scheduler has restarted, banner 
-  will be at the top of the latest boot block)
-- sqlite3 data/trading_system.db "SELECT MIN(volume_score), 
-  MAX(volume_score), AVG(volume_score) FROM signal_scores WHERE 
-  scored_at >= datetime('now', '-2 hours');" (should show diverse
-  range, not 50.0 uniformly)
+- SELECT COUNT(*) FROM signal_scores WHERE scoring_version='0.12.0';
+  (should be >0 once scheduler has run)
+- SELECT MIN(reversion_score), MAX(reversion_score), AVG(reversion_score)
+  FROM signal_scores WHERE scoring_version='0.12.0';
+  (confirm diverse values, not 0.0 floor)
 
 ==========================================================
 END HANDOFF
