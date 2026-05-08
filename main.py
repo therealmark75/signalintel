@@ -1,5 +1,5 @@
 # main.py - Phase 1 + Phase 2
-import sys, time, logging, argparse, signal
+import sys, time, logging, argparse, signal, subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 from apscheduler.schedulers.blocking import BlockingScheduler
@@ -437,6 +437,24 @@ def job_daily_summary():
         logger.error(f"Daily summary FAILED: {e}")
 
 
+def _log_startup_banner():
+    try:
+        result = subprocess.run(
+            ['git', 'rev-parse', '--short', 'HEAD'],
+            capture_output=True, text=True, check=False,
+        )
+        git_head = result.stdout.strip() if result.returncode == 0 else "unknown"
+    except FileNotFoundError:
+        git_head = "unknown"
+    started_at = datetime.now().isoformat(timespec='seconds')
+    logger.info("=" * 60)
+    logger.info("Scheduler boot")
+    logger.info(f"  SCORING_ENGINE_VERSION : {SCORING_ENGINE_VERSION}")
+    logger.info(f"  git HEAD               : {git_head}")
+    logger.info(f"  process started at     : {started_at}")
+    logger.info("=" * 60)
+
+
 def main():
     parser = argparse.ArgumentParser(description="Trading System Phase 1+2")
     parser.add_argument("command", choices=["run-once", "signals", "news", "scheduler", "report"])
@@ -470,6 +488,7 @@ def main():
         return
 
     if args.command == "scheduler":
+        _log_startup_banner()
         from apscheduler.executors.pool import ThreadPoolExecutor
         from apscheduler.jobstores.memory import MemoryJobStore
 
