@@ -224,6 +224,8 @@ def score_mean_reversion(row: dict) -> float:
         elif rsi < 35:    score += 20
         elif rsi < 40:    score += 10
         else:             score += 0   # not oversold
+    else:
+        score += 20  # P5: NULL input → neutral contribution
 
     # 52-week low proximity (max +35 pts)
     low_52w = row.get("low_52w_pct")
@@ -233,6 +235,8 @@ def score_mean_reversion(row: dict) -> float:
         elif low_52w < 10: score += 25
         elif low_52w < 20: score += 12
         elif low_52w < 30: score += 5
+    else:
+        score += 17.5  # P5: NULL input → neutral contribution
 
     # Below 50-day SMA (confirms pullback) max +25 pts
     sma50 = row.get("sma_50_pct")
@@ -240,6 +244,8 @@ def score_mean_reversion(row: dict) -> float:
         if sma50 < -10:   score += 25
         elif sma50 < -5:  score += 15
         elif sma50 < 0:   score += 8
+    else:
+        score += 12.5  # P5: NULL input → neutral contribution
 
     return _clamp(score)
 
