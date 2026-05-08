@@ -275,13 +275,26 @@ def scrape_analyst_recom_priority(db_path):
     if results:
         conn = get_connection(db_path)
         cur = conn.cursor()
+        now = __import__('datetime').datetime.utcnow().isoformat()
         for ticker, row in results.items():
-            set_clause = ", ".join(f"{k} = ?" for k in row)
-            vals = list(row.values()) + [ticker, ticker]
-            cur.execute(f"""UPDATE screener_snapshots SET {set_clause}
-                           WHERE ticker = ? AND scraped_at = (
-                               SELECT MAX(scraped_at) FROM screener_snapshots WHERE ticker = ?)""",
-                        vals)
+            # Exchange is metadata — write to ticker_metadata, not screener_snapshots.
+            exch = row.pop('exchange', None)
+            if exch:
+                cur.execute("""
+                    INSERT INTO ticker_metadata (ticker, exchange, first_seen_at, updated_at)
+                    VALUES (?, ?, ?, ?)
+                    ON CONFLICT(ticker) DO UPDATE SET
+                        exchange   = excluded.exchange,
+                        updated_at = excluded.updated_at
+                """, (ticker, exch, now, now))
+            # Remaining fields still go to the latest screener_snapshots row.
+            if row:
+                set_clause = ", ".join(f"{k} = ?" for k in row)
+                vals = list(row.values()) + [ticker, ticker]
+                cur.execute(f"""UPDATE screener_snapshots SET {set_clause}
+                               WHERE ticker = ? AND scraped_at = (
+                                   SELECT MAX(scraped_at) FROM screener_snapshots WHERE ticker = ?)""",
+                            vals)
         conn.commit()
         conn.close()
         logger.info(f"  Priority scrape: updated {len(results)} tickers with short/insider/valuation data")

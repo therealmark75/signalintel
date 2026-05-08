@@ -1,9 +1,9 @@
 """
-One-off bulk backfill: populate screener_snapshots.exchange for all tickers
-whose latest snapshot row has exchange IS NULL.
+Bulk backfill: populate ticker_metadata.exchange for all tickers not yet present
+in ticker_metadata (or with NULL exchange there).
 
-Resume-safe: queries NULL rows fresh on every run, so kill/restart picks up
-where it left off. Idempotent: skips tickers that already have a value.
+Resume-safe: queries missing rows fresh on every run, so kill/restart picks up
+where it left off. Idempotent: skips tickers already in ticker_metadata.
 
 Run from project root:
     python scripts/backfill_exchange.py
@@ -67,32 +67,29 @@ signal.signal(signal.SIGTERM, _handle_signal)
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _get_null_exchange_tickers(conn):
+    # Tickers in screener_snapshots with no entry in ticker_metadata (or NULL exchange there).
     cur = conn.cursor()
     cur.execute("""
-        SELECT DISTINCT ticker
-        FROM screener_snapshots s1
-        WHERE exchange IS NULL
-          AND scraped_at = (
-              SELECT MAX(scraped_at)
-              FROM screener_snapshots s2
-              WHERE s2.ticker = s1.ticker
-          )
-        ORDER BY ticker
+        SELECT DISTINCT ss.ticker
+        FROM screener_snapshots ss
+        LEFT JOIN ticker_metadata tm ON ss.ticker = tm.ticker
+        WHERE tm.ticker IS NULL OR tm.exchange IS NULL
+        ORDER BY ss.ticker
     """)
     return [r[0] for r in cur.fetchall()]
 
 
 def _update_exchange(conn, ticker, exchange):
+    from datetime import datetime
+    now = datetime.utcnow().isoformat()
     cur = conn.cursor()
     cur.execute(
-        """UPDATE screener_snapshots
-              SET exchange = ?
-            WHERE ticker = ?
-              AND scraped_at = (
-                  SELECT MAX(scraped_at)
-                  FROM screener_snapshots
-                  WHERE ticker = ?)""",
-        (exchange, ticker, ticker),
+        """INSERT INTO ticker_metadata (ticker, exchange, first_seen_at, updated_at)
+           VALUES (?, ?, ?, ?)
+           ON CONFLICT(ticker) DO UPDATE SET
+               exchange   = excluded.exchange,
+               updated_at = excluded.updated_at""",
+        (ticker, exchange, now, now),
     )
     conn.commit()
 

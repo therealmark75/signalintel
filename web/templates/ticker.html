@@ -355,6 +355,7 @@ async function loadPage() {
     const data = await fetch(`/api/ticker/${TICKER}`).then(r=>r.json());
     const s  = data.signal     || {};
     const sc = data.screener   || {};
+    const tm = data.metadata   || {};
     const lr = data.legal_risk || {risk_label:'No data', risk_color:'#6b7280', penalty:0, risk_level:'NONE'};
 
     const TIER_LABELS = {
@@ -456,7 +457,7 @@ async function loadPage() {
                 ${sc.sector ? `<a href="/?tab=sectors" class="badge badge-link">${sc.sector}</a>` : ''}
                 ${sc.industry ? `<a href="/industry/${encodeURIComponent(sc.industry)}" class="badge badge-link">${sc.industry}</a>` : ''}
                     ${sc.country ? `<span class="badge">${(()=>{const flags={'USA':'🇺🇸','UK':'🇬🇧','Canada':'🇨🇦','Germany':'🇩🇪','Japan':'🇯🇵','China':'🇨🇳','Australia':'🇦🇺','France':'🇫🇷'};return (flags[sc.country]||'')+ ' '+sc.country;})()} </span>` : ''}
-                    <span class="badge">${sc.exchange || '—'}</span>
+                    <span class="badge">${tm.exchange || '—'}</span>
                 </div>
             </div>
             <div class="hero-right">

@@ -1313,6 +1313,10 @@ def api_ticker(ticker):
         ORDER BY scraped_at DESC LIMIT 1
     """, (ticker,))
 
+    metadata_row = db_query(
+        "SELECT * FROM ticker_metadata WHERE ticker = ?", (ticker,)
+    )
+
     signal = db_query("""
         SELECT * FROM signal_scores WHERE ticker = ?
         ORDER BY scored_at DESC LIMIT 1
@@ -1339,6 +1343,7 @@ def api_ticker(ticker):
     # Fair Value calculation (P/E vs sector average)
     sc = screener[0] if screener else None
     sc = dict(sc) if sc else {}
+    tm = dict(metadata_row[0]) if metadata_row else {}
     fair_value = None
     fv_discount = None
     fv_label = None
@@ -1465,6 +1470,7 @@ def api_ticker(ticker):
     return jsonify({
         "ticker":               ticker,
         "screener":             sc,
+        "metadata":             tm,
         "signal":               dict(signal[0]) if signal else {},
         "insiders":             insiders,
         "news":                 news,
@@ -2093,8 +2099,9 @@ def api_penny_hot():
             FROM screener_snapshots ss
             INNER JOIN ({lts_sq}) lts ON ss.ticker = lts.ticker AND ss.scraped_at = lts.max_ts
             LEFT JOIN ({sig_sq}) sig ON ss.ticker = sig.ticker
+            INNER JOIN ticker_metadata tm ON ss.ticker = tm.ticker
             WHERE ss.price > 0 AND ss.price < 5
-              AND ss.exchange = ?
+              AND tm.exchange = ?
               AND ss.change_pct IS NOT NULL
             ORDER BY ABS(ss.change_pct) DESC
             LIMIT 5
