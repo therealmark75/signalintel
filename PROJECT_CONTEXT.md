@@ -46,12 +46,10 @@ goes to market.
 - Likes Socratic questioning, constructive criticism, being pushed
   when vague. Acknowledges strengths specifically but pairs pushback
   with constructive alternatives.
-- Self-aware patterns to flag (his own admission):
-  - Tends to push fast, but is good at noticing when to rest
-  - "Tomorrow with fresh eyes" framing has been correct multiple times
-  - The "last 10% takes the last 10%" pattern is real
-- Mark has explicitly asked Athena to STOP suggesting session-end
-  pacing. He'll call it himself.
+- Mark has explicitly directed Athena to STOP suggesting session-end
+  pacing, breaks, "tomorrow with fresh eyes," or any timing/tiredness
+  flags. He drives pace and calls session-end himself. This overrides
+  any default tendencies.
 
 ---
 
@@ -92,33 +90,71 @@ user-facing only. Translator: `signals/signal_labels.py` via `tier_short()`.
 - Payments: Stripe (Phase 2)
 - Mobile: React Native (Phase 4)
 
-### Key Files (ask Mark before assuming structure has changed)
+KEY FILES (ask Mark before assuming structure has changed):
+- main.py — scheduler entry point. Includes _log_startup_banner()
+  function that logs SCORING_ENGINE_VERSION and git HEAD on every
+  scheduler boot (added 8 May 2026 to mitigate runtime-code drift).
+  job_scrape_screener now causally chains to job_generate_signals at
+  the end of its success path; the +30-min cron for scoring was
+  removed in the same commit.
+- web/app.py — Flask routes, login, current_user(), session management.
+  api_screener and api_ticker both LEFT JOIN ticker_metadata for
+  exchange data.
+- web/templates/ — Jinja2 HTML, including _nav.html, _watchlist_picker.html,
+  ticker.html (8-axis radar), screener.html (21 columns including
+  EXCHANGE), penny_screener.html (12 columns including EXCHANGE)
+- scrapers/ — FinViz, EDGAR, news scrapers
+  - scrapers/screener_scraper.py — FinViz screener (Overview, Financial,
+    Technical, Custom views; rel_volume sourced from Custom column 64).
+    _scrape_exchange(soup) wrapper uses href pattern search (f=exch_)
+    not link index, robust against future FinViz page structure changes.
+- signals/ — scorer, scanner, signal_labels modules
+  - signals/scorer.py — TITLE_WEIGHTS, _title_weight(), compute_composite()
+    (5-component weighted average + normalisation), score_all_tickers()
+- database/db.py — SQLite helpers
+- config/constants.py — TRACKED, all non-secret constants including
+  SCORING_ENGINE_VERSION, DATABASE_PATH, SECTORS, SCREENER_SCRAPE_TIMES,
+  NEWS_SCRAPE_TIMES, INSIDER_SCRAPE_TIMES, MIN_PRICE_FOR_SIGNAL,
+  ALERT_MIN_COMPOSITE_SCORE, REQUEST_DELAY_SECONDS, etc.
+- config/settings.py — GITIGNORED, three secrets only:
+  TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, FMP_API_KEY. Imports from
+  constants.py for any non-secret values it needs. Contains a wildcard
+  re-export of constants for backward compatibility with one-off
+  diagnostic scripts.
+- docs/scoring_invariants.md — process invariants (P1-P18)
+- docs/tier_matrix.md — canonical tier-feature mapping
+- scripts/backfill_default_watchlists.py — idempotent default-watchlist
+  migration
+- scripts/backfill_exchange.py — one-off bulk backfill (used 7 May 2026
+  to populate ticker_metadata.exchange for 11,109 tickers; idempotent,
+  resume-safe, can be re-run for new tickers)
+- scripts/migrate_ticker_metadata.py — one-shot migration (used 8 May
+  2026 to create ticker_metadata table and migrate exchange off
+  screener_snapshots; idempotent re-runnable)
+- data/trading_system.db — SQLite database (LIVE, ~315MB)
 
-- `main.py` — scheduler entry point
-- `web/app.py` — Flask routes, login, `current_user()`, session management
-- `web/templates/` — Jinja2 HTML, including `_nav.html`, `_watchlist_picker.html`
-- `scrapers/` — FinViz, EDGAR, news scrapers
-- `signals/` — scorer, scanner, `signal_labels` modules
-- `database/db.py` — SQLite helpers
-- `config/settings.py` — constants and feature flags
-- `config/tiers.py` — `USER_TIERS` definitions
-- `docs/scoring_invariants.md` — process invariants (P1-P17)
-- `docs/tier_matrix.md` — canonical tier-feature mapping
-- `scripts/backfill_default_watchlists.py` — idempotent default-watchlist migration
-- `data/trading_system.db` — SQLite database (LIVE, 311MB)
-- `data/signalintel.db` — STALE 52KB empty file, NOT in active use,
-  under investigation as of 7 May 2026
-
-### Key DB Tables
-
-- `screener_snapshots` (FinViz raw data)
-- `signal_scores` (computed component + composite scores, `scored_at` timestamp)
-- `insider_trades` (FinViz insider data)
-- `rating_changes` (history of when tickers move between rating tiers)
-- `top_signals_of_day`
-- `watchlists` (membership, ticker per row)
-- `watchlists_meta` (per-watchlist settings: name, alerts_enabled, is_default)
-- `users` (with tier column)
+KEY DB TABLES:
+- screener_snapshots (FinViz raw data; rel_volume populates correctly
+  from 7 May 2026 onward; pre-7-May-2026 rows have NULL rel_volume.
+  exchange column exists but is no longer written to as of 8 May 2026
+  — exchange now lives in ticker_metadata)
+- ticker_metadata (NEW 8 May 2026: ticker PK, exchange, first_seen_at,
+  updated_at; populated for 11,122+ tickers; written to by priority
+  scrape and bulk backfill, read by api_ticker and api_screener)
+- signal_scores (computed component + composite scores, scored_at timestamp)
+  - Component columns: momentum_score, quality_score, insider_score,
+    reversion_score, sector_strength_score, volume_score (added 7 May
+    2026; producing diverse production scores from 8 May 2026 13:25
+    BST onward — see "Volume Confirmation production history" note
+    below)
+  - Aggregate columns: composite_score, composite_score_raw,
+    sector_modifier_applied, scoring_version
+- insider_trades (FinViz insider data)
+- rating_changes (history of when tickers move between rating tiers)
+- top_signals_of_day
+- watchlists (membership, ticker per row)
+- watchlists_meta (per-watchlist settings: name, alerts_enabled, is_default)
+- users (with tier column)
 
 **Important time column note:** `signal_scores` time column is
 `scored_at`, NOT `snapshot_date`. People get this wrong, including past
@@ -126,72 +162,70 @@ CC sessions. Always `scored_at`.
 
 ---
 
-## COMPOSITE SCORE — THE 16-COMPONENT VISION
+COMPOSITE SCORE — THE 16-COMPONENT VISION
 
-The composite score aggregates multiple independent signal components.
-Currently 7 of 16 built. Each component scores 0-100 independently and
-contributes to composite via weighted aggregation.
+Built (8):
+1. Momentum         — price action, MAs, RSI
+2. Quality          — fundamentals
+3. Insider          — insider buying/selling
+4. Reversion        — mean reversion signals (33% of v0.11.0 rows
+                      score 0.0; pre-launch investigation needed —
+                      see followups)
+5. Legal            — SEC EDGAR penalty (currently 0.3% coverage,
+                      legal scraper has catch-up backlog)
+6. Value            — valuation metrics (NOT in compute_composite weights;
+                      applied via separate path)
+7. Sector Strength  — relative sector performance (NOT in
+                      compute_composite weights; applied as
+                      sector_modifier_applied)
+8. Volume Confirmation — four-tier RVOL × price-change scoring
+                       (climax/confirmed/mild/low conviction bands).
+                       Added 7 May 2026. Reads rel_volume from
+                       screener_snapshots Custom view column 64.
+                       FIRST SCHEDULED PRODUCTION RUN: 8 May 2026
+                       13:25 BST (post-scheduler-restart). Yesterday's
+                       "diverse 23.8-78.6" claim was a manual test run
+                       during the session, not scheduler behaviour.
 
-`SCORING_ENGINE_VERSION: 0.9.0` (in `config/settings.py`).
+Composite weighting (compute_composite):
+- 5 components contribute via weighted average: momentum (0.35),
+  quality (0.30), insider (0.25), reversion (0.10), volume (0.10).
+  Sum = 1.10, normalised by total_w to keep composite in 0-100 range.
+- Legal applies as a penalty modifier downstream
+- Sector strength applies as sector_modifier_applied downstream
+- Value's integration into composite is currently unclear; scoped
+  for review during Yahoo pipeline session
 
-**Bump policy:**
-- PATCH = bug fix without scoring change
-- MINOR = new component or weight change
-- MAJOR 0→1 = production launch freeze
-- MAJOR 1→2 = post-launch breaking changes
+SCORING_ENGINE_VERSION: 0.11.0 (in config/constants.py as of 7 May 2026,
+in version control for the first time).
 
-`signal_scores` and `rating_changes` both have `scoring_version` columns.
-Backtest page filters by version automatically.
+Bump policy: PATCH = bug fix without scoring change; MINOR = new
+component, weight change, OR substantive change to scoring substrate
+(e.g. a column going from NULL to real values across the population);
+MAJOR 0→1 = production launch freeze; MAJOR 1→2 = post-launch breaking
+changes. signal_scores and rating_changes both have scoring_version
+columns. Backtest page filters by version automatically.
 
-### Built (7)
-
-1. **Momentum** — price action, MAs, RSI
-2. **Quality** — fundamentals
-3. **Insider** — insider buying/selling
-4. **Reversion** — mean reversion signals
-5. **Legal** — SEC EDGAR penalty (currently 0.3% coverage, legal scraper
-   has catch-up backlog)
-6. **Value** — valuation metrics
-7. **Sector Strength** — relative sector performance
-
-### Next Up (8)
-
-8. **Volume Confirmation** — three-state RVOL+price scoring (FinViz data
-   already there, ~30 min)
-
-### Then (9-16, requires Yahoo Finance pipeline)
-
-9.  Short Squeeze — short interest + composite confluence
-10. Earnings Surprise — Yahoo Analysis
-11. Piotroski F-Score — Yahoo Financials
-12. Altman Z-Score — Yahoo Statistics + Balance Sheet
-13. Institutional Ownership — Yahoo Holders
-14. Analyst Momentum — Yahoo Analysis
-15. News Sentiment — Yahoo News + LLM classifier
-16. Options Flow — Yahoo Options (Elite tier only)
-
-**Yahoo pipeline** is a major infrastructure session that unlocks 9-16.
-11 new tables, sequential scraping (yfinance has thread-safety issues),
-rate-limited 1.5 req/sec, 1500/day budget, scheduled 02:00 ET.
-
-### Design Principle: Independence
-
-Each component reads its own raw data. Components do NOT depend on
-other components' computed outputs. This prevents bugs from cascading
-and prevents double-counting in the composite.
-
-### Price Filter
-
-`MIN_PRICE_FOR_SIGNAL = $1.00`. Sub-$1 tickers are excluded from new
-signals. Watchlist entries below threshold show "BELOW $1" badge.
-To raise threshold: change constant in `config/settings.py`, then run
-`scripts/purge_sub_threshold_rating_changes.py` to backfill historically.
+Version history:
+- 0.9.0: original 7-component build (98,108 stamped rows in DB)
+- 0.10.0: Volume Confirmation added but rel_volume was NULL universally
+  (no rows stamped under this version; existed only locally for hours
+  before being superseded)
+- 0.11.0: rel_volume fix landed; volume component producing real scores;
+  Custom view bugs (column index, limit, Short Float key) repaired
+  exposing analyst_recom/insider/short_interest as previously corrupt.
+  IMPORTANT: v0.11.0 rows scored before 8 May 2026 13:25 BST were
+  produced by a stale scheduler running pre-rel_volume-fix code, so
+  rel_volume was NULL on those scrapes and volume_score was uniformly
+  50.0 (P5 default). Only v0.11.0 rows from 8 May 2026 13:25 BST
+  onward have produced diverse Volume Confirmation scoring against
+  real rel_volume substrate.
 
 ---
 
 ## PROCESS INVARIANTS — DOCS/SCORING_INVARIANTS.MD
 
-Mark has codified 17 invariants from real failures. Always reference
+Mark has codified 18 invariants from real failures. Always reference
 these by ID when relevant.
 
 | ID  | Rule |
@@ -216,6 +250,65 @@ these by ID when relevant.
 | P15 | Tests articulate signal AND silence (assert what fires AND what doesn't) |
 | P16 | Audit table entries must cite specific test/grep/inspection and state empirical result. Hedge-words flag entries as unverified: "Theoretical", "Should", "Expected to", "By design", "No known issue", "Likely", "Probably". |
 | P17 | Audit entries describing a function's behaviour must enumerate the function's complete set of effects: reads, writes, mutations, side effects, external calls. Technically-true descriptions that conceal material behaviour are audit failures. Origin: BUG-001-REOPENED, where `current_user()` was reported as "always reads DB" while also issuing UPDATE on every call. |
+| P18 | Substantive scoring substrate changes require MINOR version bump even if the rubric and weights are unchanged. A column going from NULL to real values across the population, or a data source being repaired, materially changes the scoring output for the same logical methodology. Pre-change and post-change scores under the same version key are "permanently mis-stamped" (per the existing comment in config/constants.py). Origin: 7 May 2026, when rel_volume fix moved volume_score from a flat 50 (NULL substrate) to real values across the rubric, requiring a 0.10.0 → 0.11.0 bump even though only a scraper was fixed. |
+
+---
+
+HEDGE-WORD LIST (P16 ENFORCEMENT)
+
+Any of the following without empirical backing flags an audit
+entry as unverified and requires CC (or Mark, when reviewing CC
+output) to substantiate or retract:
+
+- "Theoretical" / "In theory" / "Theoretically"
+- "Should" / "Should work" / "Should be fine"
+- "Expected to" / "Expected behaviour"
+- "By design"
+- "No known issue"
+- "Likely" / "Probably" / "Most likely"
+- "Pretty sure" / "Fairly confident"
+- "Looks right" / "Seems correct"
+- "Renders after server restart" / "Will render correctly" — added
+  8 May 2026 after a Phase 2 gate predicted post-restart rendering
+  rather than empirically verifying it. Predictions are not verifications.
+- "Obviously" — this one especially; "obviously sensible" is the
+  exact phrasing CC has used to justify out-of-scope decisions.
+
+When these appear in CC's output, the next prompt should ask for
+empirical proof of the claim, not accept the hedge.
+
+---
+
+## RUNTIME-CODE DRIFT — A FIRST-CLASS FAILURE MODE
+
+Long-lived processes (the scheduler especially) load module code
+into memory at start time. New commits to disk do NOT deploy until
+the process restarts. This is invisible without explicit instrumentation.
+
+This failure mode bit the project twice in 24 hours (7-8 May 2026):
+- Yesterday's commits (Volume Confirmation, rel_volume fix, config
+  refactor) were on disk for ~24 hours but not running, because the
+  scheduler had been started before those commits landed. Symptom:
+  ticker pages showed Volume as "—" despite Volume Confirmation
+  being committed.
+- The morning's 08:00 BST scrape ran with pre-rel_volume-fix code
+  (because the scheduler was still stale), producing 11,177 rows
+  with rel_volume=NULL. Subsequent scoring runs (after 11:30 BST
+  scheduler restart) read those NULL rows and correctly returned
+  volume_score=50.0 for everything. Symptom: volume_score uniformly
+  50.0 across the entire scored universe.
+
+Mitigation shipped 8 May 2026:
+- main.py _log_startup_banner() logs SCORING_ENGINE_VERSION + git
+  HEAD short hash + ISO 8601 process start time on every scheduler
+  boot. Banner appears at the top of every restart's log block.
+- Going forward: any time the scheduler is restarted, the first
+  six log lines tell you what code is loaded. Drift becomes visible
+  in seconds, not after multi-hour diagnostic sessions.
+
+Lesson: scheduled processes need version logging on boot. Future
+long-lived processes (e.g., Yahoo pipeline workers) should follow
+the same pattern.
 
 ---
 
@@ -230,9 +323,10 @@ checks CC must satisfy before claiming complete. Every Mark-side
 verification must walk that gate, not skim it.
 
 **Common failure mode:** CC's audit table makes plausible-sounding claims
-that haven't been empirically tested. The 7 May tier-display backdoor
-was found because tightened P17-style enumeration forced CC to disclose
-writes alongside reads in `current_user()`.
+that haven't been empirically tested. Today's pattern: CC predicts
+post-restart behaviour ("renders after server restart") rather than
+verifying it. Predictions in gate output are not verifications. The
+empirical browser walk after server restart is required before commit.
 
 `CLAUDE.md` now has a "Scope Discipline" section that requires CC to
 not modify code outside the prompt's explicit scope. Tested working:
@@ -254,22 +348,39 @@ unless explicitly told to." Tested working.
 
 ### Phase 1 (active, pre-launch, system used by Mark only)
 
-- ✅ SEC EDGAR legal cards
-- ✅ Wire legal penalty into composite score
-- ✅ Multi-watchlist infrastructure with tier gating
-- ✅ Telegram alerts (watchlist-gated, per-watchlist toggle)
-- ✅ Backtesting system (`rating_changes` table, `/backtest` page)
-- ✅ Global ticker search with keyboard nav
-- ✅ Scoring engine versioning (0.9.0)
-- ✅ Default watchlist for all users (renameable, undeletable)
-- ✅ BUG-001-REOPENED: tier display backdoor in `current_user()` removed
-- [ ] Investigate `signalintel.db` (something is writing to the stale
-      file; next priority as of 7 May 2026)
-- [ ] SIGTERM handler for scheduler
-- [ ] Volume Confirmation (component 8)
-- [ ] Yahoo pipeline + components 9-16
-- [ ] Virtual portfolio with margin calls and bust mechanic
-- [ ] Email alerts via SendGrid
+✅ SEC EDGAR legal cards
+✅ Wire legal penalty into composite score
+✅ Multi-watchlist infrastructure with tier gating
+✅ Telegram alerts (watchlist-gated, per-watchlist toggle)
+✅ Backtesting system (rating_changes table, /backtest page)
+✅ Global ticker search with keyboard nav
+✅ Scoring engine versioning (now 0.11.0, in git for the first time)
+✅ Default watchlist for all users (renameable, undeletable)
+✅ BUG-001-REOPENED: tier display backdoor in current_user() removed
+✅ signalintel.db stale artifact removed and gitignored
+✅ SIGTERM/SIGINT graceful shutdown handler in main.py
+✅ Volume Confirmation (component 8) — first production scheduled
+   run on 8 May 2026 13:25 BST
+✅ rel_volume scraper fix (sourced from Custom view column 64)
+✅ Custom view collateral fixes (column index 0→1, limit param,
+   Short Float key) — repaired silently-broken analyst_recom,
+   insider_own_pct, insider_transactions, short_interest_pct
+✅ Config refactor: constants.py (tracked) + settings.py (secrets only)
+✅ Exchange/listing field on ticker pages (8 May 2026)
+✅ Bulk exchange backfill: 11,109 tickers populated overnight
+   7-8 May 2026
+✅ ticker_metadata table (8 May 2026): exchange moved off
+   screener_snapshots to dedicated metadata table; write-once
+   read-forever architecture
+✅ EXCHANGE column on main and penny screeners (8 May 2026)
+✅ Causal job chaining (8 May 2026): scoring chained to scrape
+   completion, replacing structurally-wrong +30-min cron offset
+✅ Scheduler startup banner (8 May 2026): logs SCORING_ENGINE_VERSION
+   + git HEAD on boot, mitigates runtime-code drift
+[ ] Yahoo Finance pipeline + components 9-16 (large infrastructure
+    session, deserves fresh chat)
+[ ] Virtual portfolio with margin calls and bust mechanic
+[ ] Email alerts via SendGrid
 
 ### Phase 2
 
@@ -277,7 +388,7 @@ unless explicitly told to." Tested working.
 - Earnings calendar
 - Short squeeze signals (high short interest + STRONG_BUY confluence)
 - Options flow (Unusual Whales)
-- Hexagon → N-axis radar refactor
+- Component rendering refactor (8-now array-driven before adding 9-16)
 - Pre-commit hook for diff review on auth-adjacent files (mechanical
   enforcement of Scope Discipline)
 
@@ -321,7 +432,7 @@ unless explicitly told to." Tested working.
 - Push back constructively when something seems off
 - Pair every critique with a better path forward
 - Ask "Why?" and "How do you know?" but also "What's working?"
-- Flag tiredness, scope creep, or rushed decisions
+- Flag scope creep or rushed decisions
 - Be willing to play devil's advocate (and label it when you do)
 - Use commas and brackets over em/en dashes
 - Match his energy: direct, slightly lyrical, occasional dry humour
@@ -335,8 +446,9 @@ unless explicitly told to." Tested working.
 - Use em-dashes (—), he reads them as AI tells. Use commas or brackets.
 - Pretend uncertainty when you're confident, or vice versa
 - Defer to him on technical decisions where you have a real opinion
-- Suggest "let's pick this up tomorrow" or pace the session for him.
-  He's explicitly asked you to stop doing this. He'll call it himself.
+- Suggest "let's pick this up tomorrow" or pace the session for him
+- Suggest breaks, ask if he's tired, flag long sessions, or push
+  back on timing. Mark calls session-end himself. This is non-negotiable.
 
 **When to push back hard:**
 - He wants to skip a verification step ("looks fine to me")
@@ -344,6 +456,224 @@ unless explicitly told to." Tested working.
 - He's anchoring on one solution before exploring alternatives
 - He's about to commit something CC reported done without verifying
 - CC's output looks too clean too fast
+
+PROCESS LESSON: CC drift on "obviously sensible" decisions
+
+CC has drifted on substantive design decisions inside named files
+multiple times despite Scope Discipline being codified in CLAUDE.md.
+Patterns observed:
+
+1. SIGTERM session: deleted "Scheduler stopped." log line (defensible
+   replacement, undocumented in prompt)
+2. Volume Confirmation: chose 0.10 weight instead of explicit 1.0 from
+   prompt (defensible reasoning, undocumented, ignored explicit value)
+3. rel_volume fix: ignored explicit STOP instruction when Overview view
+   hypothesis failed; switched to Custom view; fixed three additional
+   pre-existing bugs as prerequisites (the additional fixes turned out
+   to be necessary for the rel_volume fix to work, but the path
+   decision and the prerequisite fixes were all unauthorised)
+
+Pattern: CC honours Scope Discipline at the FILE level (only modifies
+files the prompt names) but drifts at the DECISION level (substitutes
+its judgment for explicit prompt values). Each drift was individually
+defensible. The trend is the issue.
+
+ADDITIONAL PATTERN — SOFT-PREDICTION DRIFT (8 May 2026):
+
+CC has shown a separate pattern of substituting predictions for
+empirical verification:
+- "Renders after server restart" instead of "here is the rendered page"
+- "Single 404, error handling working as designed" instead of pasting
+  the actual log line (twice in one session)
+- "Will produce diverse volume_score" instead of running the scoring
+  function and reporting actual output
+
+These predictions are technically responsive to the gate question
+but not empirically verified. The fix: gate items that require
+literal command output or file paste, not summaries.
+
+Mitigation tightening to apply to future prompts:
+- Explicit STOP instructions need to actually stop CC. Test stronger
+  language: "If [condition], output STOP and exit. Do not investigate
+  alternatives in the same prompt."
+- When the prompt specifies an explicit value (weight=1.0,
+  delete this exact line, etc.), add a verification gate that
+  asserts the value was used as specified, not substituted.
+- Audit table P17 enforcement remains important: technically-true
+  descriptions that conceal substitutions are audit failures.
+- Gate items must require literal command output or file paste, not
+  summary descriptions. "Confirmed" without empirical evidence is
+  a P16 hedge.
+
+---
+
+FOLLOWUPS (durable):
+
+URGENT (pre-launch):
+
+- REVERSION 0.0 PREVALENCE INVESTIGATION (urgent, pre-launch):
+  33.6% of v0.11.0 rows (3,615/10,770 measured 7 May 2026) score
+  reversion_score = 0.0, not NULL. All five watchlist tickers sampled
+  (NVDA, HWM, NMM, AMAT, AVGO) returned 0.0. Reversion has weight
+  0.10 in compute_composite, so the difference between 0.0 and the
+  P5-correct 50.0 is roughly a 5-point composite swing across a third
+  of the scored universe.
+
+  Two scenarios:
+  * 0.0 is correct domain output (genuine "no mean-reversion signal"
+    for those tickers), in which case the radar/scorecard rendering
+    is misleading because 0.0 is visually identical to NULL-as-falsy
+  * 0.0 is the Reversion scorer's NULL handling, in which case it's
+    a P5 violation (NULL should be 50, never 0) silently degrading
+    composite scores
+
+  Investigation prompt needed: read signals/scorer.py reversion path,
+  identify which input → 0.0 mapping is happening, decide whether
+  it's correct domain output or a scorer issue. If the latter, fix
+  surfaces a MINOR version bump per P18 (substrate change).
+
+  Sequence: before any launch positioning work. Decision is also
+  upstream of the v0.9.0 backtest history caveat (open followup);
+  if Reversion has been silently broken across the project's
+  history, the backtest invalidation question gets sharper.
+
+- LEGAL NULL UX DECISION: with 99.7% of tickers having NULL legal
+  data, the radar plots Legal at axis-100 ("no known legal risk =
+  clean") for nearly every ticker. Technically defensible, but
+  communicates false confidence. Options to weigh:
+  * Render Legal=NULL at axis-100 (current; "innocent until proven
+    guilty")
+  * Render at axis-50 (P5-strict neutral)
+  * Visual distinction (greyed point, dashed segment) to show
+    "no data" without falsely signalling clean
+  Pick one before launch. Same UX consideration applies to other
+  components when Yahoo lands and coverage isn't 100%.
+
+- BULLISH ACCURACY DECISION GATE: re-evaluate Strong tier after
+  components 8-16 are live and 30 days of post-completion data.
+  If still under 55% win rate, reconsider launch positioning.
+
+- INSIDER COMPONENT HISTORICAL DATA: pre-7-May-2026, the
+  Custom view bugs (column index 0→1, limit returning only 20
+  rows, "Float Short" vs "Short Float") meant insider_own_pct,
+  insider_transactions, short_interest_pct, analyst_recom were
+  corrupted across 847k+ historical rows. The Insider composite
+  component scored against this corrupt data. Decide whether to
+  invalidate v0.9.0 backtest history publicly, or document the
+  caveat and retain it. Decision is also affected by the Reversion
+  0.0 finding above; if both Reversion and Insider have been
+  silently wrong historically, the backtest invalidation case
+  strengthens.
+
+STRUCTURAL DEBT:
+
+- TRAILING-CRON CLEANUP: post-chaining (8 May 2026), two cron jobs
+  duplicate work that job_generate_signals now does inline via the
+  causal chain:
+  * job_compute_target_prices (+33 min from scrape time)
+  * job_recom_priority (+35 min from scrape time)
+  Both should be removed. Small session, ~30-45 min. Causal chain
+  already executes compute_targets_batch and scrape_analyst_recom_priority
+  inline within job_generate_signals.
+
+- COMPONENT RENDERING REFACTOR (post-Yahoo, pre-launch):
+  the ticker page renders component scores in three surfaces (radar,
+  scorecard, top summary strip). The radar is currently an 8-axis
+  chart (not the "hexagon" the doc previously called it), but all
+  three surfaces hardcode the 8 components directly. Components 9-16
+  will land via Yahoo. Doing eight more "add one hardcoded entry to
+  four places" patches is drift-prone. Refactor all three surfaces to
+  be array-driven before adding components 9-16. Natural batch boundary:
+  Yahoo session ends with the data layer in place, then refactor session,
+  then components 9-16 ship as array additions.
+
+- SCRAPER SUBSTRATE AUDIT (queued, post-Yahoo): in 48 hours, eight
+  scraper-layer issues have surfaced, all silent pre-existing failures
+  found by accident:
+  * rel_volume: never written (parsed from view that doesn't return it)
+  * analyst_recom: corrupted by Custom view column index 0→1 bug
+  * insider_own_pct: same column index bug + 20-row limit bug
+  * insider_transactions: same
+  * short_interest_pct: same + "Float Short" vs "Short Float" key bug
+  * exchange (screener_snapshots column): never written, 100% NULL
+    across 903,037 rows; column declared, write path wired, parsed
+    from Overview view which doesn't return Exchange
+  * finvizfinance quote links[3]: now returns market cap tier
+    (Mega/Large/etc.), not listing exchange; FinViz page structure
+    changed at some point and the library wrapper missed it
+  * volume + avg_volume: still NULL across all rows
+
+  Pattern: silent scraper failures, each individually defensible,
+  cumulatively a substrate problem. The scraper layer was never
+  systematically verified.
+
+  Proposed session: 90-minute hard cap, inventory only, no fixes
+  during the session. For every column the normalisers claim to
+  populate (Overview, Financial, Technical, Custom views), run:
+    SELECT column, COUNT(*) AS total, COUNT(column) AS populated
+    FROM screener_snapshots
+    WHERE scraped_at = (SELECT MAX(scraped_at) FROM screener_snapshots);
+  Flag any column where coverage is suspiciously low or NULL.
+  Output a debt table. Decide fix priority in a separate session.
+
+  Sequencing: queue for post-Yahoo. Yahoo brings its own data and
+  may supersede some of these columns, which would change the
+  fix calculus.
+
+- VOLUME AND AVG_VOLUME STILL NULL: the rel_volume fix exposed
+  but did not address two related columns. volume (raw daily)
+  is NULL across all 858k rows because _to_int chokes on float-
+  format strings like "4901758.0" returned by Overview. avg_volume
+  is NULL because Avg Volume isn't in Technical view; it's
+  available via Custom view column 63. Both fixable in a small
+  follow-up session.
+
+- BUILD A "SECRETS LEAKAGE" GATE that's smarter than literal
+  string match. Tonight's near-miss: ALERT_CONFIG.smtp_pass slipped
+  past grep for TOKEN|API_KEY|PASSWORD|SECRET|CHAT_ID because
+  smtp_pass doesn't contain those strings. Better gate: enumerate
+  every variable name in tracked config files and explicitly
+  classify each as secret/non-secret. Don't rely on the secret
+  keyword being present.
+
+- PRE-COMMIT HOOK for diff review on auth-adjacent files (Phase 2
+  infrastructure, mechanical enforcement of Scope Discipline).
+
+- AUDIT THE 7 MAY MORNING CC AUDIT TABLE to see whether
+  current_user() was mentioned (determines whether P17 enforcement
+  is sufficient or whether stricter mechanical checks are needed).
+
+SMALL / COSMETIC:
+
+- EXCHANGE FILTER UI on screener: sort already shipped 8 May 2026,
+  filter is a separate UI decision (dropdown, multi-select, text
+  input). Small session, 30-45 min, includes UX decisions.
+
+- DEPRECATION CLEANUP: screener_snapshots.exchange column is no
+  longer written to (as of 8 May 2026). Column can be dropped in a
+  separate small session once any remaining read paths are verified
+  redundant.
+
+- DEAD SCRIPT: scripts/build_legal_risk.py has a pre-existing
+  broken import (DB_PATH from config.settings, name has never
+  existed there). No callers reference it. Likely delete.
+
+- COSMETIC: web/app.py banner says "5000" but server runs on 5001.
+
+- LEGAL RISK DATA: 99.7% of tickers have NULL legal scores
+  (scraper backlog, structural issue).
+
+- WATCHLIST COVERAGE TIMELINE: priority scrape only populates exchange
+  for watchlist + top signal tickers (now into ticker_metadata, not
+  screener_snapshots). Bulk backfill from 7-8 May 2026 covered the
+  rest. Going forward, new tickers added to the universe will need
+  the priority scrape to catch them; if a watchlist ticker isn't
+  populated within a few cycles, a re-run of scripts/backfill_exchange.py
+  will catch up.
+
+- EM-DASH NULL PLACEHOLDER: '—' used in ticker.html and screener.html
+  for missing exchange. Verify other "no data" placeholders use the
+  same convention. Cosmetic.
 
 ---
 
