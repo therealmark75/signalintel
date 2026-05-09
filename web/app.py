@@ -61,11 +61,6 @@ def _init_penny_tables():
             selected_at TEXT DEFAULT (datetime('now'))
         )
     """)
-    # Add exchange column to screener_snapshots if missing
-    try:
-        conn.execute("ALTER TABLE screener_snapshots ADD COLUMN exchange TEXT")
-    except Exception:
-        pass
     conn.commit()
     conn.close()
 _init_penny_tables()
