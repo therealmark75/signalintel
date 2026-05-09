@@ -206,53 +206,6 @@ def job_recom_bulk():
     except Exception as e:
         logger.error(f"Bulk recom job FAILED: {e}", exc_info=True)
 
-def job_recom_priority():
-    """
-    Scrape analyst recom from individual FinViz ticker pages
-    for high-priority tickers: watchlist + today's top signals.
-    Runs after main screener job.
-    """
-    start = time.time()
-    logger.info("JOB START: Analyst Recom (priority tickers)")
-    try:
-        conn = get_connection(DATABASE_PATH)
-        cur = conn.cursor()
-
-        # Get all watchlist tickers (across all users)
-        cur.execute("SELECT DISTINCT ticker FROM watchlists")
-        watchlist_tickers = [r[0] for r in cur.fetchall()]
-
-        # Get today's top signal tickers
-        cur.execute("""
-            SELECT DISTINCT ticker FROM top_signals_of_day
-            WHERE signal_date = DATE('now')
-        """)
-        top_tickers = [r[0] for r in cur.fetchall()]
-
-        conn.close()
-
-        # Deduplicate, preserve order (watchlist first)
-        seen = set()
-        priority_tickers = []
-        for t in watchlist_tickers + top_tickers:
-            if t not in seen:
-                seen.add(t)
-                priority_tickers.append(t)
-
-        if not priority_tickers:
-            logger.info("JOB DONE: Recom | no priority tickers found")
-            return
-
-        logger.info(f"  Priority tickers: {len(priority_tickers)} ({len(watchlist_tickers)} watchlist + {len(top_tickers)} top signals)")
-
-        recom_map = scrape_recom_for_tickers(priority_tickers, delay=1.5)
-        updated = update_analyst_recom(DATABASE_PATH, recom_map)
-
-        duration = time.time() - start
-        logger.info(f"JOB DONE: Recom | {updated} rows updated | {duration:.1f}s")
-
-    except Exception as e:
-        logger.error(f"Recom job FAILED: {e}", exc_info=True)
 
 def job_news_and_calendar(top_n: int = 30):
     """Scrape news sentiment for top BUY signals + economic calendar."""
@@ -370,25 +323,6 @@ def _send_rating_alerts(changes: list):
         body = "\n".join(lines)
         send_alert(f"📋 <b>SignalIntel — watchlist changes</b>\n\n{body}")
 
-
-def job_compute_target_prices():
-    """Compute and store SignalIntel target prices for all tickers scored today."""
-    start = time.time()
-    logger.info("JOB START: Target price computation")
-    try:
-        from signals.target_price import compute_targets_batch
-        from scrapers.fmp_scraper import get_price_targets_map
-
-        screener_rows   = get_latest_screener(DATABASE_PATH)
-        legal_risk_map  = get_legal_risk_map(DATABASE_PATH)
-        fmp_targets     = get_price_targets_map(DATABASE_PATH)
-        price_hist_map  = get_price_history_map(DATABASE_PATH)
-
-        rows = compute_targets_batch(screener_rows, legal_risk_map, fmp_targets, price_hist_map)
-        updated = update_target_prices(DATABASE_PATH, rows)
-        logger.info(f"JOB DONE: Target prices | {updated} rows updated | {time.time()-start:.1f}s")
-    except Exception as e:
-        logger.error(f"Target price job FAILED: {e}", exc_info=True)
 
 
 def job_fmp_earnings():
@@ -524,25 +458,6 @@ def main():
                 id=f"insider_{t}", name=f"Insider {t}",
             )
 
-        for t in SCREENER_SCRAPE_TIMES:
-            h, m = t.split(":")
-            m2 = (int(m) + 33) % 60
-            h2 = int(h) + (1 if int(m) + 33 >= 60 else 0)
-            scheduler.add_job(
-                job_compute_target_prices,
-                CronTrigger(hour=h2, minute=m2, day_of_week="mon-fri"),
-                id=f"targets_{t}", name=f"Target Prices {h2:02d}:{m2:02d}",
-            )
-
-        for t in SCREENER_SCRAPE_TIMES:
-            h, m = t.split(":")
-            m2 = (int(m) + 35) % 60
-            h2 = int(h) + (1 if int(m) + 35 >= 60 else 0)
-            scheduler.add_job(
-                job_recom_priority,
-                CronTrigger(hour=h2, minute=m2, day_of_week="mon-fri"),
-                id=f"recom_{t}", name=f"Analyst Recom {h2:02d}:{m2:02d}",
-            )
 
         # Nightly bulk recom job - 02:00 Mon-Fri
         scheduler.add_job(
