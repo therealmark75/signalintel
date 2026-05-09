@@ -1079,6 +1079,7 @@ def api_screener():
     sector, rating (comma-sep), score_min, score_max,
     mcap (any/micro/small/mid/large), pe_min, pe_max,
     rsi_min, rsi_max, upside_min,
+    exchange (comma-sep: NYSE, NASDAQ, AMEX, Other),
     momentum_score_min, insider_score_min, volume_min,
     high_52w_pct_max, dividend_yield_min, earnings_days, legally_clean,
     sort (column), dir (asc/desc), page, per_page
@@ -1105,6 +1106,7 @@ def api_screener():
     dividend_yield_min  = request.args.get("dividend_yield_min", type=float)
     earnings_days       = request.args.get("earnings_days", type=int)
     legally_clean_param = request.args.get("legally_clean", "").lower() in ("1", "true", "yes")
+    exchanges  = [e for e in request.args.get("exchange", "").split(",") if e]
     sort_col  = request.args.get("sort", "composite_score")
     sort_dir  = request.args.get("dir", "desc").lower()
     page      = max(1, request.args.get("page", type=int, default=1))
@@ -1188,6 +1190,10 @@ def api_screener():
     if relvol_min is not None:
         where.append("ss.rel_volume >= ?")
         params.append(relvol_min)
+    if exchanges:
+        placeholders = ",".join("?" * len(exchanges))
+        where.append(f"COALESCE(tm.exchange, 'Other') IN ({placeholders})")
+        params.extend(exchanges)
     # Theme-specific conditions
     if momentum_score_min is not None:
         where.append("sig.momentum_score >= ?")
@@ -1259,6 +1265,7 @@ def api_screener():
         SELECT COUNT(*) as total
         FROM ({latest_ss}) ss
         LEFT JOIN ({sig_subq}) sig ON ss.ticker = sig.ticker
+        LEFT JOIN ticker_metadata tm ON ss.ticker = tm.ticker
         {extra_joins_sql}
         WHERE {where_sql}
     """, params)
