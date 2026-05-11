@@ -241,7 +241,7 @@ def insert_screener_rows(db_path: str, rows: list[dict]) -> int:
             roe, insider_own_pct, insider_transactions, inst_own_pct,
             short_interest_pct, short_ratio,
             analyst_recom, rsi_14, rel_volume, avg_volume,
-            sma_50_pct, sma_200_pct, high_52w_pct, low_52w_pct, beta, exchange,
+            sma_50_pct, sma_200_pct, high_52w_pct, low_52w_pct, beta,
             forward_pe, peg_ratio, price_to_sales, price_to_book
         ) VALUES (
             :scraped_at, :ticker, :company, :sector, :industry, :country,
@@ -251,12 +251,11 @@ def insert_screener_rows(db_path: str, rows: list[dict]) -> int:
             :short_interest_pct, :short_ratio,
             :analyst_recom, :rsi_14, :rel_volume, :avg_volume,
             :sma_50_pct, :sma_200_pct, :high_52w_pct, :low_52w_pct, :beta,
-            :exchange, :forward_pe, :peg_ratio, :price_to_sales, :price_to_book
+            :forward_pe, :peg_ratio, :price_to_sales, :price_to_book
         )
     """
     for row in rows:
         row["scraped_at"] = now
-        row.setdefault("exchange", None)
         for col in ("inst_own_pct","short_ratio","forward_pe","peg_ratio","price_to_sales","price_to_book"):
             row.setdefault(col, None)
     cur.executemany(insert_sql, rows)
