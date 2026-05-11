@@ -547,6 +547,10 @@ async function loadPage() {
     }).join('') || '<tr><td colspan="3" style="color:var(--muted2);text-align:center;padding:16px">No history yet</td></tr>';
 
     const valueScore = COMPONENTS.find(c => c.key === 'value').getValue(s, lr).num;
+    const scoreChipsHTML = COMPONENTS
+        .map(c => c.chipRenderer ? c.chipRenderer(s, lr) : genericChip(c, s, lr))
+        .filter(html => html !== '')
+        .join('');
 
     document.getElementById('page-content').innerHTML = `
         <!-- Hero -->
@@ -601,23 +605,7 @@ async function loadPage() {
                 <div style="font-size:28px;font-weight:700;color:var(--text)">$${fmt(s.target_price,2)}</div>
                 <div style="font-size:12px;font-weight:700;margin-top:2px;color:${tu>=0?'#00ff88':'#ff3b5c'}">${tu>=0?'+'+fmt(tu,1)+'% upside':fmt(Math.abs(tu),1)+'% downside'}</div>
             </div>`; })() : ''}
-            <div class="signal-scores">
-                <div class="score-item" data-tip="Measures price trend strength, RSI momentum and moving average signals. High score = strong upward momentum"><div class="score-item-label">Momentum</div><div class="score-item-value ${scoreC(s.momentum_score)}">${fmt(s.momentum_score,1)}</div></div>
-                <div class="score-item" data-tip="Fundamental quality score based on P/E ratio vs sector average, EPS growth and return on equity"><div class="score-item-label">Quality</div><div class="score-item-value ${scoreC(s.quality_score)}">${fmt(s.quality_score,1)}</div></div>
-                <div class="score-item" data-tip="Insider activity score based on recent buying and selling by company directors, officers and major shareholders. 100 = strong cluster buying"><div class="score-item-label">Insider</div><div class="score-item-value ${scoreC(s.insider_score)}">${fmt(s.insider_score,1)}</div></div>
-                <div class="score-item" data-tip="Mean reversion signal. Low score = price has moved far from average and may revert. High = trending strongly"><div class="score-item-label">Reversion</div><div class="score-item-value ${scoreC(s.reversion_score)}">${fmt(s.reversion_score,1)}</div></div>
-                <div class="score-item" data-tip="Volume Confirmation score. High score = strong volume confirming price move. Low = price move on weak or declining volume."><div class="score-item-label">Volume</div><div class="score-item-value ${scoreC(s.volume_score)}">${fmt(s.volume_score,1)}</div></div>
-                <div class="score-item" data-tip="SEC EDGAR legal risk assessment. Penalises composite score for active enforcement actions, investigations or class actions"><div class="score-item-label">Legal</div><div class="score-item-value" style="color:${lr.scraped_at ? lr.risk_color : '#6b7280'}">${lr.scraped_at ? (lr.risk_level === 'NONE' ? 'Clean' : lr.risk_label) : 'Not analysed'}</div></div>
-                <div class="score-item" data-tip="Value score derived from 12-month price target upside. Above 50 = priced below target (upside), below 50 = priced above target (downside)."><div class="score-item-label">Value</div><div class="score-item-value ${scoreC(valueScore)}">${fmt(valueScore,1)}</div></div>
-                ${(()=>{
-                    const ss = s.sector_strength_score;
-                    const mod = s.sector_modifier_applied;
-                    if (ss == null) return '';
-                    const modStr = mod != null ? (mod >= 0 ? '+' : '') + fmt(mod, 1) : '';
-                    const ssC = ss >= 70 ? 'hi' : ss >= 40 ? 'mid' : 'bad';
-                    return `<div class="score-item" data-tip="Sector relative strength based on 7-day performance of the sector ETF (XLK for Technology, XLF for Financial, etc). Top-performing sectors boost composite score; lagging sectors apply a drag. Weight: ±7.5% max."><div class="score-item-label">Sector</div><div class="score-item-value ${ssC}">${fmt(ss,0)}${modStr ? ` <span style="font-size:10px;color:${mod>=0?'#00ff88':'#ff3b5c'}">(${modStr})</span>` : ''}</div></div>`;
-                })()}
-            </div>
+            <div class="signal-scores">${scoreChipsHTML}</div>
         </div>
 
 
