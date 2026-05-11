@@ -502,36 +502,10 @@ async function loadPage() {
         }
     }
 
-    const lrSign = (lr.penalty||0) > 0 ? '+' : '';
-    const lrIsNone = lr.scraped_at && lr.risk_level === 'NONE';
-    const lrDisplayLabel = !lr.scraped_at ? 'Not analysed' : lrIsNone ? 'Clean' : lr.risk_label;
-    const lrDisplayColor = lr.scraped_at ? lr.risk_color : '#6b7280';
-    const scoreBars = [
-        {label:'Momentum',  val:s.momentum_score},
-        {label:'Quality',   val:s.quality_score},
-        {label:'Insider',   val:s.insider_score},
-        {label:'Reversion', val:s.reversion_score},
-        {label:'Volume',    val:s.volume_score},
-    ].map(b => `
-        <div class="score-bar-row">
-            <div class="score-bar-header">
-                <span class="score-bar-label">${b.label}</span>
-                <span class="score-bar-num ${scoreC(b.val)}">${fmt(b.val,1)}</span>
-            </div>
-            <div class="bar-track">
-                <div class="bar-fill" style="width:${b.val==null?4:Math.min(100,b.val)}%;background:${b.val==null?'#9CA3AF':barC(b.val)}"></div>
-            </div>
-        </div>`).join('') + `
-        <div class="score-bar-row">
-            <div class="score-bar-header">
-                <span class="score-bar-label">Legal</span>
-                <span style="font-family:var(--mono);font-size:11px;font-weight:700;color:${lrDisplayColor}">${lrDisplayLabel}${lrIsNone ? ' ✓' : ''}</span>
-            </div>
-            ${lr.scraped_at && !lrIsNone ? `<div style="margin-top:5px;display:flex;align-items:center;gap:8px">
-                <span style="font-family:var(--mono);font-size:10px;padding:2px 8px;border-radius:3px;background:${lr.risk_color}22;color:${lr.risk_color};border:1px solid ${lr.risk_color}44">${lrSign}${lr.penalty||0} pts</span>
-                <span style="font-size:10px;color:var(--muted2)">applied to composite</span>
-            </div>` : ''}
-        </div>`;
+    const scoreBars = COMPONENTS
+        .filter(c => c.inStrip)
+        .map(c => c.stripRenderer ? c.stripRenderer(s, lr) : genericStrip(c, s, lr))
+        .join('');
 
     const insiderRows = (data.insiders||[]).map(i => {
         const buy = i.transaction_type === 'Buy';
