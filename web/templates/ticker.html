@@ -551,6 +551,11 @@ async function loadPage() {
         .map(c => c.chipRenderer ? c.chipRenderer(s, lr) : genericChip(c, s, lr))
         .filter(html => html !== '')
         .join('');
+    const radarLegendHTML = COMPONENTS
+        .filter(c => c.radarIndex !== null)
+        .sort((a, b) => a.radarIndex - b.radarIndex)
+        .map(c => radarLegendRow(c))
+        .join('');
 
     document.getElementById('page-content').innerHTML = `
         <!-- Hero -->
@@ -620,34 +625,7 @@ async function loadPage() {
             </div>
             <div class="radar-legend">
                 <div class="radar-legend-title">SignalIntel Scorecard</div>
-                <div class="radar-dim">
-                    <div class="radar-dim-name"><div class="radar-dim-dot" style="background:#00d4ff"></div>Momentum</div>
-                    <div class="radar-dim-score hi" id="rd-momentum">-</div>
-                </div>
-                <div class="radar-dim">
-                    <div class="radar-dim-name"><div class="radar-dim-dot" style="background:#00ff88"></div>Quality</div>
-                    <div class="radar-dim-score hi" id="rd-quality">-</div>
-                </div>
-                <div class="radar-dim">
-                    <div class="radar-dim-name"><div class="radar-dim-dot" style="background:#af52de"></div>Insider</div>
-                    <div class="radar-dim-score hi" id="rd-insider">-</div>
-                </div>
-                <div class="radar-dim">
-                    <div class="radar-dim-name"><div class="radar-dim-dot" style="background:#facc15"></div>Reversion</div>
-                    <div class="radar-dim-score hi" id="rd-reversion">-</div>
-                </div>
-                <div class="radar-dim">
-                    <div class="radar-dim-name"><div class="radar-dim-dot" style="background:#8b5cf6"></div>Volume</div>
-                    <div class="radar-dim-score hi" id="rd-volume">-</div>
-                </div>
-                <div class="radar-dim">
-                    <div class="radar-dim-name"><div class="radar-dim-dot" style="background:#ff6b35"></div>Value</div>
-                    <div class="radar-dim-score hi" id="rd-value">-</div>
-                </div>
-                <div class="radar-dim">
-                    <div class="radar-dim-name"><div class="radar-dim-dot" style="background:#fbbf24"></div>Sector</div>
-                    <div class="radar-dim-score hi" id="rd-sector">-</div>
-                </div>
+                ${radarLegendHTML}
             </div>
         </div>
 
