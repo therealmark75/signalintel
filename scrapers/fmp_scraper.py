@@ -503,6 +503,8 @@ def job_refresh_dividends(db_path: str, tickers: list[str] = None) -> int:
                 save_dividend(db_path, profile)
                 saved += 1
             time.sleep(0.3)
+        except FMPRateLimitError:
+            raise
         except Exception as e:
             logger.warning(f"[FMP] Dividend fetch failed for {ticker}: {e}")
     logger.info(f"[FMP] Saved {saved} dividend records")
