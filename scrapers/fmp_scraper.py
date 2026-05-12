@@ -9,6 +9,7 @@ import sqlite3
 import time
 import logging
 import json
+import threading
 from datetime import datetime, timedelta
 
 import requests
@@ -26,8 +27,18 @@ def _api_key():
 FMP_BASE = "https://financialmodelingprep.com/stable"
 _HEADERS = {"User-Agent": "SignalIntel/1.0 marknicholson75@gmail.com"}
 
+# BUG A circuit breaker (consecutive 429 protection)
+FMP_CIRCUIT_BREAKER_THRESHOLD = 10
+_fmp_429_lock = threading.Lock()
+_fmp_429_streak = 0
+
+
+class FMPRateLimitError(Exception):
+    """Raised when _get() hits consecutive 429s past the circuit-breaker threshold."""
+
 
 def _get(path: str, params: dict = None, timeout: int = 20):
+    global _fmp_429_streak
     key = _api_key()
     if not key:
         return None
@@ -38,13 +49,26 @@ def _get(path: str, params: dict = None, timeout: int = 20):
         try:
             r = requests.get(url, params=p, headers=_HEADERS, timeout=timeout)
             if r.status_code == 200:
+                with _fmp_429_lock:
+                    _fmp_429_streak = 0
                 return r.json()
             elif r.status_code == 429:
-                logger.warning("[FMP] Rate limited – sleeping 10s")
+                with _fmp_429_lock:
+                    _fmp_429_streak += 1
+                    streak = _fmp_429_streak
+                if streak >= FMP_CIRCUIT_BREAKER_THRESHOLD:
+                    logger.error(
+                        f"[FMP] Circuit breaker tripped: {streak} consecutive 429s. "
+                        "Aborting job — re-enable once FMP rate limit clears."
+                    )
+                    raise FMPRateLimitError(f"FMP rate limit: {streak} consecutive 429s")
+                logger.warning(f"[FMP] Rate limited ({streak}/{FMP_CIRCUIT_BREAKER_THRESHOLD}) – sleeping 10s")
                 time.sleep(10)
             else:
                 logger.warning(f"[FMP] HTTP {r.status_code}: {path}")
                 return None
+        except FMPRateLimitError:
+            raise
         except Exception as e:
             logger.warning(f"[FMP] Request attempt {attempt+1} failed: {e}")
             time.sleep(2)
