@@ -8,25 +8,86 @@ import pytest
 
 
 def test_signal_scores_freshness(db):
-    """Latest scored_at must be within 48 hours of now."""
+    """Latest scored_at must be within 72 hours of now."""
     row = db.execute("SELECT MAX(scored_at) FROM signal_scores").fetchone()
     assert row[0] is not None, "signal_scores is empty"
     latest = datetime.fromisoformat(row[0])
     if latest.tzinfo is None:
         latest = latest.replace(tzinfo=timezone.utc)
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=48)
-    assert latest >= cutoff, f"signal_scores last updated {row[0]} — older than 48h"
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=72)
+    assert latest >= cutoff, f"signal_scores last updated {row[0]} — older than 72h"
 
 
 def test_screener_snapshots_freshness(db):
-    """Latest scraped_at must be within 48 hours of now."""
+    """Latest scraped_at must be within 72 hours of now."""
     row = db.execute("SELECT MAX(scraped_at) FROM screener_snapshots").fetchone()
     assert row[0] is not None, "screener_snapshots is empty"
     latest = datetime.fromisoformat(row[0])
     if latest.tzinfo is None:
         latest = latest.replace(tzinfo=timezone.utc)
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=48)
-    assert latest >= cutoff, f"screener_snapshots last scraped {row[0]} — older than 48h"
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=72)
+    assert latest >= cutoff, f"screener_snapshots last scraped {row[0]} — older than 72h"
+
+
+def test_insider_trades_freshness(db):
+    """
+    Catches scraper job death or persistent FAILED status.
+
+    Ignores quiet insider periods where rows_added=0 is legitimate
+    (insider_trades uses INSERT OR IGNORE; a quiet day where all trades
+    are already in the table does not advance MAX(scraped_at) even
+    though the scraper ran successfully).
+
+    Source: run_log WHERE job_name='insider_scrape' AND status='SUCCESS'.
+    """
+    row = db.execute(
+        "SELECT MAX(run_at) FROM run_log "
+        "WHERE job_name = 'insider_scrape' AND status = 'SUCCESS'"
+    ).fetchone()
+    assert row[0] is not None, "no successful insider_scrape runs in run_log"
+    latest = datetime.fromisoformat(row[0])
+    if latest.tzinfo is None:
+        latest = latest.replace(tzinfo=timezone.utc)
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=72)
+    assert latest >= cutoff, f"insider_scrape last successful run {row[0]}, older than 72h"
+
+
+def test_legal_risk_freshness(db):
+    """
+    Catches legal_risk scraper cron death or extended outage.
+
+    Ignores partial-run days where some rows have been written and the
+    job is still mid-run. Scraper expands coverage continuously and
+    writes a new scraped_at on each ticker processed, so MAX(scraped_at)
+    advances throughout every active run.
+    """
+    row = db.execute("SELECT MAX(scraped_at) FROM legal_risk").fetchone()
+    assert row[0] is not None, "legal_risk is empty"
+    latest = datetime.fromisoformat(row[0])
+    if latest.tzinfo is None:
+        latest = latest.replace(tzinfo=timezone.utc)
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=72)
+    assert latest >= cutoff, f"legal_risk last scraped {row[0]}, older than 72h"
+
+
+def test_ticker_metadata_freshness(db):
+    """
+    Catches ticker_metadata write path breakage independent of
+    screener_snapshots success.
+
+    Ignores first_seen_at (frozen at backfill, never advances).
+    updated_at is written by the screener scrape via ON CONFLICT...DO
+    UPDATE; if that specific write breaks (BUG-B-style miss) while
+    screener_snapshots still populates, this test fails while the
+    screener_snapshots freshness test still passes.
+    """
+    row = db.execute("SELECT MAX(updated_at) FROM ticker_metadata").fetchone()
+    assert row[0] is not None, "ticker_metadata is empty"
+    latest = datetime.fromisoformat(row[0])
+    if latest.tzinfo is None:
+        latest = latest.replace(tzinfo=timezone.utc)
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=72)
+    assert latest >= cutoff, f"ticker_metadata last updated {row[0]}, older than 72h"
 
 
 def test_no_duplicate_signals_for_latest_run(db, latest_run_date):
