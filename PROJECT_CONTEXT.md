@@ -216,10 +216,6 @@ of test, candidates for expansion to insider_trades, legal_risk, etc.
 `logs/trading_system.log` — live scheduler log. Configured in main.py
 via `logging.basicConfig` with StreamHandler(stdout) + FileHandler.
 
-`logs/scheduler.log` — ORPHANED. Last written 6 May 17:32. A stale
-FileHandler is being created somewhere in the codebase but writing
-nothing useful. FOLLOWUP queued to grep and remove.
-
 `data/trading_system.db` — SQLite database, ~315MB.
 
 ### Key DB Tables
@@ -728,14 +724,6 @@ STRUCTURAL DEBT:
   web/app.py startup code for code-change-triggered table
   drops/recreates. Could share root cause with the 9 May ADD COLUMN
   guard pattern.
-
-- SCHEDULER.LOG ORPHAN — 11 May discovery. `logs/scheduler.log`
-  hasn't been written to since 6 May 17:32 despite main.py being
-  the live scheduler. Some FileHandler in the codebase (probably
-  an early prototype scheduler module that's been deprecated) is
-  still being imported and writing nothing useful. Grep for
-  `scheduler.log` references in `scrapers/`, `web/`, `signals/`,
-  and remove the orphan handler. Low risk, cosmetic.
 
 - COMPONENT METADATA CONSUMERS — the JS-only registry is the right
   call for now (YAGNI), but if any future consumer needs Python
