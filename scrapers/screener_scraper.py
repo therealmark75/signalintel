@@ -162,7 +162,7 @@ def scrape_sector(sector, delay=2.5):
     time.sleep(delay + random.uniform(0,1))
 
     # Fetch analyst recom + insider/short + rel_volume via custom view
-    # Columns: 1=Ticker, 26=Insider Own, 27=Insider Trans, 30=Float Short, 62=Recom, 64=Rel Volume
+    # Columns: 1=Ticker, 26=Insider Own, 27=Insider Trans, 30=Float Short, 62=Recom, 63=Avg Volume, 64=Rel Volume
     from finvizfinance.screener.custom import Custom
     custom_df = _fetch_with_retry(Custom(), filters, columns=[1, 26, 27, 30, 62, 63, 64])
     custom_data = {}
