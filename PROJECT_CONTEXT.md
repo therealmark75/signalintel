@@ -383,6 +383,7 @@ ID when relevant.
 | P17 | Audit entries describing function behaviour must enumerate complete set of effects |
 | P18 | Substantive scoring substrate changes require MINOR version bump |
 | P19 | Schema migration inventory enumerates every CRUD path against the modified table (read, write, init, ORM), not just init code. The 9 May column drop caught the ADD COLUMN guard in web/app.py but missed the INSERT in database/db.py, silent for 48 hours until pytest freshness tests caught it on 11 May. Phase 1 for any schema-affecting work must enumerate: init/migration code, ORM definitions, raw SQL INSERTs/UPDATEs/DELETEs, SELECT projections, and any place the column name appears as a string literal |
+| P20 | Analyst completeness gate. When two paths diverge on what an analyst making a buy/sell/hold decision receives, the analytically-stronger path wins regardless of engineering cost. Engineering cost is a tiebreaker between analytically-equivalent paths only |
 
 ---
 
@@ -876,6 +877,43 @@ and main.py file description as the canonical invocation. Future
 restart prompts should use `python main.py scheduler`; bare `python
 main.py` will fail-fast with a usage message, which is the right
 ergonomics (the alternative would be silent misconfiguration).
+
+### Diagnose before alarming (14 May 2026 lesson)
+
+**Diagnose before alarming (14 May 2026 lesson).** Phase 2a verification surfaced two files marked as modified in `git status` (PROJECT_CONTEXT.md and HANDOFF.md). Athena framed this as a P-level STOP violation by CC without first running `git diff` to verify the content of the modifications. A follow-up diagnostic prompt showed the modifications were prior-session uncommitted work (13 May lessons in PROJECT_CONTEXT.md, 14 May decision-lock content in HANDOFF.md authored earlier in the same session by CC's HANDOFF update prompt). CC had not touched either file in the Phase 2a session.
+
+The lesson is symmetric with P16 (which applies to CC output): Athena's diagnoses must also be empirical before being framed as violations. Seeing `M filename.md` in `git status` is a symptom; the content of the diff is the evidence. When `git status` shows modifications, the diagnostic sequence is: (1) `git log --oneline filename` to see when the file was last committed, (2) `git diff HEAD filename` to see what changed, (3) only then judge whether the modification is intentional/prior-session/CC-introduced.
+
+The pattern Athena should follow: alarm shapes the next prompt to be diagnostic, not corrective. The verification gap closure prompt fired on 14 May was the right shape, but it could have been the first response rather than the second.
+
+### Prior-session uncommitted modifications carry forward invisibly (14 May 2026 lesson)
+
+**Prior-session uncommitted modifications carry forward invisibly (14 May 2026 lesson).** A session can end with files modified but uncommitted (e.g., end-of-13-May had PROJECT_CONTEXT.md sitting uncommitted with the day's lessons captured; end-of-14-May-morning had HANDOFF.md sitting uncommitted with the decision lock). The next session's CC sees these in `git status` but has no context about when they were modified or by whom. Future Athena prompts that invoke `git status` should treat unexpected `M filename` entries as a prompt to investigate origin (`git log -1 --format=%cI filename` for last commit timestamp) before assuming current-session origin.
+
+Operationally: every session that authors HANDOFF or PROJECT_CONTEXT edits should commit those edits before the session closes, not leave them for "later." 13 May's lessons sat uncommitted for 24 hours; 14 May's HANDOFF rewrite sat uncommitted for 6 hours. Both surfaced as diagnostic noise the next time `git status` was checked.
+
+### Gate-report-condensation drift (14 May 2026 lesson)
+
+**CC's gate-walking discipline can drift on report format even when the underlying work is sound (14 May 2026 lesson).** Phase 2a-Phase2's verification gate specified 11 numbered gates with paste-quoted evidence per gate (sqlite `.schema` output, full `cat` of new files, `git diff` per modified file, pytest `-v` output verbatim, `ps -ef` for scheduler PID, benchmark output verbatim, FMP grep result, `git diff --stat` confirming untouched files). CC's report condensed this into a summary checkmark table with bullet observations.
+
+The underlying work was largely correct (8 commits scoped cleanly, 206 tests passing, schedulers untouched per Gate 9). The report shape was wrong. The follow-up diagnostic prompt extracted the paste-quoted evidence and found three real divergences from spec: benchmark used 5 tickers instead of 10 and wrote to live DB; FMP grep wasn't reported (the bug turned out to be a paste artefact in Phase 1, not a real bug); doc files were modified but unscoped.
+
+Lesson: gate items requiring paste-quoted evidence must phrase the paste requirement unambiguously ("paste the verbatim output of X, not a summary of it"). When CC's report is a summary table, the diagnostic move is to re-elicit the underlying evidence, not accept the table. Athena's first instinct on a summary-shaped report should be "show me the diff/grep/output," not "looks good."
+
+This is distinct from CC's prior drift patterns (substituting prompt values, soft-prediction drift, negative-instruction drift). Gate-report-condensation is a new pattern worth naming explicitly so future prompts can pre-empt it.
+
+### Diagnostic prompts as gate-closure tool (14 May 2026 lesson)
+
+**Diagnostic prompts as gate-closure tool (14 May 2026 lesson).** When CC's verification gate report is condensed or evidence is missing, the right response is a tight read-only diagnostic prompt that re-elicits the missing evidence empirically. The 14 May verification gap closure prompt was a five-part empirical sweep (doc diffs, scheduler PID, FMP grep, benchmark scope, commit hygiene). It caught all four divergences and corrected one Athena misdiagnosis along the way.
+
+Pattern characteristics:
+- Read-only. No code changes, no commits, no pushes, no reverts.
+- Paste-quoted verbatim output for every part.
+- Each part targets one specific claim from the prior gate that needs empirical backing.
+- STOP and report only; do not propose fixes in the diagnostic prompt.
+- Fix decisions made by Mark + Athena after reviewing the diagnostic output, not in the same turn as the diagnostic.
+
+Distinct from Phase 1 inventories (which are forward-looking, scoping a future change). Diagnostic prompts are backward-looking, validating that a past change matches its spec. Worth having both shapes in the toolkit.
 
 ### CC drift patterns (still real, less frequent)
 
