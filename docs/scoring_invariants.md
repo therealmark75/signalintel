@@ -384,3 +384,9 @@ Specifically: a function being audited for "does it read X correctly" must also 
 Origin: BUG-001-REOPENED (7 May 2026). The previous CC audit reported "current_user() always reads DB" — technically true, but the function also issued an UPDATE on every call, hardcoding tier='elite' for a specific username. The audit didn't lie; it under-described. The bug remained for hours because the audit answered the narrow question ("does it read?") rather than the full question ("what does it do?").
 
 Enforcement: When CC produces an audit table entry for any function, that entry must list every effect the function has, not only the effect being audited for. Reviewers (Mark or Athena) flag entries that describe one effect without addressing whether others exist.
+
+---
+
+## P20 — Analyst completeness gate
+
+**P20 — Analyst completeness gate.** When two paths diverge on what an analyst making a buy/sell/hold decision actually receives, the path serving the more complete analyst experience wins, regardless of implementation cost. Engineering cost is a tiebreaker between analytically-equivalent paths, not a vetoing factor over analytically-stronger ones.
