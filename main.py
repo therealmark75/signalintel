@@ -10,7 +10,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from config.constants import (DATABASE_PATH, SECTORS, SCREENER_SCRAPE_TIMES, NEWS_SCRAPE_TIMES,
     INSIDER_SCRAPE_TIMES, INSIDER_CLUSTER_BUY_COUNT, INSIDER_CLUSTER_DAYS,
     LOG_DIR, LOG_LEVEL, REQUEST_DELAY_SECONDS, SCORING_ENGINE_VERSION,
-    TELEGRAM_ALERT_MAX_PER_RUN)
+    TELEGRAM_ALERT_MAX_PER_RUN, YAHOO_REQUEST_DELAY_SECONDS)
 from notifications.telegram import send_alert
 from signals.signal_labels import tier_label, tier_short
 from database.db import (get_connection, initialise_schema, insert_screener_rows, generate_top_signals_of_day, prune_old_snapshots,
@@ -18,9 +18,17 @@ from database.db import (get_connection, initialise_schema, insert_screener_rows
     insert_news_articles, insert_ticker_sentiment, insert_calendar_events,
     log_run, get_latest_screener, get_recent_insiders, get_cluster_signals,
     get_top_signals, get_ticker_sentiment, get_legal_risk_map, update_target_prices,
-    get_price_history_map, get_watchlist_tickers)
+    get_price_history_map, get_watchlist_tickers,
+    get_active_tickers, insert_earnings_history, insert_financial_statements,
+    insert_institutional_holders, insert_analyst_changes, upsert_external_scrape_log)
 from scrapers.quote_scraper import scrape_recom_for_tickers
 from scrapers.legal_risk_scraper import scrape_priority_tickers
+from scrapers.yahoo_scraper import (
+    YahooRateLimitedError,
+    fetch_earnings_history, fetch_financial_statements,
+    fetch_institutional_holders, fetch_analyst_changes,
+    get_priority_tickers, get_upcoming_earnings_tickers,
+)
 from scrapers.screener_scraper import scrape_all_sectors
 from scrapers.insider_scraper import scrape_all_insider_types, detect_cluster_signals
 from signals.scorer import score_all_tickers
@@ -371,6 +379,218 @@ def job_daily_summary():
         logger.error(f"Daily summary FAILED: {e}")
 
 
+def job_yahoo_analyst_changes():
+    """Daily 02:00 BST Mon-Fri: fetch analyst upgrades/downgrades for priority tickers."""
+    start = time.time()
+    logger.info("=" * 60)
+    logger.info("JOB START: Yahoo Analyst Changes (priority)")
+    try:
+        import yfinance as yf
+        tickers = get_priority_tickers(DATABASE_PATH)
+        if not tickers:
+            logger.info("JOB DONE: Yahoo Analyst Changes | 0 tickers in priority set")
+            return
+        logger.info(f"  Priority tickers: {len(tickers)}")
+        total_rows = 0
+        for ticker in tickers:
+            try:
+                t = yf.Ticker(ticker)
+                rows = fetch_analyst_changes(t, ticker)
+                if rows:
+                    n = insert_analyst_changes(DATABASE_PATH, rows)
+                    total_rows += n
+                upsert_external_scrape_log(DATABASE_PATH, ticker, "ANALYST", success=True)
+            except YahooRateLimitedError:
+                raise
+            except Exception as e:
+                logger.warning(f"  [Yahoo Analyst] {ticker}: {e}")
+                upsert_external_scrape_log(DATABASE_PATH, ticker, "ANALYST", success=False, error=str(e))
+            time.sleep(YAHOO_REQUEST_DELAY_SECONDS)
+        duration = time.time() - start
+        log_run(DATABASE_PATH, "yahoo_analyst_changes", "SUCCESS", total_rows, duration_s=duration)
+        logger.info(f"JOB DONE: Yahoo Analyst Changes | {total_rows} rows | {duration:.1f}s")
+    except YahooRateLimitedError:
+        raise
+    except Exception as e:
+        logger.error(f"Yahoo Analyst Changes FAILED: {e}", exc_info=True)
+        log_run(DATABASE_PATH, "yahoo_analyst_changes", "FAILED", error_msg=str(e), duration_s=time.time()-start)
+
+
+def job_yahoo_earnings_priority():
+    """Daily 02:15 BST Mon-Fri: fetch earnings history for priority tickers + upcoming earnings."""
+    start = time.time()
+    logger.info("=" * 60)
+    logger.info("JOB START: Yahoo Earnings (priority)")
+    try:
+        import yfinance as yf
+        priority = get_priority_tickers(DATABASE_PATH)
+        upcoming = get_upcoming_earnings_tickers(DATABASE_PATH, days=7)
+        tickers  = list(set(priority + upcoming))
+        if not tickers:
+            logger.info("JOB DONE: Yahoo Earnings Priority | 0 tickers")
+            return
+        logger.info(f"  Tickers: {len(tickers)} ({len(priority)} priority + {len(upcoming)} upcoming)")
+        total_rows = 0
+        for ticker in tickers:
+            try:
+                t = yf.Ticker(ticker)
+                rows = fetch_earnings_history(t, ticker)
+                if rows:
+                    n = insert_earnings_history(DATABASE_PATH, rows)
+                    total_rows += n
+                upsert_external_scrape_log(DATABASE_PATH, ticker, "EARNINGS", success=True)
+            except YahooRateLimitedError:
+                raise
+            except Exception as e:
+                logger.warning(f"  [Yahoo Earnings Priority] {ticker}: {e}")
+                upsert_external_scrape_log(DATABASE_PATH, ticker, "EARNINGS", success=False, error=str(e))
+            time.sleep(YAHOO_REQUEST_DELAY_SECONDS)
+        duration = time.time() - start
+        log_run(DATABASE_PATH, "yahoo_earnings_priority", "SUCCESS", total_rows, duration_s=duration)
+        logger.info(f"JOB DONE: Yahoo Earnings Priority | {total_rows} rows | {duration:.1f}s")
+    except YahooRateLimitedError:
+        raise
+    except Exception as e:
+        logger.error(f"Yahoo Earnings Priority FAILED: {e}", exc_info=True)
+        log_run(DATABASE_PATH, "yahoo_earnings_priority", "FAILED", error_msg=str(e), duration_s=time.time()-start)
+
+
+def job_yahoo_institutional_holders():
+    """Weekly Sunday 04:00 BST: fetch institutional holders for full active universe."""
+    start = time.time()
+    logger.info("=" * 60)
+    logger.info("JOB START: Yahoo Institutional Holders (bulk)")
+    try:
+        import yfinance as yf
+        from database.db import get_connection
+        all_tickers = get_active_tickers(DATABASE_PATH, days=7)
+        # Resume-from-checkpoint: skip tickers with recent success
+        conn = get_connection(DATABASE_PATH)
+        cur  = conn.cursor()
+        cur.execute("""
+            SELECT ticker FROM external_scrape_log
+            WHERE data_type = 'HOLDERS'
+              AND last_success_at >= datetime('now', '-6 days')
+        """)
+        already_done = {r[0] for r in cur.fetchall()}
+        conn.close()
+        tickers = [t for t in all_tickers if t not in already_done]
+        logger.info(f"  Active tickers: {len(all_tickers)} | skipping {len(already_done)} recent | scraping {len(tickers)}")
+        total_rows = 0
+        for ticker in tickers:
+            try:
+                t = yf.Ticker(ticker)
+                rows = fetch_institutional_holders(t, ticker)
+                if rows:
+                    n = insert_institutional_holders(DATABASE_PATH, rows)
+                    total_rows += n
+                upsert_external_scrape_log(DATABASE_PATH, ticker, "HOLDERS", success=True)
+            except YahooRateLimitedError:
+                raise
+            except Exception as e:
+                logger.warning(f"  [Yahoo Holders] {ticker}: {e}")
+                upsert_external_scrape_log(DATABASE_PATH, ticker, "HOLDERS", success=False, error=str(e))
+            time.sleep(YAHOO_REQUEST_DELAY_SECONDS)
+        duration = time.time() - start
+        log_run(DATABASE_PATH, "yahoo_institutional_holders", "SUCCESS", total_rows, duration_s=duration)
+        logger.info(f"JOB DONE: Yahoo Institutional Holders | {total_rows} rows | {duration:.1f}s")
+    except YahooRateLimitedError:
+        raise
+    except Exception as e:
+        logger.error(f"Yahoo Institutional Holders FAILED: {e}", exc_info=True)
+        log_run(DATABASE_PATH, "yahoo_institutional_holders", "FAILED", error_msg=str(e), duration_s=time.time()-start)
+
+
+def job_yahoo_financials():
+    """Weekly Monday 04:00 BST: fetch financials (income/balance/cashflow) for full active universe."""
+    start = time.time()
+    logger.info("=" * 60)
+    logger.info("JOB START: Yahoo Financials (bulk)")
+    try:
+        import yfinance as yf
+        from database.db import get_connection
+        all_tickers = get_active_tickers(DATABASE_PATH, days=7)
+        conn = get_connection(DATABASE_PATH)
+        cur  = conn.cursor()
+        cur.execute("""
+            SELECT ticker FROM external_scrape_log
+            WHERE data_type = 'FINANCIALS'
+              AND last_success_at >= datetime('now', '-6 days')
+        """)
+        already_done = {r[0] for r in cur.fetchall()}
+        conn.close()
+        tickers = [t for t in all_tickers if t not in already_done]
+        logger.info(f"  Active tickers: {len(all_tickers)} | skipping {len(already_done)} recent | scraping {len(tickers)}")
+        total_rows = 0
+        for ticker in tickers:
+            try:
+                t = yf.Ticker(ticker)
+                rows = fetch_financial_statements(t, ticker)
+                if rows:
+                    n = insert_financial_statements(DATABASE_PATH, rows)
+                    total_rows += n
+                upsert_external_scrape_log(DATABASE_PATH, ticker, "FINANCIALS", success=True)
+            except YahooRateLimitedError:
+                raise
+            except Exception as e:
+                logger.warning(f"  [Yahoo Financials] {ticker}: {e}")
+                upsert_external_scrape_log(DATABASE_PATH, ticker, "FINANCIALS", success=False, error=str(e))
+            time.sleep(YAHOO_REQUEST_DELAY_SECONDS)
+        duration = time.time() - start
+        log_run(DATABASE_PATH, "yahoo_financials", "SUCCESS", total_rows, duration_s=duration)
+        logger.info(f"JOB DONE: Yahoo Financials | {total_rows} rows | {duration:.1f}s")
+    except YahooRateLimitedError:
+        raise
+    except Exception as e:
+        logger.error(f"Yahoo Financials FAILED: {e}", exc_info=True)
+        log_run(DATABASE_PATH, "yahoo_financials", "FAILED", error_msg=str(e), duration_s=time.time()-start)
+
+
+def job_yahoo_earnings_bulk():
+    """Weekly Tuesday 04:00 BST: bulk gap-fill earnings history for full active universe."""
+    start = time.time()
+    logger.info("=" * 60)
+    logger.info("JOB START: Yahoo Earnings (bulk)")
+    try:
+        import yfinance as yf
+        from database.db import get_connection
+        all_tickers = get_active_tickers(DATABASE_PATH, days=7)
+        conn = get_connection(DATABASE_PATH)
+        cur  = conn.cursor()
+        cur.execute("""
+            SELECT ticker FROM external_scrape_log
+            WHERE data_type = 'EARNINGS'
+              AND last_success_at >= datetime('now', '-6 days')
+        """)
+        already_done = {r[0] for r in cur.fetchall()}
+        conn.close()
+        tickers = [t for t in all_tickers if t not in already_done]
+        logger.info(f"  Active tickers: {len(all_tickers)} | skipping {len(already_done)} recent | scraping {len(tickers)}")
+        total_rows = 0
+        for ticker in tickers:
+            try:
+                t = yf.Ticker(ticker)
+                rows = fetch_earnings_history(t, ticker)
+                if rows:
+                    n = insert_earnings_history(DATABASE_PATH, rows)
+                    total_rows += n
+                upsert_external_scrape_log(DATABASE_PATH, ticker, "EARNINGS", success=True)
+            except YahooRateLimitedError:
+                raise
+            except Exception as e:
+                logger.warning(f"  [Yahoo Earnings Bulk] {ticker}: {e}")
+                upsert_external_scrape_log(DATABASE_PATH, ticker, "EARNINGS", success=False, error=str(e))
+            time.sleep(YAHOO_REQUEST_DELAY_SECONDS)
+        duration = time.time() - start
+        log_run(DATABASE_PATH, "yahoo_earnings_bulk", "SUCCESS", total_rows, duration_s=duration)
+        logger.info(f"JOB DONE: Yahoo Earnings Bulk | {total_rows} rows | {duration:.1f}s")
+    except YahooRateLimitedError:
+        raise
+    except Exception as e:
+        logger.error(f"Yahoo Earnings Bulk FAILED: {e}", exc_info=True)
+        log_run(DATABASE_PATH, "yahoo_earnings_bulk", "FAILED", error_msg=str(e), duration_s=time.time()-start)
+
+
 def _log_startup_banner():
     try:
         result = subprocess.run(
@@ -561,6 +781,34 @@ def main():
             job_market_history,
             CronTrigger(hour=7, minute=0, day_of_week="mon-fri"),
             id="market_history", name="Market History 07:00",
+        )
+
+        # ── Yahoo daily priority (Mon-Fri) ────────────────────
+        scheduler.add_job(
+            job_yahoo_analyst_changes,
+            CronTrigger(hour=2, minute=0, day_of_week="mon-fri"),
+            id="yahoo_analyst_02:00", name="Yahoo Analyst Changes (priority)",
+        )
+        scheduler.add_job(
+            job_yahoo_earnings_priority,
+            CronTrigger(hour=2, minute=15, day_of_week="mon-fri"),
+            id="yahoo_earnings_02:15", name="Yahoo Earnings (priority)",
+        )
+        # ── Yahoo weekly bulk (spread across Sun-Tue) ─────────
+        scheduler.add_job(
+            job_yahoo_institutional_holders,
+            CronTrigger(hour=4, minute=0, day_of_week="sun"),
+            id="yahoo_institutional_sun_04:00", name="Yahoo Institutional Holders (bulk)",
+        )
+        scheduler.add_job(
+            job_yahoo_financials,
+            CronTrigger(hour=4, minute=0, day_of_week="mon"),
+            id="yahoo_financials_mon_04:00", name="Yahoo Financials (bulk)",
+        )
+        scheduler.add_job(
+            job_yahoo_earnings_bulk,
+            CronTrigger(hour=4, minute=0, day_of_week="tue"),
+            id="yahoo_earnings_tue_04:00", name="Yahoo Earnings (bulk)",
         )
 
         logger.info("Scheduled jobs:")
