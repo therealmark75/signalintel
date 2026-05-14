@@ -159,3 +159,77 @@ def test_legal_risk_distribution(db):
     ).fetchone()[0]
     none_pct = none_count / total * 100
     assert none_pct >= 70, f"'None' risk only {none_pct:.0f}% of classified tickers — classifier may be over-triggering"
+
+
+# ── Yahoo Phase 2a freshness gates ───────────────────────────────────────────
+
+def test_yahoo_earnings_history_freshness(db):
+    """
+    Latest earnings_history scraped_at must be within 14 days of now.
+    Skipped if the table is empty (job has not yet run — acceptable on fresh deploy).
+
+    Catches: yahoo_earnings_priority or yahoo_earnings_bulk job dying silently.
+    Ignores: tickers with no earnings data from Yahoo (empty fetch is NOT written).
+    """
+    row = db.execute("SELECT MAX(scraped_at) FROM earnings_history").fetchone()
+    if row[0] is None:
+        pytest.skip("earnings_history is empty — Yahoo scraper not yet run")
+    latest = datetime.fromisoformat(row[0])
+    if latest.tzinfo is None:
+        latest = latest.replace(tzinfo=timezone.utc)
+    cutoff = datetime.now(timezone.utc) - timedelta(days=14)
+    assert latest >= cutoff, f"earnings_history last scraped {row[0]} — older than 14 days"
+
+
+def test_yahoo_financial_statements_freshness(db):
+    """
+    Latest financial_statements scraped_at must be within 14 days of now.
+    Skipped if the table is empty (weekly bulk job runs once; first run may be pending).
+
+    Catches: yahoo_financials bulk job dying silently.
+    Ignores: tickers with no financial data from Yahoo.
+    """
+    row = db.execute("SELECT MAX(scraped_at) FROM financial_statements").fetchone()
+    if row[0] is None:
+        pytest.skip("financial_statements is empty — Yahoo financials scraper not yet run")
+    latest = datetime.fromisoformat(row[0])
+    if latest.tzinfo is None:
+        latest = latest.replace(tzinfo=timezone.utc)
+    cutoff = datetime.now(timezone.utc) - timedelta(days=14)
+    assert latest >= cutoff, f"financial_statements last scraped {row[0]} — older than 14 days"
+
+
+def test_yahoo_analyst_changes_freshness(db):
+    """
+    Latest analyst_changes scraped_at must be within 14 days of now.
+    Skipped if the table is empty (daily job has not yet run on this deploy).
+
+    Catches: yahoo_analyst_changes daily priority job dying silently.
+    Ignores: tickers with no analyst upgrade/downgrade history from Yahoo.
+    """
+    row = db.execute("SELECT MAX(scraped_at) FROM analyst_changes").fetchone()
+    if row[0] is None:
+        pytest.skip("analyst_changes is empty — Yahoo analyst scraper not yet run")
+    latest = datetime.fromisoformat(row[0])
+    if latest.tzinfo is None:
+        latest = latest.replace(tzinfo=timezone.utc)
+    cutoff = datetime.now(timezone.utc) - timedelta(days=14)
+    assert latest >= cutoff, f"analyst_changes last scraped {row[0]} — older than 14 days"
+
+
+def test_yahoo_institutional_holders_freshness(db):
+    """
+    Latest institutional_holders scraped_at must be within 14 days of now.
+    Skipped if the table is empty (weekly Sunday bulk job may not have run yet).
+
+    Catches: yahoo_institutional_holders weekly bulk job dying silently.
+    Ignores: tickers where Yahoo returns no institutional holder data.
+    """
+    row = db.execute("SELECT MAX(scraped_at) FROM institutional_holders").fetchone()
+    if row[0] is None:
+        pytest.skip("institutional_holders is empty — Yahoo holders scraper not yet run")
+    latest = datetime.fromisoformat(row[0])
+    if latest.tzinfo is None:
+        latest = latest.replace(tzinfo=timezone.utc)
+    cutoff = datetime.now(timezone.utc) - timedelta(days=14)
+    assert latest >= cutoff, f"institutional_holders last scraped {row[0]} — older than 14 days"
