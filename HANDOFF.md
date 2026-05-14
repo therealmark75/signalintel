@@ -3,109 +3,125 @@
 **Tactical session state.** Updated end of each session. For stable
 project context (who/what/how), see `PROJECT_CONTEXT.md`.
 
-Last updated: 14 May 2026, end of session (Phase 2b-i shipped).
-Next session: Phase 2b-ii: 5 new scorer functions + composite rebalance + version bump. FRESH CHAT recommended (large scoring session).
+Last updated: 14 May 2026, end of session (Phase 2b-ii shipped).
+Next session: Phase 2b-iii or later phases. FRESH CHAT recommended.
 
 ---
 
-## JUST SHIPPED -- 14 May 2026 (Phase 2b-i: substrate refactor)
+## JUST SHIPPED — 14 May 2026 (Phase 2b-ii: 5 new scorer functions + composite rebalance)
 
-### Tail-end Phase 2a cleanup (no commits)
+### Secrets leakage gate (commit 2eb28c5)
 
-- Yahoo benchmark residue cleared from all 5 tables: `analyst_changes` (4,833 rows), `financial_statements` (4,214 rows), `institutional_holders` (50 rows), `earnings_history` (20 rows), `external_scrape_log` (20 rows). All rows dated 2026-05-14T06:18 UTC benchmark window. No post-07:29 rows existed. Tables now empty, waiting for first scheduled cron.
-- Backup file `data/trading_system.db.backup_pre_vacuum_20260513_064920` (363MB) deleted from filesystem. File was never git-tracked; no commit possible or needed.
+- `docs/config_variable_classification.md` created: authoritative enumeration of all variables in 5 tracked config files. ALERT_CONFIG explicitly noted as "7 May 2026 near-miss" (smtp credentials, name matches no grep pattern).
+- CLAUDE.md note added directing auditors to use this file instead of literal grep patterns.
 
-### New module (commit c7b7dc1)
+### FOLLOWUPS cleanup (commit 61a9eea, pushed)
 
-- `signals/line_item_keys.py`: canonical snake_case vocabulary mapping raw yfinance PascalCase strings to canonical names. Scorer functions reference this module's constants; if yfinance renames a field, only this file needs updating.
-- 12 INCOME_KEYS, 15 BALANCE_KEYS, 7 CASHFLOW_KEYS. Keys verified against yfinance 1.2.0 AAPL output 14 May 2026.
-- `common_stock_equity` intentionally absent (not present in yfinance 1.2.0 output).
-- PIOTROSKI_LOOKUPS (9 entries): all line items for the 9 binary Piotroski F-Score signals.
-- ALTMAN_LOOKUPS (6 entries): Altman Z-Score formula. X4 uses `TotalLiabilitiesNetMinorityInterest` (classic Altman formula), NOT `TotalDebt`. `total_debt` stays in BALANCE_KEYS for future use but is not in ALTMAN_LOOKUPS.
+- 6 completed FOLLOWUP entries pruned from PROJECT_CONTEXT.md.
+- New STRUCTURAL DEBT entry added: TEST ISOLATION REFACTOR (tests run against live production DB; proper fix needs per-test temp DB, estimated 20+ files affected).
+- All 14 local commits (9 Phase 2a + 5 Phase 2b-i) pushed to remote.
 
-### Rename (commit 28c5fcf)
+### Phase 2b-ii (5 commits, local main, unpushed)
 
-- `screener_rows` → `ticker_data_rows` across 4 files: `main.py` (6 lines), `signals/scorer.py` (2 lines), `signals/scanner.py` (12 lines), `signals/target_price.py` (2 lines). 22 lines total.
-- `insert_screener_rows` (DB helper function name for writing to `screener_snapshots`) intentionally unchanged — different concept.
-- Post-rename absence grep confirms zero remaining `screener_rows` variable references.
+**Commit 16e36bd** — `feat(scorer): add 4 Yahoo enrichment map helpers + wire into job_generate_signals`
 
-### Signature extension (commit babebb3)
+- `database/db.py`: 4 new helpers after `get_legal_risk_map`:
+  - `get_earnings_enrichment_map` → `{ticker: [list most-recent-first]}`
+  - `get_financials_enrichment_map` → `{ticker: {stmt_type: {fiscal_year: {raw_key: value}}}}`
+  - `get_inst_ownership_map` → `{ticker: {total_pct_held, holder_count, filing_date}}` (latest filing only via INNER JOIN)
+  - `get_analyst_momentum_map` → `{ticker: {upgrades_90d, downgrades_90d, net_momentum}}` (90-day window, 'up'/'init'=upgrade)
+- `main.py`: 4 new imports, 4 map builds in `job_generate_signals`, 4 new kwargs passed to `score_all_tickers`.
+- `tests/test_enrichment_map_builders.py`: 4 isolated shape tests using tmp_path SQLite.
 
-- `score_all_tickers` extended with 4 no-op kwargs for Phase 2b-ii: `earnings_map`, `financials_map`, `inst_own_map`, `analyst_mom_map`. All default None with `or {}` pattern inside function body. Not consumed by any scoring logic yet; Phase 2b-ii diff will be purely additive.
+**Commit a108153** — `feat(scorer): add 5 Phase 2b-ii scorer functions + TickerSignal fields`
 
-### Snapshot test (commits 386a745, 68fe8b6)
+- `signals/scorer.py`:
+  - Import: `PIOTROSKI_LOOKUPS, ALTMAN_LOOKUPS` from `signals.line_item_keys`
+  - `_parse_market_cap_text(s)` → float|None: parses "1.5B" etc.
+  - `score_earnings_surprise`: 4-quarter decay weights (4/3/2/1), contribution ladder ±7/±15/±25, neutral zone (-3%, 0%], P5 empty→50.0
+  - `score_piotroski`: Lock 1 (< 2 years → 50.0), 9 binary signals, F≥7→80/6→65/5→50/4→38/≤3→20
+  - `score_altman_penalty`: all-or-nothing, Z≥3→0/≥1.8→-10/≥0→-30/<0→-60, X4 uses TotalLiabilitiesNetMinorityInterest
+  - `score_inst_ownership`: Lock 3 (pct>60→75.0), tiers >40→55/≤20→35, cap at 100, P5 None→50.0
+  - `score_analyst_momentum`: net≥3→80/.../≤-3→20, P5 None→50.0
+  - `TickerSignal`: 5 new fields (earnings_score=50.0, piotroski_score=50.0, altman_penalty=0, inst_own_score=50.0, analyst_mom_score=50.0)
+- `tests/test_phase2b_scorers.py`: 25 tests (P21 matrix: positive/negative/P5/partial/edge × 5 scorers)
 
-- New file `tests/test_scorer_snapshot.py`: behaviour-preservation snapshot for `score_all_tickers`. 14 synthetic tickers covering all 7 rating tiers (STRONG_BUY through STRONG_SELL), 3 legal rendering states (MINOR penalty / NONE explicit / absent), 3 sector modifier paths (HighSector 60, LowSector 40, NeutralSector 50), 1 all-NULL P5 ticker.
-- Asserts `composite_score_raw`, `composite_score`, `rating`, `legal_penalty`, `sector_modifier_applied` per ticker to 1dp.
-- SS07 rebuilt mid-session: original inputs (`rsi_14=28`, `low_52w_pct=5`) produced `reversion_score=78` which tripped the HOLD branch before STRONG_SELL. Rebuilt with `rsi_14=58`, `low_52w_pct=45` → `reversion_score=15` → STRONG_SELL correctly (composite 18.0). Diagnosis B (no bug in `assign_rating`, synthetic data quirk).
-- WH14 added for previously missing WEAK_HOLD coverage: composite 31.9, insider_score 34.0 (CFO sell), sector neutral. Verified WEAK_HOLD fires correctly (composite < 38 AND insider <= 35).
-- Snapshot baseline regenerated post-patch. Test passes.
+**Commit f1c825d** — `feat(scorer): rebalance composite weights to 1.60-sum + apply Altman penalty additively`
+
+- `compute_composite`: 4 new params (earnings, piotroski, inst_own, analyst_mom all default 50.0), 4 new weights (each 0.125, total 0.50 added). New sum: 1.60.
+- `score_all_tickers`: computes all 5 new scores per ticker, passes to `compute_composite`, applies `altman_penalty` additively alongside `legal_penalty` in `c_score_raw`.
+
+**Commit f477b5f** — `feat(scorer): bump SCORING_ENGINE_VERSION to 0.13.0 for Phase 2b-ii`
+
+- `config/constants.py`: `SCORING_ENGINE_VERSION = "0.13.0"`
+
+**Commit 48fdf49** — `test(scorer): regenerate snapshot baseline for v0.13.0 + add synthetic enrichment maps for SS07`
+
+- `tests/test_scorer_snapshot.py`:
+  - SS07 row: added `"market_cap": "240M"` for Altman (Z≈-0.25 → penalty -60)
+  - 4 new constants: `_SYNTHETIC_EARNINGS_MAP`, `_SYNTHETIC_FINANCIALS_MAP`, `_SYNTHETIC_INST_OWN_MAP`, `_SYNTHETIC_ANALYST_MOM_MAP`
+  - SS07 synthetic data: 4 severe earnings misses → score 0.0; Piotroski F=2 → score 20.0; analyst net=-4 → score 20.0; Altman Z<0 → penalty -60 → composite clamped to 0.0 → STRONG_SELL
+  - Test call passes all 4 enrichment maps
+  - EXPECTED_SNAPSHOT regenerated for v0.13.0 (all 7 rating tiers represented)
+- P21 distribution: STRONG_BUY(1) BUY(2) STRONG_HOLD(6) HOLD(1) SELL(2) WEAK_HOLD(1) STRONG_SELL(1)
 
 ### Test count
 
-- pytest: 203 passing, 4 Yahoo freshness skipped (tables still empty, correct behaviour).
-- Prior count was 202 (206 Phase 2a count − 4 Yahoo freshness that now correctly skip). +1 snapshot test.
+- pytest: 232 passing, 4 Yahoo freshness skipped (tables still empty, correct behaviour).
+- Prior: 207 passing. +25 phase2b scorers + 4 enrichment map builders = +29 new tests, -4 (snapshot was failing during commits 3-4) → net +25, but snapshot now passing again.
 
 ### Commits (5 total, local main, unpushed)
 
 ```
-c7b7dc1 feat(scorer): add line_item_keys.py canonical vocabulary module
-28c5fcf refactor(scorer): rename screener_rows to ticker_data_rows
-babebb3 feat(scorer): add Phase 2b-ii enrichment kwargs (no consumption)
-386a745 test(scorer): add snapshot test for behaviour preservation
-68fe8b6 test(scorer): patch snapshot coverage — fix SS07 STRONG_SELL routing, add WH14 WEAK_HOLD
+48fdf49 test(scorer): regenerate snapshot baseline for v0.13.0 + add synthetic enrichment maps for SS07
+f477b5f feat(scorer): bump SCORING_ENGINE_VERSION to 0.13.0 for Phase 2b-ii
+f1c825d feat(scorer): rebalance composite weights to 1.60-sum + apply Altman penalty additively
+a108153 feat(scorer): add 5 Phase 2b-ii scorer functions + TickerSignal fields
+16e36bd feat(scorer): add 4 Yahoo enrichment map helpers + wire into job_generate_signals
 ```
 
-Combined with 9 Phase 2a commits, 14 commits sit on local main unpushed.
+Combined with 16 prior pushed commits, 5 commits sit on local main unpushed.
 
-**SCORING_ENGINE_VERSION unchanged at 0.12.0** (substrate-only refactor, no scoring logic changed, no version bump warranted).
+**SCORING_ENGINE_VERSION bumped to 0.13.0** — composite rebalance + 5 new enrichment scorers.
 
 ---
 
 ## CURRENT STATE (end of 14 May 2026)
 
-- Scheduler PID 1867 running on Phase 2a code since 07:29 BST 14 May. Phase 2b-i commits are on disk but scheduler has not been restarted (substrate refactor is not scoring-live until Phase 2b-ii adds scorer functions).
-- 5 Phase 2b-i commits + 9 Phase 2a commits on local main, not yet pushed.
-- 5 Yahoo data tables empty, waiting for first scheduled cron: tonight 02:00 BST (analyst priority) and 02:15 BST (earnings priority).
-- pytest: 203 passing, 4 Yahoo freshness skipped.
-- SCORING_ENGINE_VERSION: 0.12.0. Bump to 0.13.0 happens in Phase 2b-ii after composite rebalance.
-- Backup file deleted, 363MB reclaimed, DB at ~328MB.
-- `signals/line_item_keys.py` in place. PIOTROSKI_LOOKUPS and ALTMAN_LOOKUPS ready for Phase 2b-ii.
+- Scheduler PID 1867 still running on Phase 2a code (not restarted since 07:29 BST).
+  Phase 2b-ii is on disk but live scheduler must be restarted to use new scoring.
+- 5 Phase 2b-ii commits on local main, not yet pushed.
+- 5 Yahoo data tables: analyst_changes and earnings_history may now have overnight data (02:00 / 02:15 BST crons). Verify before next session.
+- pytest: 232 passing, 4 Yahoo freshness skipped.
+- SCORING_ENGINE_VERSION: 0.13.0.
 
 ---
 
-## PROCESS TELLS -- 14 May 2026 (Phase 2b-i session)
+## PROCESS TELLS — 14 May 2026 (Phase 2b-ii session)
 
-- **Snapshot coverage gap caught at gate-walk, not in CC's audit output.** CC implemented the 12-15 ticker profile coverage matrix from the locked spec, all 7 rating tiers nominally assigned, but SS07 (`rsi_14=28`, `low_52w_pct=5`) produced `reversion_score=78` which tripped the `reversion >= 75` HOLD branch before the `composite < 25 AND insider <= 20` STRONG_SELL branch. Diagnosis B confirmed: no bug in `assign_rating`, the synthetic inputs for a "deep bearish" ticker were inadvertently perfect for the reversion scorer. Patched mid-session. Lesson: when a Phase 2 prompt locks a profile coverage matrix, the verification gate must require empirical confirmation that each matrix row is represented with the expected rating, not just that the total ticker count matches. P21 codified.
+- **Empty-insiders diagnostic error.** Pre-commit P21 check accidentally passed `[]` instead of `_SYNTHETIC_INSIDERS`, producing SS07 composite=35.8 (insider=50 neutral) instead of the correct 28.0 (insider=0 from sellers). This led to an overstated pre-computation — SS07 appeared to route SELL not WEAK_HOLD under new weights. The actual issue was narrower (SS07 at 28.0 → WEAK_HOLD, not SELL). Lesson: diagnostic scripts must use the same input fixtures as the test. Always verify the fixture being passed before trusting the output.
 
-- **Two-cleanup-prompts-instead-of-one was over-ceremony.** Mark pushed back on the Phase 2a tail-end cleanup being drafted as two sequential prompts (audit prompt → DELETE prompt). Collapsed to a single audit-and-DELETE prompt with embedded self-check; finished cleanly in 10 minutes. Lesson: Phase 1 + Phase 2 rigour earns its weight on substrate refactors, schema migrations, scoring logic. It is over-ceremony on housekeeping (file deletions, table truncations, residue cleanups). Rule codified: refactor / scoring / schema = two-turn; housekeeping / one-off DELETEs / file removals = single-turn with self-check.
-
-- **Date-blindness as a failure mode (both sides).** During the morning scheduler-state check, Athena read "scheduler dead" from empty pgrep output without sanity-checking the date stamp on the log file. CC's first reply assumed "today is 15 May" from conversation context priming. Both corrected by Mark explicitly stating the date. P22 codified: any session involving "yesterday / today / tomorrow / overnight" temporal reasoning requires grounding on the actual date at session start.
-
-- **Mark's communication preference locked mid-session.** Athena was over-explaining prompt construction rationale, surfacing architectural questions, and walking through diagnostic reasoning. Mark explicitly redirected: he's not technical, he wants Athena to make the calls and tell him outcome + next prompt, briefly. Replies: outcome, single recommendation, next prompt. No meta-notes on prompt design, no "two options to surface," no process lessons mid-flow. Process lessons land in HANDOFF / PROJECT_CONTEXT at session close. Memory updated.
+- **P21 STOP condition fired correctly.** SS07 under new 1.60-sum weights with all-neutral enrichment data (28.0 > 25 threshold) was caught before committing the snapshot. Option A (add enrichment data for SS07) was chosen over Option B (adjust base screener inputs) — the enrichment path exercises the new scorers and is more realistic.
 
 ---
 
 ## STILL OPEN
 
-- **Phase 2b-ii (next session, FRESH CHAT recommended — large session):** 5 new scorer functions (Earnings Surprise, Piotroski F-Score, Altman additive penalty, Institutional Ownership, Analyst Momentum), composite weight rebalance (1.10 → 1.60 sum, normalised), SCORING_ENGINE_VERSION bump 0.12.0 → 0.13.0, new unit tests for each scorer, snapshot baseline regeneration with new components. `signals/line_item_keys.py` PIOTROSKI_LOOKUPS and ALTMAN_LOOKUPS already in place.
-- **Altman Z-Score tiers (locked):** Z >= 3.0 = 0, 1.8 <= Z < 3.0 = -10, Z < 1.8 = -30, Z < 0 = -60.
-- **Phase 2b-ii prerequisite — Yahoo cron verification:** first action of next session must be verifying tonight's 02:00 / 02:15 BST Yahoo cron ran cleanly. Query `external_scrape_log` for `last_success_at > '2026-05-15T00:00'` and check the scheduler log for JOB START / JOB DONE envelope. If silent failure, characterise and fix before any Phase 2b-ii implementation proceeds.
-- **Phase 2b-ii timing dependency:** Sunday 04:00 BST = first bulk `institutional_holders` run. Monday 04:00 BST = first bulk `financial_statements` run. Tuesday 04:00 BST = first bulk `earnings_history` (full historical) run. Phase 2b-ii scorers need these tables populated. The later in the week the next session runs, the more data will be available.
-- **Push to remote:** 14 commits (9 Phase 2a + 5 Phase 2b-i) on local main. Push window TBD when Mark is ready.
+- **Scheduler restart:** Phase 2b-ii scorers are on disk but the scheduler at PID 1867 is running Phase 2a code. Next time the scheduler is restarted, it will pick up v0.13.0 scoring with all 5 new enrichment paths.
+- **Push to remote:** 5 Phase 2b-ii commits on local main. Push window TBD when Mark is ready.
+- **Yahoo cron verification:** Check `external_scrape_log` and `earnings_history` / `analyst_changes` tables for first overnight cron data (02:00 / 02:15 BST 15 May 2026).
 - **Phases 2c, 2d, 2e, 2f** queued per programme plan (flag substrate, rendering, end-to-end verification).
+- **TEST ISOLATION REFACTOR** — see STRUCTURAL DEBT in PROJECT_CONTEXT.md.
 
 ---
 
-## NOTES FOR FRESH-CHAT ATHENA (Phase 2b-ii)
+## NOTES FOR FRESH-CHAT ATHENA
 
 - Read PROJECT_CONTEXT.md first (stable), then this HANDOFF for current state.
-- Phase 2b-ii is a LARGE session: 5 new scorers + composite rebalance + version bump + tests + snapshot regeneration. Plan accordingly.
-- First action: verify tonight's Yahoo cron ran. `sqlite3 data/trading_system.db "SELECT data_type, COUNT(*), MAX(last_success_at) FROM external_scrape_log GROUP BY data_type;"` — should show rows for ANALYST and EARNINGS dated 15 May 2026.
-- The snapshot baseline in `tests/test_scorer_snapshot.py` will need updating in Phase 2b-ii (new components shift scores). This is expected and intentional — update it after all 5 scorer functions are wired in, using the same regeneration script pattern as Phase 2b-i Step 4a. The snapshot test is not a "do not change" artefact; it's a "change only when you mean to" artefact.
-- The `score_all_tickers` signature already has 4 no-op kwargs (`earnings_map`, `financials_map`, `inst_own_map`, `analyst_mom_map`) — Phase 2b-ii's diff is purely additive within the existing function body.
-- Composite weight rebalance target: from 1.10 current (momentum 0.35, quality 0.30, insider 0.25, reversion 0.10, volume 0.10) to 1.60 total with 5 new components added. Normalisation in `compute_composite` handles any total_w, so adding weights is safe.
-- The flag system (Phases 2d/2e) is NOT touched in Phase 2b-ii. Short Squeeze waits.
+- Phase 2b-ii is fully shipped. All 5 commits on local main, unpushed.
+- First action if continuing: verify Yahoo overnight cron. `sqlite3 data/trading_system.db "SELECT data_type, COUNT(*), MAX(last_success_at) FROM external_scrape_log GROUP BY data_type;"` — look for ANALYST and EARNINGS rows dated 2026-05-15.
+- The snapshot test now exercises all 4 enrichment paths via SS07 synthetic data. It is a "change only when you mean to" artefact — do not update it unless scoring logic intentionally changes.
+- `signals/scorer.py` enrichment scorer functions are at lines ~295–525. `compute_composite` is at ~573. `score_all_tickers` is at ~680.
 
 ---
 
