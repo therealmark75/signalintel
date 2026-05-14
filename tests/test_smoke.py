@@ -264,6 +264,14 @@ def test_api_watchlists_create_tier_limit_returns_structured_error(client):
     # Set tier='starter' (watchlist_limit=5) so the limit check in
     # /api/watchlists fires when we attempt to create a 6th watchlist.
     conn = get_connection(DB)
+    # Save production watchlist data before wiping for test setup.
+    _saved_meta = conn.execute(
+        "SELECT id, user_id, name, sort_order, created_at, updated_at, alerts_enabled, is_default "
+        "FROM watchlists_meta WHERE user_id=2"
+    ).fetchall()
+    _saved_watchlists = conn.execute(
+        "SELECT user_id, watchlist_id, ticker, added_at, notes FROM watchlists WHERE user_id=2"
+    ).fetchall()
     conn.execute("UPDATE users SET tier='starter' WHERE id=2")
     conn.execute("DELETE FROM watchlists WHERE user_id=2")
     conn.execute("DELETE FROM watchlists_meta WHERE user_id=2")
@@ -288,6 +296,19 @@ def test_api_watchlists_create_tier_limit_returns_structured_error(client):
         conn = get_connection(DB)
         conn.execute("DELETE FROM watchlists WHERE user_id=2")
         conn.execute("DELETE FROM watchlists_meta WHERE user_id=2")
+        for row in _saved_meta:
+            conn.execute(
+                "INSERT INTO watchlists_meta "
+                "(id, user_id, name, sort_order, created_at, updated_at, alerts_enabled, is_default) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                tuple(row)
+            )
+        for row in _saved_watchlists:
+            conn.execute(
+                "INSERT INTO watchlists (user_id, watchlist_id, ticker, added_at, notes) "
+                "VALUES (?, ?, ?, ?, ?)",
+                tuple(row)
+            )
         conn.execute("UPDATE users SET tier='elite' WHERE id=2")
         conn.commit()
         conn.close()
