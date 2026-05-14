@@ -90,12 +90,16 @@ same context.
 
 ### Core Tech Stack
 
-- Backend: Flask, SQLite, Python scheduler (`main.py`)
+- Backend: Flask, SQLite, Python scheduler (`main.py`). Correct
+  invocation is `python main.py scheduler` (13 May 2026 lesson; bare
+  `python main.py` exits with usage error).
 - Frontend: Jinja2 templates, vanilla JS, no framework yet
-- Data sources: FinViz (live), SEC EDGAR (live for legal risk),
-  FMP (dividends, with circuit breaker as of 12 May 2026), Yahoo Finance
-  (Phase 1 next major session, large infrastructure work, brings
-  components 9-16), SendGrid (planned for email)
+- Data sources: FinViz (live, 3 scrapes/day at 07:00, 11:00, 16:30 BST,
+  ~51 min per scrape, INSERT batched at end of full sector loop), SEC
+  EDGAR (live for legal risk), FMP (dividends, with circuit breaker as
+  of 12 May 2026), Yahoo Finance (Phase 1 next major session, large
+  infrastructure work, brings components 9-16), SendGrid (planned for
+  email)
 - Alerts: Telegram (live, watchlist-gated)
 - Payments: Stripe (Phase 2)
 - Mobile: React Native (Phase 4)
@@ -108,7 +112,8 @@ same context.
 the consecutive-429 circuit breaker landed in fmp_scraper.
 `_log_startup_banner()` logs SCORING_ENGINE_VERSION + git HEAD on every
 boot (mitigates runtime-code drift; necessary but not sufficient, see
-"Runtime-Code Drift").
+"Runtime-Code Drift"). Correct invocation: `python main.py scheduler`
+(bare `python main.py` exits with usage error; 13 May 2026 lesson).
 
 `web/app.py`: Flask routes, login, current_user(), session management.
 Banner port fixed to 5001 (was incorrectly 5000) on 9 May 2026.
@@ -160,11 +165,15 @@ Value/Sector are `inStrip: false`; null-overlay logic reads
 `r.wasNull` from getValue output (not the DB key directly).
 
 `scrapers/screener_scraper.py`: FinViz screener (Overview, Financial,
-Technical, Custom views). rel_volume from Custom column 64.
-`_scrape_exchange(soup)` wrapper uses href pattern search (f=exch_),
-not link index, robust against future FinViz page structure changes.
-`scrape_analyst_recom_priority` is the priority recom scraper, called
-inline by job_generate_signals.
+Technical, Custom views). Custom view column mappings: column 63 = Avg
+Volume (added 12 May 2026, Fix B, commit 6714509), column 64 =
+rel_volume. `_to_int` helper handles pandas float-formatted strings via
+`int(float(str(val).replace(",","").strip()))` (12 May 2026, Fix A,
+commit 164b6fb; the prior int() conversion choked on inputs like
+"4901758.0"). `_scrape_exchange(soup)` wrapper uses href pattern search
+(f=exch_), not link index, robust against future FinViz page structure
+changes. `scrape_analyst_recom_priority` is the priority recom scraper,
+called inline by job_generate_signals.
 
 `scrapers/legal_risk_scraper.py`: SEC EDGAR. legal_risk table has 9
 columns. Coverage expanding daily; ~87 tickers as of 9 May 2026,
@@ -220,16 +229,30 @@ propagation through `job_refresh_dividends`, cross-job reset via 2xx,
 and the threshold=1 edge case. All stub `requests.get` and `time.sleep`;
 no real HTTP, no real delays.
 
-`tests/` overall: 191 tests total (186 prior + 5 new circuit breaker
-tests). The two data-freshness tests (`test_signal_scores_freshness`,
-`test_screener_snapshots_freshness`) are sensitive operational
-tripwires that caught BUG B's 48-hour silent failure. Critical class
-of test, candidates for expansion to insider_trades, legal_risk, etc.
+`tests/test_data_integrity.py`: data-freshness tests. Two original
+tests (`test_signal_scores_freshness`, `test_screener_snapshots_freshness`)
+caught BUG B's 48-hour silent failure on 11 May. Expanded 12 May 2026
+(commit e31b79d) with three more covering insider_trades (via run_log,
+since the INSERT-OR-IGNORE pattern makes scraped_at unreliable),
+legal_risk (via scraped_at), and ticker_metadata (via updated_at). All
+five freshness tests at 72h consistency threshold. Cosmetic note: the
+two original tests still use em-dashes in assertion messages while the
+three new ones use commas; one-line cleanup pending.
+
+`tests/` overall: 194 tests total (191 prior + 3 new freshness tests
+from the 12 May expansion). The data-freshness tests are sensitive
+operational tripwires.
 
 `logs/trading_system.log`: live scheduler log. Configured in main.py
 via `logging.basicConfig` with StreamHandler(stdout) + FileHandler.
+Screener job logs `JOB START: Screener` and `JOB DONE: Screener (N
+rows, Xs)` envelope lines, useful for grep-based runtime verification.
 
-`data/trading_system.db`: SQLite database, ~315MB.
+`data/trading_system.db`: SQLite database, ~328MB post-VACUUM (13 May
+2026, reclaimed 35MB from the 9 May column drop, 363MB → 328MB).
+Growing ~33k rows/day across three daily scrape windows. Linear
+projection ~12M screener_snapshot rows/year; data retention strategy
+is a future thought (post-Yahoo).
 
 ### Key DB Tables
 
@@ -238,7 +261,12 @@ via `logging.basicConfig` with StreamHandler(stdout) + FileHandler.
   pre-7-May rows have NULL. BUG B (11 May 2026): INSERT in
   database/db.py:244 still referenced the dropped exchange column for
   ~48 hours, silent failure caught by pytest freshness tests, fixed
-  11 May and empirically confirmed 12 May.
+  11 May and empirically confirmed 12 May. Volume + avg_volume
+  populated from 12 May 2026 16:30 onward (commits 164b6fb, 6714509,
+  329dfee; baseline 0/11k pre-fix, 100% / 99.7% post-fix). The 0.3%
+  avg_volume NULL tail is legitimate FinViz data absence for
+  illiquid/SPAC tickers, empirically confirmed via ATC ("-" on FinViz)
+  and SPACEX ("Chart Not Available") spot-checks on 13 May 2026.
 - `ticker_metadata`: 8 May 2026 onward: ticker PK, exchange,
   first_seen_at, updated_at. Populated for 11,122+ tickers. Canonical
   source for exchange.
@@ -318,6 +346,12 @@ the version, purely presentational, no scoring substrate change.
 The 12 May BUG A circuit breaker did NOT bump the version, operational
 hardening only, no scoring substrate change.
 
+The 12 May volume + avg_volume NULL fix did NOT bump the version,
+data-completeness fix only; the volume component's scoring logic was
+already correct, the issue was upstream NULL inputs from the scraper.
+
+The 13 May VACUUM did NOT bump the version, storage reclamation only.
+
 ---
 
 ## PROCESS INVARIANTS: DOCS/SCORING_INVARIANTS.MD
@@ -382,6 +416,17 @@ the codebase (probably an early prototype scheduler module)" but
 empirical grep returned zero hits. The diagnosis was speculative.
 Unverified diagnoses carry forward in our docs as easily as in CC's.
 
+CC also occasionally drifts into adjacent concepts when reaching for
+"why" explanations. 13 May 2026 example: asked to characterise the
+28 tickers with NULL avg_volume from the post-fix scrape, CC's note
+referenced "tickers where the Custom view returned no exchange/data
+for that field." Exchange was dropped on 9 May 2026 and has nothing
+to do with avg_volume; CC's framing slipped onto an adjacent topic
+rather than the columns actually at play. The empirical verification
+itself was correct, but the loose explanation could have leaked into
+HANDOFF if not caught. Watch for explanations that reach for
+plausible-sounding adjacent concepts without verifying the mechanism.
+
 ---
 
 ## RUNTIME-CODE DRIFT: A FIRST-CLASS FAILURE MODE
@@ -415,8 +460,12 @@ Mitigation in place:
 - The banner is necessary but not sufficient. Detection-without-action
   is the failure mode the banner alone doesn't solve.
 - Habit: any commit touching SCORING_ENGINE_VERSION, signals/scorer.py,
-  the scheduler, or web/app.py should trigger an explicit process
-  restart at commit time. Don't rely on noticing the banner later.
+  the scheduler, web/app.py, OR scrapers/ should trigger an explicit
+  process restart at commit time. Don't rely on noticing the banner
+  later. The scrapers/ extension is a 13 May 2026 lesson: the volume +
+  avg_volume fix landed on disk and pushed without effect until the
+  scheduler restarted onto the new code, exactly the runtime-drift
+  pattern that hit the project four times in 7-9 May.
 - Schema migrations specifically: Phase 1 inventory must include "what
   would resurrect the dropped state on restart" (startup guards, ORM
   init, table-create-if-missing patterns). AND every CRUD path against
@@ -475,6 +524,19 @@ modify code outside the prompt's explicit scope.
   residual exchange reference remained (a dead one-time migration
   script). Empirical closure on the BUG B substrate.
 
+**Real-world wins (13 May 2026):**
+- Volume + avg_volume fix verified via baseline-and-comparison. Pre-fix
+  scrapes (07:00 and 11:00 12 May) showed 0% populated; post-fix scrape
+  (16:30 12 May, completing 17:23) showed 100% volume and 99.7%
+  avg_volume. The 28 NULL avg_volume rows spot-checked on FinViz (ATC
+  shows "-", SPACEX shows "Chart Not Available") confirming source-side
+  data absence rather than parser miss. P16 absolutism: hypothesis was
+  plausible, empirical check closed it.
+- VACUUM reclaimed 35MB on a 363MB DB (9.6% reduction), integrity
+  verified before and after, no row loss. Demonstrated the
+  stop-scheduler → backup → VACUUM → verify → restart workflow on a
+  live production DB without losing the running scheduler state.
+
 ---
 
 ## PRODUCT ROADMAP
@@ -514,6 +576,9 @@ modify code outside the prompt's explicit scope.
 ✅ BUG A proper fix: FMP consecutive-429 circuit breaker shipped (12 May 2026, commits c38e167, 876c025, 9b17c4d, ddd9da5)
 ✅ P19 sweep on screener_snapshots: dead migration script deleted (12 May 2026, commit 0848893)
 ✅ scheduler.log orphan + 9 May DB backup cleanup (12 May 2026, commit 94c1d91)
+✅ Volume + avg_volume NULL fix (12 May 2026, commits 164b6fb Fix A, 6714509 Fix B, 329dfee comment fix; empirically verified 13 May with baseline-and-comparison plus FinViz spot-checks)
+✅ Data-freshness test expansion (12 May 2026, commit e31b79d; insider_trades, legal_risk, ticker_metadata added at 72h threshold; 191 → 194 tests)
+✅ VACUUM screener database (13 May 2026; 35MB reclaimed, 363MB → 328MB, no row loss, integrity verified; closes the 9 May column-drop residue)
 
 [ ] Yahoo Finance pipeline + components 9-16 (FRESH CHAT, large infrastructure session, next major work)
 [ ] Virtual portfolio with margin calls and bust mechanic
@@ -764,6 +829,54 @@ push gate. Doc edits should come from Athena drafting an update prompt
 for CC, or Mark editing directly. CC self-initiating bypasses both
 review paths.
 
+### Baseline-and-comparison verification (13 May lesson)
+
+For any fix that changes data behaviour (NULL → populated, wrong value
+→ right value, missing rows → present rows), the strongest empirical
+test compares pre-fix and post-fix rows in the same query. The pattern:
+
+1. Identify a stable identifier that separates pre-fix from post-fix
+   rows (here: scraped_at hour window, with pre-fix scrapes at 07:00
+   and 11:00 of fix-day and post-fix scrapes at 16:30 onward)
+2. Run a populated-counts query grouped by that identifier
+3. Pre-fix groups should show the bug; post-fix groups should show the
+   fix; intermediate rows (if any) should follow whichever code was
+   running
+
+13 May 2026 volume + avg_volume fix verification was the textbook
+example. The query showed `2026-05-12T07: 0/11k populated, 0%` next to
+`2026-05-12T16: 11127/11127, 100%`. Pre-fix and post-fix in the same
+output, same units, no interpretation needed.
+
+This pattern works for any database fix where rows are accumulating
+naturally over time. It does NOT require backfilling pre-fix data
+(actively unhelpful, would erase the empirical evidence of the bug).
+
+### Pre-emptive baseline establishment (13 May lesson)
+
+CC's verify-the-fix prompt on 13 May ran preliminary queries on pre-fix
+data BEFORE the post-fix scrape completed, establishing baseline
+empirically (07:00 and 11:00 = 0% populated) so that when post-fix data
+landed, the comparison was already pre-loaded. Productive initiative
+that went slightly beyond the literal prompt scope but in the same
+direction.
+
+This is distinct from "scope drift": baseline-gathering on read-only
+queries adds no risk and strengthens the eventual gate. Document the
+pattern, don't flag as drift. The shape to encourage: CC should freely
+expand information-gathering steps when they sharpen the verification
+that's already being asked for.
+
+### main.py invocation correction (12 May, codified 13 May)
+
+12 May 2026 scheduler restart: bare `python main.py` exited with usage
+error. CC self-corrected to `python main.py scheduler` and the
+scheduler started cleanly. Captured in PROJECT_CONTEXT Core Tech Stack
+and main.py file description as the canonical invocation. Future
+restart prompts should use `python main.py scheduler`; bare `python
+main.py` will fail-fast with a usage message, which is the right
+ergonomics (the alternative would be silent misconfiguration).
+
 ### CC drift patterns (still real, less frequent)
 
 **File-level scope discipline working well.** CC reliably stops at
@@ -838,25 +951,11 @@ STRUCTURAL DEBT:
   eight scraper-layer issues surfaced (rel_volume, analyst_recom,
   insider_own_pct, insider_transactions, short_interest_pct,
   exchange [now resolved via ticker_metadata], finvizfinance quote
-  links[3], volume + avg_volume still NULL). Plus BUG A (FMP circuit
-  breaker missing, now resolved 12 May). Pattern: silent scraper
-  failures, individually defensible, cumulatively a substrate
-  problem. Proposed: 90-min hard cap, inventory only, no fixes
-  during the session. Yahoo brings its own data and may supersede
-  some columns.
-
-- VOLUME AND AVG_VOLUME STILL NULL: rel_volume fix exposed but did
-  not address two related columns. volume (raw daily) is NULL
-  because _to_int chokes on float-format strings like "4901758.0";
-  avg_volume is NULL because Avg Volume isn't in Technical view
-  (it's in Custom view column 63). Both fixable in a small follow-up.
-
-- DATA-FRESHNESS TEST EXPANSION: the two existing freshness tests
-  caught BUG B's 48-hour silent failure (11 May) and forced the
-  empirical 12 May verification. Add similar tests for
-  insider_trades, legal_risk, ticker_metadata. Optional: daily
-  Telegram alert if any expected scrape window passes without new
-  rows (passive monitoring vs. only-on-pytest-run).
+  links[3], volume + avg_volume [now resolved 12 May]). Plus BUG A
+  (FMP circuit breaker missing, now resolved 12 May). Pattern: silent
+  scraper failures, individually defensible, cumulatively a substrate
+  problem. Proposed: 90-min hard cap, inventory only, no fixes during
+  the session. Yahoo brings its own data and may supersede some columns.
 
 - SECRETS LEAKAGE GATE smarter than literal string match. 7 May
   near-miss: ALERT_CONFIG.smtp_pass slipped past grep for
@@ -885,9 +984,22 @@ STRUCTURAL DEBT:
 
 SMALL / COSMETIC:
 
-- VACUUM the database after the 9 May column drop (deferred, leaves
-  unused column space until next VACUUM, which is fine but worth
-  cleaning up eventually).
+- VACUUM BACKUP FILE: `data/trading_system.db.backup_pre_vacuum_20260513_064920`
+  (363MB) created during the 13 May VACUUM. Delete after ~24h of clean
+  post-VACUUM scrape cycles confirm no regression (so from 14 May 2026
+  06:50 BST onward). Small single-file commit.
+
+- DATA RETENTION STRATEGY (post-Yahoo): screener_snapshots grows ~33k
+  rows/day across three daily scrapes; linear projection ~12M rows/year
+  just from the screener. DB currently 328MB post-VACUUM. Worth thinking
+  about archival or summarisation policies before the DB grows past
+  a few GB, but not urgent. Better understood after Yahoo lands and
+  total data volume is clearer.
+
+- TEST EM-DASH CLEANUP: the two original freshness tests in
+  `tests/test_data_integrity.py` still use em-dashes in assertion
+  messages ("older than 72h —") while the three new ones (12 May
+  expansion) use commas. One-line cleanup pending.
 
 - LEGAL RISK COVERAGE: ~99% of tickers have no legal_risk row as of
   9 May 2026 (scraper actively catching up at ~10/day). State 1
