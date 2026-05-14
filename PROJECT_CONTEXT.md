@@ -398,6 +398,7 @@ ID when relevant.
 | P20 | Analyst completeness gate. When two paths diverge on what an analyst making a buy/sell/hold decision receives, the analytically-stronger path wins regardless of engineering cost. Engineering cost is a tiebreaker between analytically-equivalent paths only |
 | P21 | Profile coverage matrices in Phase 2 prompts require explicit per-row verification gates confirming each matrix row produced the expected rating — not just that the total ticker count matches. Total-count agreement does not imply per-row correctness; synthetic inputs designed for "deep bearish" can inadvertently maximise a reversion scorer and route through HOLD before STRONG_SELL (14 May 2026, SS07 diagnosis B) |
 | P22 | Session date is empirical context, not conversation-primed context. Any session involving "yesterday / today / tonight / overnight" temporal reasoning must ground on the actual current date stated explicitly at session start. Both CC and Athena are subject to date-blindness from primed context; the discipline is symmetric |
+| P23 | Auth-adjacent side-effects require explicit escalation in audit, not just disclosure. Commits that add or modify side-effects in auth-adjacent functions (`current_user()`, login, logout, session handling, tier checks) must flag the change in the audit table with "AUTH SIDE-EFFECT — REQUIRES REVIEW" or equivalent. Disclosure in a commit-message bullet is necessary but not sufficient. The 7 May 2026 BUG-001-REOPENED backdoor was introduced in commit 9e02e7d (May 6 18:26), disclosed in that commit's bullet, then misdescribed in commit 7949805 the next morning — neither instance flagged the side-effect for review. P17 would not have caught this; the function was named, just not escalated. The pre-commit hook for auth-adjacent diff review (FOLLOWUPS) is the mechanical enforcement layer for P23 |
 
 ---
 
@@ -1053,9 +1054,7 @@ STRUCTURAL DEBT:
 - PRE-COMMIT HOOK for diff review on auth-adjacent files (Phase 2
   infrastructure, mechanical Scope Discipline enforcement).
 
-- AUDIT THE 7 MAY MORNING CC AUDIT TABLE to see whether
-  current_user() was mentioned (determines whether P17 enforcement
-  is sufficient).
+- 7 MAY AUDIT TABLE REVIEW RESOLVED: No audit table from 7 May morning survives in repo (Finding C). However, secondary investigation found the backdoor was introduced in commit 9e02e7d (6 May 18:26), with the side-effect disclosed in the commit-message bullet but not escalated for review. CC subsequently misdescribed the function as a pure reader in 7949805 (6 May 20:59) while a test comment in the same commit acknowledged the side-effect existed. P17 enforcement is sufficient for audit-completeness; the gap was scope-discipline on auth-adjacent changes. P23 added to invariants. Pre-commit hook for auth-adjacent files (still queued in FOLLOWUPS) is the mechanical layer.
 
 - PENNY SCREENER EXCHANGE FILTER (post-Yahoo): deferred from 9 May
   per Phase 1 finding that "Other" bucket is dominated by ETFs
