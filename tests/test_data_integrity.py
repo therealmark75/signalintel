@@ -15,7 +15,7 @@ def test_signal_scores_freshness(db):
     if latest.tzinfo is None:
         latest = latest.replace(tzinfo=timezone.utc)
     cutoff = datetime.now(timezone.utc) - timedelta(hours=72)
-    assert latest >= cutoff, f"signal_scores last updated {row[0]} — older than 72h"
+    assert latest >= cutoff, f"signal_scores last updated {row[0]}, older than 72h"
 
 
 def test_screener_snapshots_freshness(db):
@@ -26,7 +26,7 @@ def test_screener_snapshots_freshness(db):
     if latest.tzinfo is None:
         latest = latest.replace(tzinfo=timezone.utc)
     cutoff = datetime.now(timezone.utc) - timedelta(hours=72)
-    assert latest >= cutoff, f"screener_snapshots last scraped {row[0]} — older than 72h"
+    assert latest >= cutoff, f"screener_snapshots last scraped {row[0]}, older than 72h"
 
 
 def test_insider_trades_freshness(db):
