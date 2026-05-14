@@ -70,13 +70,14 @@ _SYNTHETIC_ROWS = [
      "eps_growth_next_yr": -15.0, "short_interest_pct": 25.0, "analyst_recom": 4.2,
      "low_52w_pct": 8.0, "high_52w_pct": -35.0},
 
-    # Profile: HOLD (via strong reversion) — heavy insider selling lifts reversion
-    # score enough to trip the reversion >= 75 HOLD branch before STRONG_SELL
+    # Profile: STRONG_SELL — collapsed fundamentals, RSI mid-range + far from 52w low
+    # so reversion_score stays low (~15) and does not trip the reversion >= 75 HOLD branch.
+    # insider_score = 0 (CEO+CFO+Chairman all selling); composite ~18.
     {"ticker": "SS07", "company": "StrongSell Corp", "sector": "Financials",
-     "price": 20.0, "change_pct": -3.5, "sma_50_pct": -18.0, "sma_200_pct": -22.0,
-     "rsi_14": 28.0, "rel_volume": 2.2, "roe": -20.0, "eps_growth_this_yr": -40.0,
+     "price": 20.0, "change_pct": -2.5, "sma_50_pct": -7.0, "sma_200_pct": -20.0,
+     "rsi_14": 58.0, "rel_volume": 0.7, "roe": -25.0, "eps_growth_this_yr": -45.0,
      "eps_growth_next_yr": -30.0, "short_interest_pct": 35.0, "analyst_recom": 4.8,
-     "low_52w_pct": 5.0, "high_52w_pct": -50.0},
+     "low_52w_pct": 45.0, "high_52w_pct": -50.0},
 
     # Profile: legal MINOR row — composite is reduced by -5 penalty
     {"ticker": "LM08", "company": "Legal Minor Inc", "sector": "Technology",
@@ -119,6 +120,15 @@ _SYNTHETIC_ROWS = [
      "rsi_14": None, "rel_volume": None, "roe": None, "eps_growth_this_yr": None,
      "eps_growth_next_yr": None, "short_interest_pct": None, "analyst_recom": None,
      "low_52w_pct": None, "high_52w_pct": None},
+
+    # Profile: WEAK_HOLD — moderate weakness, CFO sell drives insider_score to 34
+    # (below the <= 35 threshold); composite ~32; reversion ~15 (far from 52w low,
+    # RSI mid-range) so neither HOLD nor STRONG_SELL branch fires.
+    {"ticker": "WH14", "company": "WeakHold Corp", "sector": "Industrials",
+     "price": 28.0, "change_pct": -1.2, "sma_50_pct": -6.0, "sma_200_pct": -12.0,
+     "rsi_14": 50.0, "rel_volume": 0.9, "roe": 1.0, "eps_growth_this_yr": -8.0,
+     "eps_growth_next_yr": -5.0, "short_interest_pct": 12.0, "analyst_recom": 3.8,
+     "low_52w_pct": 30.0, "high_52w_pct": -20.0},
 ]
 
 _SYNTHETIC_INSIDERS = [
@@ -130,6 +140,8 @@ _SYNTHETIC_INSIDERS = [
     {"ticker": "SS07", "transaction_date": "2026-04-28", "transaction_type": "Sale", "insider_title": "CEO"},
     {"ticker": "SS07", "transaction_date": "2026-04-22", "transaction_type": "Sale", "insider_title": "CFO"},
     {"ticker": "SS07", "transaction_date": "2026-04-18", "transaction_type": "Sale", "insider_title": "Chairman"},
+    # CFO selling for WH14 — drives insider_score to 34 (weight 8: net=-8, mapped=34)
+    {"ticker": "WH14", "transaction_date": "2026-04-20", "transaction_type": "Sale", "insider_title": "CFO"},
 ]
 
 _SYNTHETIC_LEGAL_MAP = {
@@ -147,8 +159,11 @@ _SYNTHETIC_SECTOR_MAP = {
     "NeutralSector": 50.0,
 }
 
-# ── Snapshot — captured 2026-05-14 before Phase 2b-i rename commit ────────────
-# Re-generate with: python -c "from signals.scorer import score_all_tickers; ..."
+# ── Snapshot — updated 2026-05-14 (Phase 2b-i coverage patch) ────────────────
+# SS07: rewritten with mid-range RSI + far from 52w low so reversion_score ~15;
+#       HOLD branch no longer pre-empts STRONG_SELL.
+# WH14: new ticker added for WEAK_HOLD coverage (composite ~32, insider 34).
+# Re-generate with: python -c "from tests.test_scorer_snapshot import _SYNTHETIC_ROWS, ..."
 # Do NOT modify this to match broken output — fix the refactor instead.
 EXPECTED_SNAPSHOT = {
     "SB01": {"composite_score_raw": 88.6, "composite_score": 88.6, "rating": "STRONG_BUY",  "legal_penalty": 0,  "sector_modifier_applied":  0.0},
@@ -162,8 +177,9 @@ EXPECTED_SNAPSHOT = {
     "NL13": {"composite_score_raw": 50.0, "composite_score": 50.0, "rating": "STRONG_HOLD", "legal_penalty": 0,  "sector_modifier_applied":  0.0},
     "HO04": {"composite_score_raw": 43.1, "composite_score": 43.1, "rating": "HOLD",        "legal_penalty": 0,  "sector_modifier_applied":  0.0},
     "WH05": {"composite_score_raw": 33.4, "composite_score": 33.4, "rating": "SELL",        "legal_penalty": 0,  "sector_modifier_applied":  0.0},
+    "WH14": {"composite_score_raw": 31.9, "composite_score": 31.9, "rating": "WEAK_HOLD",   "legal_penalty": 0,  "sector_modifier_applied":  0.0},
     "SE06": {"composite_score_raw": 24.5, "composite_score": 24.5, "rating": "SELL",        "legal_penalty": 0,  "sector_modifier_applied":  0.0},
-    "SS07": {"composite_score_raw": 12.1, "composite_score": 12.1, "rating": "HOLD",        "legal_penalty": 0,  "sector_modifier_applied":  0.0},
+    "SS07": {"composite_score_raw": 18.0, "composite_score": 18.0, "rating": "STRONG_SELL", "legal_penalty": 0,  "sector_modifier_applied":  0.0},
 }
 
 
