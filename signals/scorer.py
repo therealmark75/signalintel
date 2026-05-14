@@ -18,6 +18,7 @@ from datetime import datetime, timezone, timedelta
 from dataclasses import dataclass, field
 
 from config.constants import MIN_PRICE_FOR_SIGNAL
+from signals.line_item_keys import PIOTROSKI_LOOKUPS, ALTMAN_LOOKUPS
 
 logger = logging.getLogger(__name__)
 
@@ -287,6 +288,245 @@ def score_volume(rvol, pct) -> float:
     return score
 
 
+# ── Phase 2b-ii enrichment scorers ───────────────────────────────────────────
+
+def _parse_market_cap_text(s) -> "float | None":
+    """Parse market cap text from screener rows ('1.5B' → 1.5e9). Returns None on failure."""
+    if not s or not isinstance(s, str):
+        return None
+    s = s.strip().upper().replace(",", "")
+    multipliers = {"T": 1e12, "B": 1e9, "M": 1e6, "K": 1e3}
+    suffix = s[-1] if s else ""
+    try:
+        if suffix in multipliers:
+            return float(s[:-1]) * multipliers[suffix]
+        return float(s)
+    except (ValueError, IndexError):
+        return None
+
+
+def score_earnings_surprise(ticker: str, earnings_list: list) -> float:
+    """Score 0-100 from up to 4 quarters of EPS surprise data, decay-weighted (4/3/2/1).
+
+    Catches: persistent earnings miss pattern even when recent quarter beat (decay weight).
+    Ignores: quarters where surprise_pct is NULL (treated as neutral 0 contribution).
+    P5: empty earnings_list → returns neutral 50.0.
+    """
+    if not earnings_list:
+        return 50.0
+
+    def _contribution(surprise_pct) -> float:
+        if surprise_pct is None:
+            return 0.0
+        if surprise_pct > 10:
+            return 25.0
+        if surprise_pct > 3:
+            return 15.0
+        if surprise_pct > 0:
+            return 7.0
+        if surprise_pct > -3:
+            return 0.0   # neutral zone: -3% < surprise <= 0%
+        if surprise_pct >= -10:
+            return -15.0
+        return -25.0
+
+    decay_weights = [4, 3, 2, 1]
+    total_w = 0.0
+    total_c = 0.0
+    for i, quarter in enumerate(earnings_list[:4]):
+        w = decay_weights[i]
+        c = _contribution(quarter.get("surprise_pct"))
+        total_w += w
+        total_c += w * c
+
+    if total_w == 0:
+        return 50.0
+
+    weighted_avg = total_c / total_w   # range [-25, +25]
+    return _clamp((weighted_avg + 25.0) * 2.0)
+
+
+def score_piotroski(ticker: str, financials: dict) -> float:
+    """Piotroski F-Score (0-9 binary signals) mapped to 0-100 score.
+
+    Lock 1: if fewer than 2 fiscal years available, return 50.0 immediately.
+    Cannot compute change-based signals (F3, F5, F6, F7, F8, F9) with only 1 year.
+
+    Catches: fundamental deterioration (ROA decline, leverage increase, dilution).
+    Ignores: companies with < 2 years of data — treated as neutral, never penalised.
+    P5: empty financials → returns neutral 50.0.
+    """
+    all_years: set = set()
+    for stmt_data in financials.values():
+        all_years.update(stmt_data.keys())
+
+    sorted_years = sorted(all_years, reverse=True)
+    if len(sorted_years) < 2:
+        return 50.0  # Lock 1
+
+    y0, y1 = sorted_years[0], sorted_years[1]
+
+    def _get(canonical_key: str, year: str):
+        stmt_type, raw_key = PIOTROSKI_LOOKUPS[canonical_key]
+        return financials.get(stmt_type, {}).get(year, {}).get(raw_key)
+
+    f = 0
+
+    # F1: ROA > 0
+    ni = _get("net_income", y0)
+    ta = _get("total_assets", y0)
+    if ni is not None and ta:
+        f += 1 if ni / ta > 0 else 0
+
+    # F2: Operating cash flow > 0
+    ocf = _get("operating_cash_flow", y0)
+    if ocf is not None:
+        f += 1 if ocf > 0 else 0
+
+    # F3: ROA improvement
+    ni1 = _get("net_income", y1)
+    ta1 = _get("total_assets", y1)
+    if ni is not None and ta and ni1 is not None and ta1:
+        f += 1 if (ni / ta) > (ni1 / ta1) else 0
+
+    # F4: OCF > Net income (accruals quality)
+    if ocf is not None and ni is not None:
+        f += 1 if ocf > ni else 0
+
+    # F5: Long-term leverage decreased
+    ltd  = _get("long_term_debt", y0)
+    ltd1 = _get("long_term_debt", y1)
+    if ltd is not None and ta and ltd1 is not None and ta1:
+        f += 1 if (ltd / ta) < (ltd1 / ta1) else 0
+
+    # F6: Current ratio improved
+    ca  = _get("current_assets", y0)
+    cl  = _get("current_liabilities", y0)
+    ca1 = _get("current_assets", y1)
+    cl1 = _get("current_liabilities", y1)
+    if ca is not None and cl and ca1 is not None and cl1:
+        f += 1 if (ca / cl) > (ca1 / cl1) else 0
+
+    # F7: No new share dilution
+    so  = _get("shares_outstanding", y0)
+    so1 = _get("shares_outstanding", y1)
+    if so is not None and so1 is not None:
+        f += 1 if so <= so1 else 0
+
+    # F8: Gross margin improved
+    gp   = _get("gross_profit", y0)
+    rev  = _get("total_revenue", y0)
+    gp1  = _get("gross_profit", y1)
+    rev1 = _get("total_revenue", y1)
+    if gp is not None and rev and gp1 is not None and rev1:
+        f += 1 if (gp / rev) > (gp1 / rev1) else 0
+
+    # F9: Asset turnover improved
+    if rev is not None and ta and rev1 is not None and ta1:
+        f += 1 if (rev / ta) > (rev1 / ta1) else 0
+
+    if f >= 7: return 80.0
+    if f == 6: return 65.0
+    if f == 5: return 50.0
+    if f == 4: return 38.0
+    return 20.0
+
+
+def score_altman_penalty(ticker: str, financials: dict, market_cap_text) -> int:
+    """Altman Z-Score additive penalty (0, -10, -30, -60).
+
+    All-or-nothing: any required value missing → return 0 (no penalty).
+    X4 uses TotalLiabilitiesNetMinorityInterest (classic Altman formula).
+
+    Catches: financial distress (Z < 1.8 = distress zone).
+    Ignores: companies with incomplete financial data — no penalty, never punish missing data.
+    P5: empty financials → returns 0.
+    """
+    all_years: set = set()
+    for stmt_data in financials.values():
+        all_years.update(stmt_data.keys())
+
+    if not all_years:
+        return 0
+
+    y0 = max(all_years)
+
+    def _get(canonical_key: str):
+        stmt_type, raw_key = ALTMAN_LOOKUPS[canonical_key]
+        return financials.get(stmt_type, {}).get(y0, {}).get(raw_key)
+
+    wc  = _get("working_capital")
+    ta  = _get("total_assets")
+    re  = _get("retained_earnings")
+    eb  = _get("ebit")
+    tl  = _get("total_liabilities")
+    rev = _get("total_revenue")
+    mc  = _parse_market_cap_text(market_cap_text)
+
+    if any(v is None for v in (wc, ta, re, eb, tl, rev, mc)):
+        return 0
+    if ta == 0 or tl == 0:
+        return 0
+
+    x1 = wc  / ta
+    x2 = re  / ta
+    x3 = eb  / ta
+    x4 = mc  / tl
+    x5 = rev / ta
+
+    z = 1.2 * x1 + 1.4 * x2 + 3.3 * x3 + 0.6 * x4 + 1.0 * x5
+
+    if z >= 3.0:  return 0
+    if z >= 1.8:  return -10
+    if z >= 0.0:  return -30
+    return -60
+
+
+def score_inst_ownership(ticker: str, inst_data: "dict | None") -> float:
+    """Score 0-100 from institutional ownership percentage (most recent filing).
+
+    Lock 3: pct > 60 → 75.0 (flattened top tier, not 80→65).
+    Caps pct at 100 to handle data outliers.
+
+    Catches: low institutional conviction (< 20% held → score 35).
+    Ignores: tickers with no institutional holder data — treated as neutral 50.0.
+    P5: inst_data is None → returns neutral 50.0.
+    """
+    if inst_data is None:
+        return 50.0
+    pct = inst_data.get("total_pct_held")
+    if pct is None:
+        return 50.0
+    pct = min(float(pct), 100.0)
+    if pct > 60: return 75.0
+    if pct > 40: return 55.0
+    if pct > 20: return 45.0
+    return 35.0
+
+
+def score_analyst_momentum(ticker: str, mom_data: "dict | None") -> float:
+    """Score 0-100 from net analyst upgrade/downgrade momentum over 90 days.
+
+    net_momentum = upgrades_90d - downgrades_90d (upgrades include 'init' actions).
+
+    Catches: coordinated analyst downgrade cycles before price action.
+    Ignores: tickers with no analyst changes in window — treated as neutral 50.0.
+    P5: mom_data is None → returns neutral 50.0.
+    """
+    if mom_data is None:
+        return 50.0
+    net = mom_data.get("net_momentum")
+    if net is None:
+        return 50.0
+    if net >= 3:  return 80.0
+    if net == 2:  return 70.0
+    if net == 1:  return 60.0
+    if net == 0:  return 50.0
+    if net == -1: return 40.0
+    if net == -2: return 30.0
+    return 20.0   # net <= -3
+
+
 # ── Composite scorer ──────────────────────────────
 
 @dataclass
@@ -321,6 +561,13 @@ class TickerSignal:
     analyst_recom:    float = None
     short_interest:   float = None
     insider_count:    int   = 0
+
+    # Phase 2b-ii enrichment scores (default neutral until scorers wired in)
+    earnings_score:    float = 50.0
+    piotroski_score:   float = 50.0
+    altman_penalty:    int   = 0
+    inst_own_score:    float = 50.0
+    analyst_mom_score: float = 50.0
 
 
 def compute_composite(
