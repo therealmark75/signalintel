@@ -12,6 +12,8 @@
 > **For any migration, refactor, or multi-surface change, apply P1.1 (inventory before edit), P1.2 (verify by absence), and P1.3 (audit table, not narrative). These are not optional.**
 >
 > **When writing tests, apply P15 — every test must articulate what it catches AND what it intentionally ignores. Both examples go in the test docstring.**
+>
+> **When auditing a config-touching commit for secrets leakage, grep against `docs/config_variable_classification.md` FIRST, not against literal patterns like `TOKEN|API_KEY|PASSWORD|SECRET|CHAT_ID`. Pattern greps miss variables whose names contain none of those keywords (e.g. `ALERT_CONFIG` holds smtp credentials but matches no standard pattern). The classification file is the authoritative enumeration of every tracked config variable and its SECRET/NON_SECRET status.**
 
 ## What This Project Is
 SignalIntel is a stock signal intelligence web application. Currently used as a personal backtesting and trading signal tool, with a roadmap to launch as a paid SaaS product for serious traders. The AI assistant working on this project is referred to as **Athena**.
