@@ -429,13 +429,27 @@ def score_all_tickers(
     weights: dict = None,
     legal_risk_map: dict = None,
     sector_strength_map: dict = None,
+    earnings_map: dict = None,
+    financials_map: dict = None,
+    inst_own_map: dict = None,
+    analyst_mom_map: dict = None,
 ) :
     """
     Main entry point. Takes screener rows + insider trades,
     returns sorted list of TickerSignal objects.
+
+    Phase 2b-ii kwargs (no-ops until consumed in 2b-ii):
+    - earnings_map:    {ticker: [{eps_actual, eps_estimate, surprise_pct, fiscal_quarter}, ...]}
+    - financials_map:  {ticker: {stmt_type: {fiscal_year: {line_item_key: value}}}}
+    - inst_own_map:    {ticker: {total_pct_held, top_holder_count, filing_date}}
+    - analyst_mom_map: {ticker: {upgrades_90d, downgrades_90d, net_momentum}}
     """
     legal_risk_map      = legal_risk_map      or {}
     sector_strength_map = sector_strength_map or {}
+    earnings_map        = earnings_map        or {}
+    financials_map      = financials_map      or {}
+    inst_own_map        = inst_own_map        or {}
+    analyst_mom_map     = analyst_mom_map     or {}
     missing_legal  = []
     results = []
 
