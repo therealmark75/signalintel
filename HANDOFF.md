@@ -3,112 +3,109 @@
 **Tactical session state.** Updated end of each session. For stable
 project context (who/what/how), see `PROJECT_CONTEXT.md`.
 
-Last updated: 14 May 2026, end of session (Phase 2a shipped).
-Next session: Phase 2b: scoring substrate refactor + components 10-14 + Altman penalty path. FRESH CHAT recommended (large infrastructure session).
+Last updated: 14 May 2026, end of session (Phase 2b-i shipped).
+Next session: Phase 2b-ii: 5 new scorer functions + composite rebalance + version bump. FRESH CHAT recommended (large scoring session).
 
 ---
 
-## JUST SHIPPED -- 14 May 2026 (Phase 2a: Yahoo scraper substrate)
+## JUST SHIPPED -- 14 May 2026 (Phase 2b-i: substrate refactor)
 
-### Database (commit 20c0148)
+### Tail-end Phase 2a cleanup (no commits)
 
-- 5 new tables added to `database/db.py:initialise_schema`: `earnings_history`, `financial_statements` (one row per line item per statement per fiscal year), `institutional_holders`, `analyst_changes`, `external_scrape_log` (PK ticker+data_type, no autoincrement)
-- All Yahoo data tables have UNIQUE constraints with source column for future multi-sourcing
-- 5 insert helpers + `get_active_tickers(db_path, days=7)` + `upsert_external_scrape_log()` added to `database/db.py`
-- All insert helpers use `INSERT OR IGNORE` for idempotency; `upsert_external_scrape_log` uses `ON CONFLICT DO UPDATE` to always overwrite
+- Yahoo benchmark residue cleared from all 5 tables: `analyst_changes` (4,833 rows), `financial_statements` (4,214 rows), `institutional_holders` (50 rows), `earnings_history` (20 rows), `external_scrape_log` (20 rows). All rows dated 2026-05-14T06:18 UTC benchmark window. No post-07:29 rows existed. Tables now empty, waiting for first scheduled cron.
+- Backup file `data/trading_system.db.backup_pre_vacuum_20260513_064920` (363MB) deleted from filesystem. File was never git-tracked; no commit possible or needed.
 
-### Scraper module (commit 1f848da)
+### New module (commit c7b7dc1)
 
-- New file `scrapers/yahoo_scraper.py`, 286 lines
-- yfinance 1.2.0 wrapper with consecutive-rate-limit circuit breaker (`YahooRateLimitedError`, `YAHOO_CIRCUIT_BREAKER_THRESHOLD = 10`, `threading.Lock`)
-- Detection of rate-limit failures via string-match on exception messages ("rate limit", "too many requests", "429", "try again"). Empty DataFrame is NOT a rate-limit signal (legitimate "no data" tickers exist).
-- 4 fetcher functions (one per Yahoo data type) + 2 priority-set helpers (`get_priority_tickers`, `get_upcoming_earnings_tickers`)
+- `signals/line_item_keys.py`: canonical snake_case vocabulary mapping raw yfinance PascalCase strings to canonical names. Scorer functions reference this module's constants; if yfinance renames a field, only this file needs updating.
+- 12 INCOME_KEYS, 15 BALANCE_KEYS, 7 CASHFLOW_KEYS. Keys verified against yfinance 1.2.0 AAPL output 14 May 2026.
+- `common_stock_equity` intentionally absent (not present in yfinance 1.2.0 output).
+- PIOTROSKI_LOOKUPS (9 entries): all line items for the 9 binary Piotroski F-Score signals.
+- ALTMAN_LOOKUPS (6 entries): Altman Z-Score formula. X4 uses `TotalLiabilitiesNetMinorityInterest` (classic Altman formula), NOT `TotalDebt`. `total_debt` stays in BALANCE_KEYS for future use but is not in ALTMAN_LOOKUPS.
 
-### Scheduler (commit 962b68b)
+### Rename (commit 28c5fcf)
 
-- 5 new job functions in `main.py`, all following the existing JOB START / JOB DONE envelope with `log_run` integration
-- Resume-from-checkpoint logic on the 3 bulk jobs: skip tickers where `external_scrape_log.last_success_at >= datetime('now', '-6 days')`
-- All 5 jobs registered via `scheduler.add_job` between `market_history` and the job listing log line
-- Daily priority (Mon-Fri): `yahoo_analyst_02:00`, `yahoo_earnings_02:15`
-- Weekly bulk (locked design, spread across Sun-Tue, NOT Sunday-only): `yahoo_institutional_sun_04:00`, `yahoo_financials_mon_04:00`, `yahoo_earnings_tue_04:00`
-- All bulk jobs at 04:00 BST on their respective days
+- `screener_rows` → `ticker_data_rows` across 4 files: `main.py` (6 lines), `signals/scorer.py` (2 lines), `signals/scanner.py` (12 lines), `signals/target_price.py` (2 lines). 22 lines total.
+- `insert_screener_rows` (DB helper function name for writing to `screener_snapshots`) intentionally unchanged — different concept.
+- Post-rename absence grep confirms zero remaining `screener_rows` variable references.
 
-### Config (commit 7073db4)
+### Signature extension (commit babebb3)
 
-- `YAHOO_PRIORITY_TIMES = ["02:00", "02:15"]` and `YAHOO_BULK_DAYS = ["sun", "mon", "tue"]` (documentation-only constants)
-- `YAHOO_REQUEST_DELAY_SECONDS = 1.0` (per-ticker delay in Yahoo loops; tighter than `REQUEST_DELAY_SECONDS = 2.5` for FinViz because yfinance's free-tier ~1.5 req/sec ceiling is HTTP-level, not server-side throttled)
-- `YAHOO_CIRCUIT_BREAKER_THRESHOLD` stays module-level in `scrapers/yahoo_scraper.py`, matching FMP pattern (not a shared config constant)
+- `score_all_tickers` extended with 4 no-op kwargs for Phase 2b-ii: `earnings_map`, `financials_map`, `inst_own_map`, `analyst_mom_map`. All default None with `or {}` pattern inside function body. Not consumed by any scoring logic yet; Phase 2b-ii diff will be purely additive.
 
-### Tests (commits 7579239, 520b623, 02b32c6)
+### Snapshot test (commits 386a745, 68fe8b6)
 
-- New file `tests/test_yahoo_circuit_breaker.py`: 5 tests mirroring `test_fmp_circuit_breaker.py` structure (mock `yf.Ticker`, stub `time.sleep`, autouse fixture resets `_yahoo_429_streak`)
-- New file `tests/test_yahoo_scraper.py`: 3 tests (active-tickers window respected, insert idempotency, scrape-log upsert overwrites)
-- `tests/test_data_integrity.py` extended with 4 new Yahoo freshness tests at 14-day threshold; each skips if its table is empty (handles gradual fill period)
-- Total test count: 206 passing (191 prior + 5 circuit breaker + 3 scraper + 4 freshness + 3 already-existing freshness that had not been counted in prior tallies)
+- New file `tests/test_scorer_snapshot.py`: behaviour-preservation snapshot for `score_all_tickers`. 14 synthetic tickers covering all 7 rating tiers (STRONG_BUY through STRONG_SELL), 3 legal rendering states (MINOR penalty / NONE explicit / absent), 3 sector modifier paths (HighSector 60, LowSector 40, NeutralSector 50), 1 all-NULL P5 ticker.
+- Asserts `composite_score_raw`, `composite_score`, `rating`, `legal_penalty`, `sector_modifier_applied` per ticker to 1dp.
+- SS07 rebuilt mid-session: original inputs (`rsi_14=28`, `low_52w_pct=5`) produced `reversion_score=78` which tripped the HOLD branch before STRONG_SELL. Rebuilt with `rsi_14=58`, `low_52w_pct=45` → `reversion_score=15` → STRONG_SELL correctly (composite 18.0). Diagnosis B (no bug in `assign_rating`, synthetic data quirk).
+- WH14 added for previously missing WEAK_HOLD coverage: composite 31.9, insider_score 34.0 (CFO sell), sector neutral. Verified WEAK_HOLD fires correctly (composite < 38 AND insider <= 35).
+- Snapshot baseline regenerated post-patch. Test passes.
 
-### Benchmark script (commit 7f091d8)
+### Test count
 
-- New file `scripts/benchmark_yahoo.py`
-- IMPORTANT: original benchmark wrote 9,117 rows to live DB across 5 tickers (scope drift from prompt spec of 10 tickers, read-only). Rows were subsequently DELETEd from production tables and the script patched to be read-only (timings only, no DB writes). Phase 2a-cleanup commit landed the patch.
-- Empirical timing observed during benchmark: ~3.7s per ticker covering all 4 Yahoo data types. Sustained throughput slightly under the assumed 1.5 req/sec ceiling but in the same order of magnitude.
+- pytest: 203 passing, 4 Yahoo freshness skipped (tables still empty, correct behaviour).
+- Prior count was 202 (206 Phase 2a count − 4 Yahoo freshness that now correctly skip). +1 snapshot test.
 
-### Scheduler restart (manual, end-of-session)
+### Commits (5 total, local main, unpushed)
 
-- Old PID 89425 stopped, new scheduler started 14 May 2026 07:29:53 BST
-- All 21 jobs registered cleanly (16 prior + 5 new Yahoo)
-- Startup signal generation fired at 07:29:58, scored 10,793 tickers
-- No errors or import failures on boot
-- New code is running in production; first daily priority Yahoo jobs fire tomorrow 15 May at 02:00 + 02:15 BST
+```
+c7b7dc1 feat(scorer): add line_item_keys.py canonical vocabulary module
+28c5fcf refactor(scorer): rename screener_rows to ticker_data_rows
+babebb3 feat(scorer): add Phase 2b-ii enrichment kwargs (no consumption)
+386a745 test(scorer): add snapshot test for behaviour preservation
+68fe8b6 test(scorer): patch snapshot coverage — fix SS07 STRONG_SELL routing, add WH14 WEAK_HOLD
+```
+
+Combined with 9 Phase 2a commits, 14 commits sit on local main unpushed.
+
+**SCORING_ENGINE_VERSION unchanged at 0.12.0** (substrate-only refactor, no scoring logic changed, no version bump warranted).
 
 ---
 
 ## CURRENT STATE (end of 14 May 2026)
 
-- Scheduler running on new code (Phase 2a live)
-- HEAD on local main, all 8 Phase 2a commits + benchmark cleanup commit landed; not yet pushed to origin (push when Mark is ready)
-- pytest: 206 passing; 4 Yahoo freshness tests SKIPPED (tables empty, expected behaviour until first scheduled scrape populates them tomorrow)
-- 5 Yahoo data tables exist, all empty
-- `external_scrape_log` exists, empty
-- SCORING_ENGINE_VERSION unchanged at 0.12.0 (Phase 2a was substrate only; version bump lands in Phase 2b)
-- Database backup `data/trading_system.db.backup_pre_vacuum_20260513_064920` still pending deletion (criterion: 24h of clean post-VACUUM scrape cycles, met as of 14 May ~07:00 BST; small single-file deletion commit pending)
+- Scheduler PID 1867 running on Phase 2a code since 07:29 BST 14 May. Phase 2b-i commits are on disk but scheduler has not been restarted (substrate refactor is not scoring-live until Phase 2b-ii adds scorer functions).
+- 5 Phase 2b-i commits + 9 Phase 2a commits on local main, not yet pushed.
+- 5 Yahoo data tables empty, waiting for first scheduled cron: tonight 02:00 BST (analyst priority) and 02:15 BST (earnings priority).
+- pytest: 203 passing, 4 Yahoo freshness skipped.
+- SCORING_ENGINE_VERSION: 0.12.0. Bump to 0.13.0 happens in Phase 2b-ii after composite rebalance.
+- Backup file deleted, 363MB reclaimed, DB at ~328MB.
+- `signals/line_item_keys.py` in place. PIOTROSKI_LOOKUPS and ALTMAN_LOOKUPS ready for Phase 2b-ii.
 
 ---
 
-## PROCESS TELLS -- 14 May 2026 (Phase 2a session)
+## PROCESS TELLS -- 14 May 2026 (Phase 2b-i session)
 
-- **Decision-lock pattern worked.** Two Phase 1 inventories (substrate-level + flag-rendering recon), seven sequential decision locks (#1 partitioning through #7 deferred), then split Phase 2 into the program-not-prompt shape. Lock #3 pivoted from "piggyback flags column" to "build proper flag substrate" when the recon showed `signal_scores.flags` was substring-matched on one page and ignored on the rest. P20 invariant emerged organically from this pivot.
+- **Snapshot coverage gap caught at gate-walk, not in CC's audit output.** CC implemented the 12-15 ticker profile coverage matrix from the locked spec, all 7 rating tiers nominally assigned, but SS07 (`rsi_14=28`, `low_52w_pct=5`) produced `reversion_score=78` which tripped the `reversion >= 75` HOLD branch before the `composite < 25 AND insider <= 20` STRONG_SELL branch. Diagnosis B confirmed: no bug in `assign_rating`, the synthetic inputs for a "deep bearish" ticker were inadvertently perfect for the reversion scorer. Patched mid-session. Lesson: when a Phase 2 prompt locks a profile coverage matrix, the verification gate must require empirical confirmation that each matrix row is represented with the expected rating, not just that the total ticker count matches. P21 codified.
 
-- **CC's Phase 2a verification gate report was light on evidence.** The prompt required paste-quoted output per gate (sqlite `.schema`, full `cat`, pytest `-v` verbatim, `ps -ef`, `git diff --stat`, FMP grep). CC reported a summary table with checkmarks. Athena raised this as a possible P-level STOP violation on the doc files; a follow-up empirical diagnostic prompt corrected that diagnosis. Doc files were actually prior-session uncommitted work, not anything CC touched today. Two distinct lessons: (1) CC's gate-walking discipline slipped -- summary table without paste-quoted evidence is exactly the P16 hedge-word pattern, future verification gates should phrase paste requirements with explicit "paste verbatim, not a summary" language; (2) Athena's diagnosis was wrong -- saw `M PROJECT_CONTEXT.md` and `M HANDOFF.md` in `git status`, framed as "P-level STOP violation" without checking when the modifications dated from, the right diagnostic move was `git diff` first, alarm second.
+- **Two-cleanup-prompts-instead-of-one was over-ceremony.** Mark pushed back on the Phase 2a tail-end cleanup being drafted as two sequential prompts (audit prompt → DELETE prompt). Collapsed to a single audit-and-DELETE prompt with embedded self-check; finished cleanly in 10 minutes. Lesson: Phase 1 + Phase 2 rigour earns its weight on substrate refactors, schema migrations, scoring logic. It is over-ceremony on housekeeping (file deletions, table truncations, residue cleanups). Rule codified: refactor / scoring / schema = two-turn; housekeeping / one-off DELETEs / file removals = single-turn with self-check.
 
-- **The diagnostic prompt did the right work.** Five-part empirical sweep (doc diffs, scheduler PID, FMP grep, benchmark scope, commit hygiene) caught all four divergences from the original prompt: doc files were prior-session work, scheduler was alive (pgrep false negative; ps -ef showed it), FMP `streak` was a local copy in the lock (no bug), benchmark wrote to production. Verification gates work; this was the gate doing its job, including on Athena.
+- **Date-blindness as a failure mode (both sides).** During the morning scheduler-state check, Athena read "scheduler dead" from empty pgrep output without sanity-checking the date stamp on the log file. CC's first reply assumed "today is 15 May" from conversation context priming. Both corrected by Mark explicitly stating the date. P22 codified: any session involving "yesterday / today / tomorrow / overnight" temporal reasoning requires grounding on the actual date at session start.
 
-- **Three real divergences from the Phase 2a-Phase2 prompt:** (1) Benchmark used 5 tickers, not 10, and wrote to live DB rather than running read-only -- cleaned up post-hoc. (2) CC's gate walk was a summary rather than paste-quoted evidence per gate -- resolved via follow-up diagnostic. (3) CC's final `git status` output did not flag the prior-session uncommitted changes to HANDOFF.md and PROJECT_CONTEXT.md -- not a CC failure per se, but the failure mode where unstaged-from-prior-session changes are invisible in the next session's hand-off.
-
-- **Scheduler restart workflow proven on this phase.** Old PID stopped, banner confirmed new code loaded, all jobs registered, startup signal generation ran clean. Pattern that worked: kill PID, sleep 5, nohup python main.py scheduler, disown, tail logs. Worth codifying for Phase 2b end-of-session.
+- **Mark's communication preference locked mid-session.** Athena was over-explaining prompt construction rationale, surfacing architectural questions, and walking through diagnostic reasoning. Mark explicitly redirected: he's not technical, he wants Athena to make the calls and tell him outcome + next prompt, briefly. Replies: outcome, single recommendation, next prompt. No meta-notes on prompt design, no "two options to surface," no process lessons mid-flow. Process lessons land in HANDOFF / PROJECT_CONTEXT at session close. Memory updated.
 
 ---
 
 ## STILL OPEN
 
-- **Phase 2b (next session, fresh chat):** scoring substrate refactor (`screener_rows -> ticker_data_rows`, pre-enrichment pattern collapsing `legal_risk_map` and `sector_strength_map`), 5 new scorer functions (Earnings Surprise, Piotroski F-Score, Altman additive penalty, Institutional Ownership, Analyst Momentum), composite weight rebalance (1.10 -> 1.60 sum, normalised), SCORING_ENGINE_VERSION bump 0.12.0 -> 0.13.0.
-- **Phase 2b prerequisite:** design canonical `line_item_key` vocabulary for `financial_statements` mapping layer. Yahoo field names vary across statements and yfinance versions. Phase 2b Phase 1 inventory should propose the canonical vocabulary; Phase 2b Phase 2 implements it.
-- **Phase 2b prerequisite:** lock Altman penalty tiers (e.g. Z >= 3.0 = 0, 1.8 <= Z < 3.0 = -5, Z < 1.8 = -20, Z < 0 = -40). Numbers are draft.
-- **Phase 2d, 2e, 2f** queued per program plan (flag substrate, rendering, end-to-end verification).
-- **Backup file deletion:** `data/trading_system.db.backup_pre_vacuum_20260513_064920` (363MB) eligible for deletion as of 14 May ~07:00 BST. Three clean post-VACUUM scrape cycles observed (13 May 07:00, 11:00, 16:30), pytest green. Small single-file deletion commit pending.
-- **Push to remote:** 9 Phase 2a commits (8 implementation + 1 benchmark cleanup) sit on local main, not yet pushed. Push when Mark is ready.
-- **End-of-session doc update:** P20 invariant needs to land in `docs/scoring_invariants.md` AND in PROJECT_CONTEXT.md's PROCESS INVARIANTS table. Additional process lessons from today (Athena's misdiagnosis, CC's gate-walking slip, the prior-session uncommitted files pattern) should be folded into PROJECT_CONTEXT.md alongside P20.
+- **Phase 2b-ii (next session, FRESH CHAT recommended — large session):** 5 new scorer functions (Earnings Surprise, Piotroski F-Score, Altman additive penalty, Institutional Ownership, Analyst Momentum), composite weight rebalance (1.10 → 1.60 sum, normalised), SCORING_ENGINE_VERSION bump 0.12.0 → 0.13.0, new unit tests for each scorer, snapshot baseline regeneration with new components. `signals/line_item_keys.py` PIOTROSKI_LOOKUPS and ALTMAN_LOOKUPS already in place.
+- **Altman Z-Score tiers (locked):** Z >= 3.0 = 0, 1.8 <= Z < 3.0 = -10, Z < 1.8 = -30, Z < 0 = -60.
+- **Phase 2b-ii prerequisite — Yahoo cron verification:** first action of next session must be verifying tonight's 02:00 / 02:15 BST Yahoo cron ran cleanly. Query `external_scrape_log` for `last_success_at > '2026-05-15T00:00'` and check the scheduler log for JOB START / JOB DONE envelope. If silent failure, characterise and fix before any Phase 2b-ii implementation proceeds.
+- **Phase 2b-ii timing dependency:** Sunday 04:00 BST = first bulk `institutional_holders` run. Monday 04:00 BST = first bulk `financial_statements` run. Tuesday 04:00 BST = first bulk `earnings_history` (full historical) run. Phase 2b-ii scorers need these tables populated. The later in the week the next session runs, the more data will be available.
+- **Push to remote:** 14 commits (9 Phase 2a + 5 Phase 2b-i) on local main. Push window TBD when Mark is ready.
+- **Phases 2c, 2d, 2e, 2f** queued per programme plan (flag substrate, rendering, end-to-end verification).
 
 ---
 
-## NOTES FOR FRESH-CHAT ATHENA (Phase 2b)
+## NOTES FOR FRESH-CHAT ATHENA (Phase 2b-ii)
 
-If starting Phase 2b in a fresh chat:
-
-- Read PROJECT_CONTEXT.md first (stable), then this HANDOFF for current state
-- Phase 2b is a LARGE session: scoring substrate refactor + 5 new scorers + version bump + tests. Plan accordingly.
-- The pre-enrichment refactor touches existing scoring code paths (`legal_risk_map`, `sector_strength_map`). Phase 1 inventory must enumerate every call site of `score_all_tickers` to ensure clean signature migration.
-- All 5 Yahoo data tables exist and may or may not be populated by the time Phase 2b runs (depends on how many days pass between today and the next session). Phase 2b scorers must handle empty-table cases gracefully via P5 NULL handling.
-- The flag system (Phase 2d) is NOT touched in 2b. Short Squeeze waits.
+- Read PROJECT_CONTEXT.md first (stable), then this HANDOFF for current state.
+- Phase 2b-ii is a LARGE session: 5 new scorers + composite rebalance + version bump + tests + snapshot regeneration. Plan accordingly.
+- First action: verify tonight's Yahoo cron ran. `sqlite3 data/trading_system.db "SELECT data_type, COUNT(*), MAX(last_success_at) FROM external_scrape_log GROUP BY data_type;"` — should show rows for ANALYST and EARNINGS dated 15 May 2026.
+- The snapshot baseline in `tests/test_scorer_snapshot.py` will need updating in Phase 2b-ii (new components shift scores). This is expected and intentional — update it after all 5 scorer functions are wired in, using the same regeneration script pattern as Phase 2b-i Step 4a. The snapshot test is not a "do not change" artefact; it's a "change only when you mean to" artefact.
+- The `score_all_tickers` signature already has 4 no-op kwargs (`earnings_map`, `financials_map`, `inst_own_map`, `analyst_mom_map`) — Phase 2b-ii's diff is purely additive within the existing function body.
+- Composite weight rebalance target: from 1.10 current (momentum 0.35, quality 0.30, insider 0.25, reversion 0.10, volume 0.10) to 1.60 total with 5 new components added. Normalisation in `compute_composite` handles any total_w, so adding weights is safe.
+- The flag system (Phases 2d/2e) is NOT touched in Phase 2b-ii. Short Squeeze waits.
 
 ---
 

@@ -196,6 +196,18 @@ handling 8 May 2026: per-input neutral contribution (RSI=20,
 low_52w=17.5, sma_50=12.5), summing to 50.0 for all-NULL inputs. Legal
 penalty applied additively before _clamp.
 
+`signals/line_item_keys.py`: canonical vocabulary layer for
+`financial_statements` line item keys. Raw yfinance PascalCase strings
+are stored verbatim in the DB; this module is the single update point
+if yfinance renames a field. Three constant dicts (INCOME_KEYS 12
+entries, BALANCE_KEYS 15 entries, CASHFLOW_KEYS 7 entries); two lookup
+sets (PIOTROSKI_LOOKUPS 9 entries, ALTMAN_LOOKUPS 6 entries). Design
+decision locked 14 May 2026: `common_stock_equity` intentionally absent
+(not present in yfinance 1.2.0 AAPL output); Altman X4 uses
+`TotalLiabilitiesNetMinorityInterest` via `total_liabilities` key, NOT
+`TotalDebt`. Scorer functions reference snake_case constants from this
+module; mapping occurs at read-time, not write-time, preserving raw data.
+
 `signals/target_price.py`: `compute_targets_batch` is the underlying
 target-price work function, called inline by job_generate_signals (the
 trailing job_compute_target_prices cron wrapper was removed 9 May 2026).
@@ -384,6 +396,8 @@ ID when relevant.
 | P18 | Substantive scoring substrate changes require MINOR version bump |
 | P19 | Schema migration inventory enumerates every CRUD path against the modified table (read, write, init, ORM), not just init code. The 9 May column drop caught the ADD COLUMN guard in web/app.py but missed the INSERT in database/db.py, silent for 48 hours until pytest freshness tests caught it on 11 May. Phase 1 for any schema-affecting work must enumerate: init/migration code, ORM definitions, raw SQL INSERTs/UPDATEs/DELETEs, SELECT projections, and any place the column name appears as a string literal |
 | P20 | Analyst completeness gate. When two paths diverge on what an analyst making a buy/sell/hold decision receives, the analytically-stronger path wins regardless of engineering cost. Engineering cost is a tiebreaker between analytically-equivalent paths only |
+| P21 | Profile coverage matrices in Phase 2 prompts require explicit per-row verification gates confirming each matrix row produced the expected rating — not just that the total ticker count matches. Total-count agreement does not imply per-row correctness; synthetic inputs designed for "deep bearish" can inadvertently maximise a reversion scorer and route through HOLD before STRONG_SELL (14 May 2026, SS07 diagnosis B) |
+| P22 | Session date is empirical context, not conversation-primed context. Any session involving "yesterday / today / tonight / overnight" temporal reasoning must ground on the actual current date stated explicitly at session start. Both CC and Athena are subject to date-blindness from primed context; the discipline is symmetric |
 
 ---
 
@@ -915,6 +929,41 @@ Pattern characteristics:
 
 Distinct from Phase 1 inventories (which are forward-looking, scoping a future change). Diagnostic prompts are backward-looking, validating that a past change matches its spec. Worth having both shapes in the toolkit.
 
+### Mark's communication preference locked (14 May 2026 mid-session)
+
+Mark explicitly redirected mid-session: Athena was over-explaining
+prompt construction rationale, surfacing architectural options as
+open questions, and walking through diagnostic reasoning step by step.
+His preference: make the call, deliver outcome + next prompt, briefly.
+No meta-notes on prompt design mid-flow. No "two options to surface."
+No process lessons during the session. Process lessons land in
+HANDOFF / PROJECT_CONTEXT at session close.
+
+Shape of a correct Athena response: one sentence of outcome, one
+recommendation, the next prompt. Not three paragraphs explaining how
+the decision was reached.
+
+This is durable: it holds across sessions, not just the 14 May one.
+It does NOT mean suppressing pushback or devil's advocate — those are
+still expected when warranted. It means delivering conclusions, not
+derivations.
+
+### Calibrating ceremony to scope (14 May 2026 lesson)
+
+Phase 1 + Phase 2 rigour earns its weight on substrate refactors,
+schema migrations, and scoring logic. It is over-ceremony on
+housekeeping (file deletions, table truncations, residue cleanups).
+
+Specifically: the Phase 2a tail-end cleanup was drafted as two
+sequential prompts (audit prompt → DELETE prompt). Mark pushed back.
+Collapsed to a single audit-and-DELETE prompt with embedded self-check;
+finished cleanly in 10 minutes.
+
+Rule: refactor / scoring / schema = two-turn; housekeeping /
+one-off DELETEs / file removals = single-turn with self-check embedded.
+The boundary is "could this change be irreversible or hard to audit?"
+If no, one-turn.
+
 ### CC drift patterns (still real, less frequent)
 
 **File-level scope discipline working well.** CC reliably stops at
@@ -1057,6 +1106,10 @@ SMALL / COSMETIC:
 
 - FAVICON 404 in browser console: pre-existing, low priority,
   cosmetic only.
+
+- PUSH 14 COMMITS TO REMOTE: 9 Phase 2a + 5 Phase 2b-i commits sit
+  on local main, unpushed as of 14 May 2026. Push window TBD when
+  Mark is ready. No branch work needed, straight push from local main.
 
 ---
 
