@@ -97,18 +97,18 @@ def job_generate_signals(sector=None):
     logger.info("=" * 60)
     logger.info("JOB START: Signal generation")
     try:
-        screener_rows   = get_latest_screener(DATABASE_PATH, sector=None)
-        insider_trades  = get_recent_insiders(DATABASE_PATH, days=30)
-        cluster_signals = get_cluster_signals(DATABASE_PATH, days=14)
-        legal_risk_map  = get_legal_risk_map(DATABASE_PATH)
+        ticker_data_rows = get_latest_screener(DATABASE_PATH, sector=None)
+        insider_trades   = get_recent_insiders(DATABASE_PATH, days=30)
+        cluster_signals  = get_cluster_signals(DATABASE_PATH, days=14)
+        legal_risk_map   = get_legal_risk_map(DATABASE_PATH)
         from scrapers.sector_scraper import get_sector_strength_map
         sector_strength_map = get_sector_strength_map(DATABASE_PATH)
-        if not screener_rows:
+        if not ticker_data_rows:
             logger.warning("No screener data. Run scrape first.")
             return [], {}
-        logger.info(f"  Scoring {len(screener_rows)} tickers... ({len(legal_risk_map)} with legal risk data)")
+        logger.info(f"  Scoring {len(ticker_data_rows)} tickers... ({len(legal_risk_map)} with legal risk data)")
         signals = score_all_tickers(
-            screener_rows, insider_trades,
+            ticker_data_rows, insider_trades,
             legal_risk_map=legal_risk_map,
             sector_strength_map=sector_strength_map,
         )
@@ -134,14 +134,14 @@ def job_generate_signals(sector=None):
             from scrapers.fmp_scraper import get_price_targets_map
             fmp_targets    = get_price_targets_map(DATABASE_PATH)
             price_hist_map = get_price_history_map(DATABASE_PATH)
-            tp_rows = compute_targets_batch(screener_rows, legal_risk_map, fmp_targets, price_hist_map)
+            tp_rows = compute_targets_batch(ticker_data_rows, legal_risk_map, fmp_targets, price_hist_map)
             update_target_prices(DATABASE_PATH, tp_rows)
             tp_count = sum(1 for r in tp_rows if r.get("target_price"))
             logger.info(f"  12-month target prices computed for {tp_count}/{len(tp_rows)} tickers")
         except Exception as e:
             logger.error(f"  Target price computation FAILED: {e}", exc_info=True)
 
-        scan_results = run_all_scans(screener_rows, insider_trades, cluster_signals)
+        scan_results = run_all_scans(ticker_data_rows, insider_trades, cluster_signals)
         strong_buys = [s for s in signals if s.rating == "STRONG_BUY"]
         buys        = [s for s in signals if s.rating == "BUY"]
         reversions  = [s for s in signals if s.rating == "REVERSION"]

@@ -424,7 +424,7 @@ _SECTOR_MODIFIER_WEIGHT = 0.15   # dial to 0.10–0.20 after backtesting
 
 
 def score_all_tickers(
-    screener_rows: list[dict],
+    ticker_data_rows: list[dict],
     insider_trades: list[dict],
     weights: dict = None,
     legal_risk_map: dict = None,
@@ -439,7 +439,7 @@ def score_all_tickers(
     missing_legal  = []
     results = []
 
-    for row in screener_rows:
+    for row in ticker_data_rows:
         ticker = row.get("ticker", "")
         if not ticker:
             continue

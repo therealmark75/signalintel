@@ -359,7 +359,7 @@ def compute_target_price(
 
 
 def compute_targets_batch(
-    screener_rows: list,
+    ticker_data_rows: list,
     legal_risk_map: dict = None,
     fmp_targets_map: dict = None,
     price_history_map: dict = None,
@@ -375,7 +375,7 @@ def compute_targets_batch(
     price_history_map = price_history_map or {}
     results = []
 
-    for row in screener_rows:
+    for row in ticker_data_rows:
         ticker = row.get("ticker", "")
         if not ticker:
             continue

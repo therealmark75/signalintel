@@ -28,7 +28,7 @@ class ScanResult:
 
 # ── Individual scan filters ───────────────────────
 
-def scan_insider_oversold(screener_rows: list[dict],
+def scan_insider_oversold(ticker_data_rows: list[dict],
                           cluster_signals: list[dict]) -> list[ScanResult]:
     """
     Tickers with CLUSTER_BUY signal AND RSI < 40.
@@ -40,7 +40,7 @@ def scan_insider_oversold(screener_rows: list[dict],
     }
 
     results = []
-    for row in screener_rows:
+    for row in ticker_data_rows:
         ticker = row.get("ticker", "")
         if ticker not in cluster_buy_tickers:
             continue
@@ -79,13 +79,13 @@ def scan_insider_oversold(screener_rows: list[dict],
     return results
 
 
-def scan_momentum_breakout(screener_rows: list[dict]) -> list[ScanResult]:
+def scan_momentum_breakout(ticker_data_rows: list[dict]) -> list[ScanResult]:
     """
     Tickers above BOTH 50d and 200d SMA, RSI 55-72,
     relative volume > 1.3. Classic momentum breakout setup.
     """
     results = []
-    for row in screener_rows:
+    for row in ticker_data_rows:
         sma50  = row.get("sma_50_pct")
         sma200 = row.get("sma_200_pct")
         rsi    = row.get("rsi_14")
@@ -124,7 +124,7 @@ def scan_momentum_breakout(screener_rows: list[dict]) -> list[ScanResult]:
     return results[:50]   # cap at top 50
 
 
-def scan_quality_value(screener_rows: list[dict]) -> list[ScanResult]:
+def scan_quality_value(ticker_data_rows: list[dict]) -> list[ScanResult]:
     """
     High quality fundamentals at a reasonable price:
     - ROE > 15%
@@ -133,7 +133,7 @@ def scan_quality_value(screener_rows: list[dict]) -> list[ScanResult]:
     - RSI not overbought (< 72)
     """
     results = []
-    for row in screener_rows:
+    for row in ticker_data_rows:
         roe      = row.get("roe")
         eps_ty   = row.get("eps_growth_this_yr")
         analyst  = row.get("analyst_recom")
@@ -175,7 +175,7 @@ def scan_quality_value(screener_rows: list[dict]) -> list[ScanResult]:
     return results[:50]
 
 
-def scan_mean_reversion(screener_rows: list[dict]) -> list[ScanResult]:
+def scan_mean_reversion(ticker_data_rows: list[dict]) -> list[ScanResult]:
     """
     Deep oversold candidates:
     - RSI < 35
@@ -183,7 +183,7 @@ def scan_mean_reversion(screener_rows: list[dict]) -> list[ScanResult]:
     - Not in fundamental freefall (avoid if EPS growth < -30%)
     """
     results = []
-    for row in screener_rows:
+    for row in ticker_data_rows:
         rsi     = row.get("rsi_14")
         low_52w = row.get("low_52w_pct")
         eps_ty  = row.get("eps_growth_this_yr")
@@ -220,7 +220,7 @@ def scan_mean_reversion(screener_rows: list[dict]) -> list[ScanResult]:
     return results[:30]
 
 
-def scan_short_watch(screener_rows: list[dict],
+def scan_short_watch(ticker_data_rows: list[dict],
                      cluster_signals: list[dict]) -> list[ScanResult]:
     """
     Bearish setups worth watching:
@@ -234,7 +234,7 @@ def scan_short_watch(screener_rows: list[dict],
     }
 
     results = []
-    for row in screener_rows:
+    for row in ticker_data_rows:
         ticker = row.get("ticker", "")
         rsi    = row.get("rsi_14")
         short  = row.get("short_interest_pct")
@@ -281,9 +281,9 @@ def scan_short_watch(screener_rows: list[dict],
 # ── Run all scans ─────────────────────────────────
 
 def run_all_scans(
-    screener_rows:   list[dict],
-    insider_trades:  list[dict],
-    cluster_signals: list[dict],
+    ticker_data_rows: list[dict],
+    insider_trades:   list[dict],
+    cluster_signals:  list[dict],
 ) -> dict[str, list[ScanResult]]:
     """
     Run all scans and return results dict keyed by scan name.
@@ -291,11 +291,11 @@ def run_all_scans(
     logger.info("Running all scans...")
 
     results = {
-        "insider_oversold":  scan_insider_oversold(screener_rows, cluster_signals),
-        "momentum_breakout": scan_momentum_breakout(screener_rows),
-        "quality_value":     scan_quality_value(screener_rows),
-        "mean_reversion":    scan_mean_reversion(screener_rows),
-        "short_watch":       scan_short_watch(screener_rows, cluster_signals),
+        "insider_oversold":  scan_insider_oversold(ticker_data_rows, cluster_signals),
+        "momentum_breakout": scan_momentum_breakout(ticker_data_rows),
+        "quality_value":     scan_quality_value(ticker_data_rows),
+        "mean_reversion":    scan_mean_reversion(ticker_data_rows),
+        "short_watch":       scan_short_watch(ticker_data_rows, cluster_signals),
     }
 
     for name, items in results.items():
