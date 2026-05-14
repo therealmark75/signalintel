@@ -217,6 +217,113 @@ def initialise_schema(db_path: str) -> None:
         )
     """)
 
+    # ── Yahoo: earnings_history (Phase 2a) ───────────────────────
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS earnings_history (
+            id                INTEGER PRIMARY KEY AUTOINCREMENT,
+            ticker            TEXT    NOT NULL,
+            fiscal_quarter    TEXT    NOT NULL,
+            eps_actual        REAL,
+            eps_estimate      REAL,
+            surprise_pct      REAL,
+            revenue_actual    REAL,
+            revenue_estimate  REAL,
+            reported_at       TEXT,
+            source            TEXT    NOT NULL DEFAULT 'yahoo',
+            scraped_at        TEXT    NOT NULL,
+            UNIQUE (ticker, fiscal_quarter, source)
+        )
+    """)
+
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS idx_earnings_history_ticker
+        ON earnings_history (ticker, scraped_at)
+    """)
+
+    # ── Yahoo: financial_statements (Phase 2a) ───────────────────
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS financial_statements (
+            id               INTEGER PRIMARY KEY AUTOINCREMENT,
+            ticker           TEXT    NOT NULL,
+            fiscal_year      TEXT    NOT NULL,
+            statement_type   TEXT    NOT NULL CHECK (statement_type IN ('INCOME', 'BALANCE', 'CASHFLOW')),
+            line_item_key    TEXT    NOT NULL,
+            value            REAL,
+            source           TEXT    NOT NULL DEFAULT 'yahoo',
+            scraped_at       TEXT    NOT NULL,
+            UNIQUE (ticker, fiscal_year, statement_type, line_item_key, source)
+        )
+    """)
+
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS idx_financial_statements_ticker
+        ON financial_statements (ticker, scraped_at)
+    """)
+
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS idx_financial_statements_lookup
+        ON financial_statements (ticker, statement_type, fiscal_year)
+    """)
+
+    # ── Yahoo: institutional_holders (Phase 2a) ──────────────────
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS institutional_holders (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            ticker        TEXT    NOT NULL,
+            filing_date   TEXT    NOT NULL,
+            holder_name   TEXT    NOT NULL,
+            shares        INTEGER,
+            pct_out       REAL,
+            value         REAL,
+            source        TEXT    NOT NULL DEFAULT 'yahoo',
+            scraped_at    TEXT    NOT NULL,
+            UNIQUE (ticker, filing_date, holder_name, source)
+        )
+    """)
+
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS idx_institutional_holders_ticker
+        ON institutional_holders (ticker, scraped_at)
+    """)
+
+    # ── Yahoo: analyst_changes (Phase 2a) ────────────────────────
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS analyst_changes (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            ticker       TEXT    NOT NULL,
+            event_date   TEXT    NOT NULL,
+            firm         TEXT    NOT NULL,
+            from_grade   TEXT,
+            to_grade     TEXT,
+            action       TEXT,
+            source       TEXT    NOT NULL DEFAULT 'yahoo',
+            scraped_at   TEXT    NOT NULL,
+            UNIQUE (ticker, event_date, firm, action, source)
+        )
+    """)
+
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS idx_analyst_changes_ticker
+        ON analyst_changes (ticker, scraped_at)
+    """)
+
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS idx_analyst_changes_date
+        ON analyst_changes (ticker, event_date)
+    """)
+
+    # ── Yahoo: external_scrape_log (Phase 2a) ────────────────────
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS external_scrape_log (
+            ticker             TEXT    NOT NULL,
+            data_type          TEXT    NOT NULL,
+            last_attempted_at  TEXT    NOT NULL,
+            last_success_at    TEXT,
+            last_error         TEXT,
+            PRIMARY KEY (ticker, data_type)
+        )
+    """)
+
     conn.commit()
     conn.close()
     logger.info(f"Database schema ready at: {db_path}")
@@ -1341,3 +1448,130 @@ def is_below_signal_threshold(current_price) -> bool:
     if current_price is None:
         return False
     return float(current_price) < MIN_PRICE_FOR_SIGNAL
+
+
+# ── Yahoo Phase 2a helpers ─────────────────────────────────────────
+
+def get_active_tickers(db_path: str, days: int = 7) -> list:
+    """Return distinct tickers seen in screener_snapshots within the last `days` days."""
+    conn = get_connection(db_path)
+    cur  = conn.cursor()
+    cur.execute(
+        "SELECT DISTINCT ticker FROM screener_snapshots "
+        "WHERE scraped_at >= datetime('now', ?) ORDER BY ticker",
+        (f"-{days} days",),
+    )
+    tickers = [r[0] for r in cur.fetchall()]
+    conn.close()
+    return tickers
+
+
+def insert_earnings_history(db_path: str, rows: list) -> int:
+    """Insert earnings history rows. Ignores duplicates on (ticker, fiscal_quarter, source)."""
+    if not rows:
+        return 0
+    conn = get_connection(db_path)
+    cur  = conn.cursor()
+    now  = datetime.utcnow().isoformat()
+    for row in rows:
+        row.setdefault("scraped_at", now)
+        row.setdefault("source", "yahoo")
+    cur.executemany("""
+        INSERT OR IGNORE INTO earnings_history (
+            ticker, fiscal_quarter, eps_actual, eps_estimate, surprise_pct,
+            revenue_actual, revenue_estimate, reported_at, source, scraped_at
+        ) VALUES (
+            :ticker, :fiscal_quarter, :eps_actual, :eps_estimate, :surprise_pct,
+            :revenue_actual, :revenue_estimate, :reported_at, :source, :scraped_at
+        )
+    """, rows)
+    conn.commit()
+    inserted = cur.rowcount
+    conn.close()
+    return inserted
+
+
+def insert_financial_statements(db_path: str, rows: list) -> int:
+    """Insert financial statement rows (one row per line item). Ignores duplicates."""
+    if not rows:
+        return 0
+    conn = get_connection(db_path)
+    cur  = conn.cursor()
+    now  = datetime.utcnow().isoformat()
+    for row in rows:
+        row.setdefault("scraped_at", now)
+        row.setdefault("source", "yahoo")
+    cur.executemany("""
+        INSERT OR IGNORE INTO financial_statements (
+            ticker, fiscal_year, statement_type, line_item_key, value, source, scraped_at
+        ) VALUES (
+            :ticker, :fiscal_year, :statement_type, :line_item_key, :value, :source, :scraped_at
+        )
+    """, rows)
+    conn.commit()
+    inserted = cur.rowcount
+    conn.close()
+    return inserted
+
+
+def insert_institutional_holders(db_path: str, rows: list) -> int:
+    """Insert institutional holder rows. Ignores duplicates on (ticker, filing_date, holder_name, source)."""
+    if not rows:
+        return 0
+    conn = get_connection(db_path)
+    cur  = conn.cursor()
+    now  = datetime.utcnow().isoformat()
+    for row in rows:
+        row.setdefault("scraped_at", now)
+        row.setdefault("source", "yahoo")
+    cur.executemany("""
+        INSERT OR IGNORE INTO institutional_holders (
+            ticker, filing_date, holder_name, shares, pct_out, value, source, scraped_at
+        ) VALUES (
+            :ticker, :filing_date, :holder_name, :shares, :pct_out, :value, :source, :scraped_at
+        )
+    """, rows)
+    conn.commit()
+    inserted = cur.rowcount
+    conn.close()
+    return inserted
+
+
+def insert_analyst_changes(db_path: str, rows: list) -> int:
+    """Insert analyst upgrade/downgrade rows. Ignores duplicates on (ticker, event_date, firm, action, source)."""
+    if not rows:
+        return 0
+    conn = get_connection(db_path)
+    cur  = conn.cursor()
+    now  = datetime.utcnow().isoformat()
+    for row in rows:
+        row.setdefault("scraped_at", now)
+        row.setdefault("source", "yahoo")
+    cur.executemany("""
+        INSERT OR IGNORE INTO analyst_changes (
+            ticker, event_date, firm, from_grade, to_grade, action, source, scraped_at
+        ) VALUES (
+            :ticker, :event_date, :firm, :from_grade, :to_grade, :action, :source, :scraped_at
+        )
+    """, rows)
+    conn.commit()
+    inserted = cur.rowcount
+    conn.close()
+    return inserted
+
+
+def upsert_external_scrape_log(db_path: str, ticker: str, data_type: str,
+                               success: bool, error: str = None) -> None:
+    """Record latest scrape attempt for (ticker, data_type). Always overwrites."""
+    conn = get_connection(db_path)
+    now  = datetime.utcnow().isoformat()
+    conn.execute("""
+        INSERT INTO external_scrape_log (ticker, data_type, last_attempted_at, last_success_at, last_error)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(ticker, data_type) DO UPDATE SET
+            last_attempted_at = excluded.last_attempted_at,
+            last_success_at   = CASE WHEN ? THEN excluded.last_attempted_at ELSE last_success_at END,
+            last_error        = excluded.last_error
+    """, (ticker, data_type, now, now if success else None, error, success))
+    conn.commit()
+    conn.close()
