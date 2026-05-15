@@ -25,9 +25,10 @@ from database.db import (
     get_top_signals_of_day, generate_top_signals_of_day,
 )
 from config.tiers import can_create_watchlist, watchlist_limit, get_tier, next_tier
+from config.settings import FLASK_SECRET_KEY
 
 app = Flask(__name__, template_folder="templates", static_folder="static")
-app.secret_key = "signalintel-secret-change-in-production-2026"
+app.secret_key = FLASK_SECRET_KEY
 
 # Ensure user tables exist
 initialise_user_schema(DATABASE_PATH)

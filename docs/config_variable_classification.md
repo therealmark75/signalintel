@@ -103,6 +103,14 @@ All SECRET values below are empty-string placeholders in the tracked file.
 
 ---
 
+## web/app.py
+
+| Variable | Classification | Location | Notes |
+|---|---|---|---|
+| **FLASK_SECRET_KEY** | **SECRET** | config/settings.py | Flask session signing key. Rotating this value invalidates all active sessions. |
+
+---
+
 ## Maintenance
 
 When adding a new variable to any tracked config file:
