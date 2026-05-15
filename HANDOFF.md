@@ -3,142 +3,125 @@
 **Tactical session state.** Updated end of each session. For stable
 project context (who/what/how), see `PROJECT_CONTEXT.md`.
 
-Last updated: 14 May 2026, end of session (Phase 2b-ii live in production, all committed and pushed).
-Next session: Phase 2c or later phases. FRESH CHAT recommended.
+Last updated: 15 May 2026, end of session (Phase 2a/2b/2c complete, site live, gunicorn under LaunchAgent).
+Next session: Scheduler LaunchAgent (30 min, dependency-free), or SB01 snapshot investigation, or Yahoo data verification. FRESH CHAT recommended.
 
 ---
 
-## JUST SHIPPED — 14 May 2026 (Phase 2b-ii: enrichment pipeline + composite rebalance, now live)
+## JUST SHIPPED — 15 May 2026 (Phase 2a/2b/2c: production hardening, tunnel deployment, path migration)
 
-### Phase 2b-ii (5 commits, pushed)
+### Phase 2c (2 commits, pushed — chronological order, oldest first)
 
-**Commit 16e36bd** — `feat(scorer): add 4 Yahoo enrichment map helpers + wire into job_generate_signals`
+**Commit ab8eca1** — `chore(gitignore): untrack __pycache__ and .DS_Store, add to .gitignore`
 
-- `database/db.py`: 4 new helpers after `get_legal_risk_map`:
-  - `get_earnings_enrichment_map` → `{ticker: [list most-recent-first]}`
-  - `get_financials_enrichment_map` → `{ticker: {stmt_type: {fiscal_year: {raw_key: value}}}}`
-  - `get_inst_ownership_map` → `{ticker: {total_pct_held, holder_count, filing_date}}` (latest filing only via INNER JOIN)
-  - `get_analyst_momentum_map` → `{ticker: {upgrades_90d, downgrades_90d, net_momentum}}` (90-day window, 'up'/'init'=upgrade)
-- `main.py`: 4 new imports, 4 map builds in `job_generate_signals`, 4 new kwargs passed to `score_all_tickers`.
-- `tests/test_enrichment_map_builders.py`: 4 isolated shape tests using tmp_path SQLite.
+- Removed 10 tracked cpython-314 .pyc files and web/.DS_Store from git index via `git rm --cached`.
+- .gitignore was NOT modified — all three patterns (__pycache__/, *.pyc, .DS_Store) were already present before this commit. The commit subject line is slightly misleading; no .gitignore content change occurred. Verified via `git show ab8eca1 -- .gitignore` (empty diff).
+- Discovered during Phase 2c rsync (excluded __pycache__/ and .DS_Store from rsync, causing git status to report them as deletions).
 
-**Commit a108153** — `feat(scorer): add 5 Phase 2b-ii scorer functions + TickerSignal fields`
+**Commit 7eb0899** — `chore(paths): update absolute paths from ~/Documents/trading-system to ~/signalintel`
 
-- `signals/scorer.py`:
-  - `_parse_market_cap_text(s)` → float|None: parses "1.5B" etc.
-  - `score_earnings_surprise`: 4-quarter decay weights (4/3/2/1), contribution ladder ±7/±15/±25, neutral zone (-3%, 0%], P5 empty→50.0
-  - `score_piotroski`: Lock 1 (< 2 years → 50.0), 9 binary signals, F≥7→80/6→65/5→50/4→38/≤3→20
-  - `score_altman_penalty`: all-or-nothing, Z≥3→0/≥1.8→-10/≥0→-30/<0→-60, X4 uses TotalLiabilitiesNetMinorityInterest
-  - `score_inst_ownership`: Lock 3 (pct>60→75.0), tiers >40→55/≤20→35, P5 None→50.0
-  - `score_analyst_momentum`: net≥3→80/.../≤-3→20, P5 None→50.0
-  - `TickerSignal`: 5 new fields (earnings_score=50.0, piotroski_score=50.0, altman_penalty=0, inst_own_score=50.0, analyst_mom_score=50.0)
+- 5 one-off legal-risk migration scripts + CLAUDE.md updated via sed.
+- No production code changes — production code already used relative paths or os.path.expanduser.
 
-**Commit f1c825d** — `feat(scorer): rebalance composite weights to 1.60-sum + apply Altman penalty additively`
+**Phase 2c migration (no code commits, operational only):**
 
-- `compute_composite`: 4 new params (earnings, piotroski, inst_own, analyst_mom all default 50.0), 4 new weights (each 0.125, total 0.50 added). New sum: 1.60.
-- `score_all_tickers`: computes all 5 new scores per ticker, passes to `compute_composite`, applies `altman_penalty` additively alongside `legal_penalty` in `c_score_raw`.
+- rsync from ~/Documents/trading-system/ to ~/signalintel/ (venv excluded).
+- Venv recreated at ~/signalintel/venv; pip install -r requirements.txt clean.
+- pytest from new path: 233 passing, 2 skipped, 1 pre-existing SB01 failure (unchanged).
+- Gunicorn LaunchAgent generated via Python plistlib → ~/Library/LaunchAgents/io.thesignalvault.gunicorn.plist.
+- LaunchAgent loaded and verified: PID 26090, exit code 0, both curls 200.
+- Old path renamed: ~/Documents/trading-system → ~/Documents/trading-system.OLD (retain until 16 May 16:49 BST).
+- Scheduler restarted from new path: PID 25975, all 19 jobs registered.
 
-**Commit f477b5f** — `feat(scorer): bump SCORING_ENGINE_VERSION to 0.13.0 for Phase 2b-ii`
+### Phase 2a — Flask production hardening (6 commits, pushed — chronological order, oldest first)
 
-- `config/constants.py`: `SCORING_ENGINE_VERSION = "0.13.0"`
+| Commit | Subject |
+|---|---|
+| `3b5b2a0` | feat(web): move FLASK_SECRET_KEY to settings.py from hardcoded source |
+| `6d9fb1b` | feat(web): add ProxyFix middleware for Cloudflare Tunnel HTTPS termination |
+| `a1efc9c` | feat(web): harden session cookies for HTTPS-only with SameSite=Lax |
+| `a155353` | feat(deps): add gunicorn for production WSGI serving |
+| `4836788` | feat(web): add login rate limiting (10/min on POST /login) |
+| `bd31b99` | chore(web): set debug=False in __main__ block (gunicorn bypasses but hygiene) |
 
-**Commit 48fdf49** — `test(scorer): regenerate snapshot baseline for v0.13.0 + add synthetic enrichment maps for SS07`
+Gate 7 failure root cause: in-memory flask-limiter state is per-worker process. Multi-worker gunicorn distributes requests across workers, each with its own counter, so 10 requests never hit threshold on any single worker. Fix: `-w 1` for private beta. Redis upgrade path for production scale.
 
-- SS07 row: `"market_cap": "240M"` added. 4 new synthetic enrichment constants covering all new scorer paths.
-- SS07 synthetic data: 4 severe earnings misses → score 0.0; Piotroski F=2 → score 20.0; analyst net=-4 → score 20.0; Altman Z<0 → penalty -60 → composite clamped to 0.0 → STRONG_SELL.
-- EXPECTED_SNAPSHOT regenerated for v0.13.0.
-- P21 distribution: STRONG_BUY(1) BUY(2) STRONG_HOLD(6) HOLD(1) SELL(2) WEAK_HOLD(1) STRONG_SELL(1)
+### Phase 2b — Cloudflare Tunnel deployment (no code commits, operational only, 15 May 2026)
 
-### Phase 2b-i (5 commits, pushed prior session)
+- cloudflared installed via Homebrew (/opt/homebrew/bin/cloudflared).
+- Named tunnel `signalintel`, UUID `6bc7b651-9255-4c50-8d70-6f5e6175930f`.
+- Credentials: `/etc/cloudflared/6bc7b651-9255-4c50-8d70-6f5e6175930f.json` (root-owned, 400).
+- Config: `/etc/cloudflared/config.yml` (ingress: apex + www → localhost:5001, catch-all 404).
+- GoDaddy nameservers swapped to Cloudflare (anahi.ns.cloudflare.com + craig.ns.cloudflare.com). DNSSEC disabled at GoDaddy before swap.
+- DNS propagation: ~75 minutes (GoDaddy typical). Confirmed via `dig +short NS thesignalvault.io @1.1.1.1`.
+- cloudflared installed as system LaunchDaemon: `/Library/LaunchDaemons/com.cloudflare.cloudflared.plist`.
+- Lesson: `sudo cloudflared service install` installs a plist that omits `tunnel run` args; fixed by rewriting plist manually.
+- End state: four edge connections to London (lhr10/13/13/18). thesignalvault.io live over HTTPS.
 
-Yahoo enrichment table schemas, scrapers, and cron wiring for: earnings_history, analyst_changes, institutional_holders, financial_statements, yahooquery_raw. All schemas live; all tables still empty (crons pending, see STILL OPEN). Scores 9-13 scaffolded.
+### Prior Phase 2b-ii (5 commits, pushed 14 May 2026)
 
-### Phase 2a cleanups and follow-up commits (pushed)
-
-- Secrets leakage gate (2eb28c5): `docs/config_variable_classification.md` created; CLAUDE.md updated. Near-miss: ALERT_CONFIG holds SMTP credentials, matches no standard grep pattern.
-- FOLLOWUPS cleanup (61a9eea): 6 completed entries pruned; TEST ISOLATION REFACTOR structural debt added.
-- Em-dash cosmetic fix in test assertion messages.
-- P23 auth-adjacent audit escalation added to PROCESS INVARIANTS.
-- BUG-001 (7949805): tier badge fix. BUG-002 (6e015d0): tier-limit UX structured errors.
-- Watchlist picker component (6df4e88) + wiring into ticker/screener/penny screener (6d05aa3).
-- P6 compliance: penny page market cap formatting (28231e3).
-
-### Doc commits (this session)
-
-- **76356d2** — unauthorized HANDOFF.md rewrite by CC (committed without prompt, content accurate, act not authorised; P24 codified as result)
-- **dfa9276** — `docs: add process-lesson for HANDOFF self-edit incident (14 May 2026)` — P24 lesson added to PROJECT_CONTEXT.md
-
-### Production deploy
-
-- Old scheduler (PID 1867, v0.12.0) killed.
-- New scheduler (PID 11172, v0.13.0) started 14:18 BST, 14 May 2026.
-- First v0.13.0 production run: 10,807 tickers scored, 1,425 rating changes written, all `signal_scores` rows tagged `scoring_version = "0.13.0"`.
-
-### Test count
-
-- pytest: 232 passing, 4 Yahoo freshness skipped (tables still empty, correct behaviour).
-- Prior: 207 passing. +29 new tests (25 phase2b scorers + 4 enrichment map builders) = net 232.
+See previous HANDOFF for full detail. In brief: 5 Yahoo enrichment scorers (earnings_surprise, piotroski, inst_own, analyst_mom, altman_penalty), 9-component composite rebalanced to 1.60-sum, SCORING_ENGINE_VERSION → 0.13.0, snapshot test regenerated. First v0.13.0 production run: 10,807 tickers, 14:19 BST 14 May 2026.
 
 ---
 
-## CURRENT STATE (end of 14 May 2026)
+## CURRENT STATE (end of 15 May 2026)
 
-- Scheduler PID 11172 running v0.13.0. Started 14:18 BST.
-- 0 commits ahead of remote. All pushed.
-- 5 Yahoo data tables: schema live, all rows empty. Earliest data: analyst_changes + earnings_history after tonight's 02:00/02:15 BST crons.
-- pytest: 232 passing, 4 Yahoo freshness skipped.
-- SCORING_ENGINE_VERSION: 0.13.0.
-- Composite: 9-component weighted sum / 1.60 normalised. Weights: momentum 0.35, quality 0.30, insider 0.25, reversion 0.10, volume 0.10, earnings_surprise 0.125, piotroski 0.125, inst_own 0.125, analyst_mom 0.125. Altman penalty additive (alongside legal_penalty) before `_clamp`.
+- **Project root:** ~/signalintel
+- **Gunicorn:** LaunchAgent PID 26090, exit code 0. ~/signalintel/venv/bin/gunicorn -w 1 -b 127.0.0.1:5001. Logs: ~/signalintel/logs/gunicorn.{out,err}.log. Survives logout and reboot.
+- **Scheduler:** PID 25975, foreground nohup process. Survives logout (reparented to PID 1) but NOT reboot. Log: ~/signalintel/logs/scheduler.log.
+- **cloudflared:** System LaunchDaemon PID 25042 (root). /etc/cloudflared/config.yml. Survives reboot.
+- **Site:** https://thesignalvault.io — HTTP/2 200, verified 17:30 BST 15 May 2026.
+- **SCORING_ENGINE_VERSION:** 0.13.0
+- **pytest:** 233 passing, 2 skipped (Yahoo freshness — data landing), 1 failing (SB01 pre-existing). Total 236 tests.
+- **Last signal score:** 2026-05-15 16:39 BST (startup job from new-path scheduler boot).
+- **Last screener snapshot:** 2026-05-15 11:50 (16:30 window missed due to migration; next window 16 May 07:00).
+- **Git:** 0 commits ahead of remote. All pushed. HEAD: `647794e`.
+- **Old path:** ~/Documents/trading-system.OLD — retain until 16 May 2026 16:49 BST.
 
 ---
 
-## PROCESS TELLS — 14 May 2026 (Phase 2b-i and Phase 2b-ii sessions)
+## PROCESS TELLS — 15 May 2026
 
-**Phase 2b-i tells:**
+**Plist XML in heredocs eaten by chat renderer (P26 codified).**
+Three rounds of gunicorn LaunchAgent plist heredocs all arrived in Mark's terminal missing the `-w` flag. The `<string>-w</string>` XML tag was being parsed as an HTML attribute by the chat UI and stripped on copy. Dead giveaway: CC's "expected output" table mentioned `-w` while the heredoc below it did not. Fix: Python plistlib to generate plists programmatically. PlistBuddy on disk for verification. Applies to any XML-in-markdown workflow, not just plists.
 
-- **Snapshot gap (P21 codified).** Phase 2b-i snapshot test had no ticker exercising any new scorer (all enrichment maps were empty `{}`). P21 matrix coverage requires at least one ticker to exercise each new scorer path. SS07 now carries synthetic data for all 4 enrichment paths. Rule: when adding a scorer, add a snapshot-fixture row that exercises the non-neutral path or the snapshot test fails to protect the scorer's logic.
+**macOS TCC blocks launchd processes from ~/Documents/ (P25 codified).**
+Even after granting Full Disk Access to /sbin/launchd in System Settings, the LaunchAgent failed with `PermissionError: [Errno 1] Operation not permitted: '/Users/markn/Documents/trading-system/venv/pyvenv.cfg'`. TCC scopes protection per-path, not per-process-owner. The FDA grant to launchctl doesn't propagate to child processes reading TCC-protected paths. Fix: move project out of ~/Documents/. ~90 minutes diagnosis time; future projects default to ~/project-name, not ~/Documents/project-name.
 
-- **Housekeeping ceremony (calibrate-to-scope).** Phase 1 + Phase 2 rigour earns its weight on substrate refactors and scoring changes. It is over-ceremony on housekeeping (file deletions, table truncations, residue cleanups). Single-turn prompt with embedded self-check is the right shape. Collapsed a two-turn cleanup sequence to one-turn after Mark pushed back; finished cleanly in 10 minutes.
+**CC's "incomplete fix" pattern.**
+CC's first proposal was to move only the venv to a non-protected path. Technically correct framing ("venv is a build artefact") but missed that gunicorn also needs to read web/app.py, config/settings.py, and the 374MB DB from the project root — all still under ~/Documents/. Phase 1 inventory ("what does the process need to read at runtime?") would have caught the full surface area upfront.
 
-- **Date-blindness (P22 codified).** Both CC and Athena can be primed by prior context about dates. Any "yesterday / tonight / overnight" temporal reasoning must be explicitly grounded on the session start date. P22 added to PROCESS INVARIANTS.
-
-- **Comm preference (durable, locked mid-session).** Athena was over-explaining prompt-construction rationale and surfacing options as open questions. Mark's preference: deliver outcome + next prompt, briefly. No meta-notes on prompt design mid-flow. Conclusions, not derivations. Holds across sessions.
-
-**Phase 2b-ii tells:**
-
-- **Empty-insiders diagnostic error.** Pre-commit P21 check passed `[]` instead of `_SYNTHETIC_INSIDERS` to `score_all_tickers`. Produced SS07 composite 35.8 (insider neutral = 50) instead of correct 28.0 (3 sellers → insider = 0). Overstated the problem: SS07 appeared to route SELL, not WEAK_HOLD. Actual issue was that even at 28.0 (correct), P21 STOP fired correctly (28.0 > 25 STRONG_SELL threshold). Lesson: diagnostic scripts must use the same input fixtures as the test.
-
-- **P21 STOP fired correctly; Option A chosen.** SS07 with all-neutral enrichment maps (28.0) exceeded the <25 STRONG_SELL threshold. Option A (add synthetic enrichment data for SS07) was chosen over Option B (adjust base screener inputs). Option A exercises the new code paths; Option B would have masked the problem. Snapshot now correctly has all 7 tiers.
-
-- **HANDOFF self-edit (P24 codified).** CC committed a full HANDOFF.md rewrite (76356d2) without prompt authorisation, reading the header "Updated end of each session" as standing permission. It is not. P24 added: doc-file header text is descriptive metadata, never a standing instruction. Mitigation phrasing for all implementation prompts: "do not modify HANDOFF.md or PROJECT_CONTEXT.md." Header text = metadata, not permission.
-
-- **Altman Z empirical validation queued.** Thresholds (Z≥3/1.8/0/<0 → 0/-10/-30/-60) are 1968-era manufacturing calibrations. Modern tech-heavy universe may routinely fall in the distress zone (Z<1.8) without actual bankruptcy risk. Queue a distribution check before v0.13.0 data accumulates: compute Z-scores for the production ticker universe, plot distribution, verify penalty tiers are calibrated for SignalIntel's stock universe. See FOLLOWUPS: URGENT.
-
-- **Secrets leakage gate + config variable classification.** `docs/config_variable_classification.md` created (commit 2eb28c5) after ALERT_CONFIG near-miss. SMTP credentials live in a variable whose name matches no standard grep pattern (TOKEN|KEY|PASSWORD|SECRET). Pattern: credentials can live in any variable. Auditors must use the classification file, not literal grep patterns.
+**Context compaction can replay completed work.**
+After context compaction mid-session, CC suggested proceeding with "Step 11 LaunchAgent load" — work already completed and verified (PID 26090, exit code 0). Had Mark run CC's commands, the already-loaded LaunchAgent would have errored. Mitigation: after compaction, explicitly re-anchor CC with current empirical state before accepting any suggestion. "Session state is empirical" extends P22 (date is empirical) to the broader principle.
 
 ---
 
 ## STILL OPEN
 
-- **Tonight's Yahoo crons (02:00 ANALYST / 02:15 EARNINGS, 15 May 2026 BST):** First overnight cron since Phase 2b-i schema landed. Verify: `sqlite3 data/trading_system.db "SELECT data_type, COUNT(*), MAX(last_success_at) FROM external_scrape_log GROUP BY data_type;"` — look for ANALYST and EARNINGS rows dated 2026-05-15.
-- **Sunday 17 May — institutional_holders bulk job:** Verify same query + `SELECT COUNT(*) FROM institutional_holders;`
-- **Monday 18 May — financial_statements bulk job:** Verify same query + `SELECT COUNT(*) FROM financial_statements;`
-- **Tuesday 19 May — earnings_history bulk job:** Verify same query + `SELECT COUNT(*) FROM earnings_history;`
-- **Phase 2c direction TBD.** Programme plan lists flag substrate, rendering, end-to-end verification. See FOLLOWUPS: STRUCTURAL DEBT (Phase 2c direction).
-- **0 commits to push.** Everything is on remote.
-- **Real-data Altman Z distribution check.** See PROCESS TELLS: Altman empirical validation and FOLLOWUPS: URGENT.
+- **Delete ~/Documents/trading-system.OLD** — after 16 May 2026 16:49 BST. Verify site still stable first: `curl -sI https://thesignalvault.io/login | head -2` and `launchctl list | grep gunicorn`.
+- **Scheduler LaunchAgent** — still a foreground nohup process (PID 25975). Does not survive reboot. ~30 min work, dependency-free. See FOLLOWUPS: STRUCTURAL DEBT.
+- **SB01 snapshot mismatch** — `expected 76.6, got 74.7`. Pre-existing since 14 May. Needs focused diagnostic. See FOLLOWUPS: STRUCTURAL DEBT.
+- **Test count drift** — 233+2 vs expected 231+4. Two Yahoo freshness tests transitioned from skip to pass. Verify which tables have data now. See FOLLOWUPS: STRUCTURAL DEBT.
+- **Tonight's Yahoo crons (02:00 ANALYST / 02:15 EARNINGS, 16 May 2026 BST):** Verify: `sqlite3 ~/signalintel/data/trading_system.db "SELECT data_type, COUNT(*), MAX(last_success_at) FROM external_scrape_log GROUP BY data_type;"`
+- **Sunday 18 May — institutional_holders bulk job:** Same query + `SELECT COUNT(*) FROM institutional_holders;`
+- **Monday 19 May — financial_statements bulk job:** Same query + `SELECT COUNT(*) FROM financial_statements;`
+- **Tuesday 20 May — earnings_history bulk job:** Same query + `SELECT COUNT(*) FROM earnings_history;`
+- **Altman Z distribution check** — actionable once financial_statements data lands (Monday). See FOLLOWUPS: URGENT.
+- **0 commits ahead of remote.** Everything pushed.
 
 ---
 
 ## NOTES FOR FRESH-CHAT ATHENA
 
 - Read PROJECT_CONTEXT.md first (stable), then this HANDOFF for current state.
-- Phase 2b-ii is fully shipped and live in production. v0.13.0, PID 11172, 14:18 BST 14 May 2026. All commits pushed.
-- First action if continuing on Yahoo enrichment: verify overnight cron data. Check `external_scrape_log` for ANALYST and EARNINGS rows dated 2026-05-15. Query in STILL OPEN above.
-- The snapshot test (`tests/test_scorer_snapshot.py`) now exercises all 4 enrichment paths via SS07 synthetic data. It is a "change only when you mean to" artefact. Do not update EXPECTED_SNAPSHOT unless scoring logic intentionally changes.
-- `signals/scorer.py` enrichment scorer functions are at lines ~295-525. `compute_composite` is at ~573. `score_all_tickers` is at ~680.
-- 9-component composite; Altman penalty is additive (not a weight in the weighted sum). Weights listed in CURRENT STATE above.
-- P24 is new this session: CC must not self-initiate edits to HANDOFF.md or PROJECT_CONTEXT.md. Header text is metadata, not permission.
+- **Project now at ~/signalintel** — not ~/Documents/trading-system. All references updated. Old path at ~/Documents/trading-system.OLD (delete after 16 May 16:49 BST).
+- **Gunicorn under LaunchAgent** (PID 26090) — survives reboot. **Scheduler not** (PID 25975, nohup) — does not survive reboot. Symmetric LaunchAgent treatment for scheduler is STRUCTURAL DEBT.
+- Phase 2a/2b/2c fully shipped and live. v0.13.0, 233 tests passing (2 skipped, 1 pre-existing SB01 failure).
+- First action if continuing Yahoo enrichment: verify overnight cron data. Query in STILL OPEN above.
+- SB01 snapshot failure pre-exists this session (first seen 14 May). It is not a regression from migration.
+- Plist generation must use Python plistlib — not XML heredocs (P26). PlistBuddy verification before installing.
+- New projects/services: default to ~/project-name paths, never ~/Documents/ (P25, TCC lesson).
+- Phone Chrome cache issues during the Phase 2b/2c deployment session caused intermittent "site can't be reached" and login failures for ~1 hour, resolved by clearing Chrome cache and cookies. Not a deployment issue. Worth knowing if Guy or future testers report similar.
 
 ---
 
