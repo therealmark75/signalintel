@@ -21,15 +21,15 @@ SignalIntel is a stock signal intelligence web application. Currently used as a 
 ## Server & Environment
 - **Host:** Mac Mini (local server)
 - **Port:** 5001
-- **Virtual environment:** `~/Documents/trading-system/venv`
-- **Activate venv:** `source ~/Documents/trading-system/venv/bin/activate`
+- **Virtual environment:** `~/signalintel/venv`
+- **Activate venv:** `source ~/signalintel/venv/bin/activate`
 - **Database:** `data/trading_system.db` (SQLite)
 - **Run app:** `python web/app.py`
 - **Run scheduler:** `python main.py`
 
 ## Project Root
 ```
-~/Documents/trading-system/
+~/signalintel/
 ```
 
 ## File Structure

@@ -1,6 +1,6 @@
 import os
 
-app_path = os.path.expanduser("~/Documents/trading-system/web/app.py")
+app_path = os.path.expanduser("~/signalintel/web/app.py")
 with open(app_path, "r") as f:
     content = f.read()
 

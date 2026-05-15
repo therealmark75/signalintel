@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Rewrites scrapers/legal_risk_scraper.py to use CIK-based EDGAR approach.
-Run from ~/Documents/trading-system
+Run from ~/signalintel
 """
 
 scraper = '''import requests
@@ -405,7 +405,7 @@ def scrape_priority_tickers():
 '''
 
 import os
-path = os.path.expanduser("~/Documents/trading-system/scrapers/legal_risk_scraper.py")
+path = os.path.expanduser("~/signalintel/scrapers/legal_risk_scraper.py")
 with open(path, "w") as f:
     f.write(scraper)
 print(f"✅ Rewrote: {path}")

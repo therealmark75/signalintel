@@ -1,6 +1,6 @@
 import re, os
 
-main_path = os.path.expanduser("~/Documents/trading-system/main.py")
+main_path = os.path.expanduser("~/signalintel/main.py")
 with open(main_path, "r") as f:
     content = f.read()
 

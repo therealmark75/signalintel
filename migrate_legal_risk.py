@@ -1,5 +1,5 @@
 import sqlite3, sys, os
-sys.path.insert(0, os.path.expanduser("~/Documents/trading-system"))
+sys.path.insert(0, os.path.expanduser("~/signalintel"))
 from config.settings import DATABASE_PATH as DB_PATH
 
 conn = sqlite3.connect(DB_PATH)

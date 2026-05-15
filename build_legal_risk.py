@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
 SignalIntel - SEC EDGAR Legal Risk System
-Part 8 build script - run once from ~/Documents/trading-system
+Part 8 build script - run once from ~/signalintel
 """
 
 import os, sys
 
-BASE = os.path.expanduser("~/Documents/trading-system")
+BASE = os.path.expanduser("~/signalintel")
 
 # ── 1. SCRAPER ────────────────────────────────────────────────────────────────
 scraper = '''import requests
@@ -294,7 +294,7 @@ print(f"✅ Created: {scraper_path}")
 
 # ── 2. DB MIGRATION ───────────────────────────────────────────────────────────
 migration = '''import sqlite3, sys, os
-sys.path.insert(0, os.path.expanduser("~/Documents/trading-system"))
+sys.path.insert(0, os.path.expanduser("~/signalintel"))
 from config.settings import DB_PATH
 
 conn = sqlite3.connect(DB_PATH)
@@ -325,7 +325,7 @@ print(f"✅ Created: {migration_path}")
 # ── 3. SCHEDULER PATCH ────────────────────────────────────────────────────────
 scheduler_patch = '''import re, os
 
-main_path = os.path.expanduser("~/Documents/trading-system/main.py")
+main_path = os.path.expanduser("~/signalintel/main.py")
 with open(main_path, "r") as f:
     content = f.read()
 
@@ -373,7 +373,7 @@ print(f"✅ Created: {sched_path}")
 # ── 4. FLASK ROUTE PATCH ──────────────────────────────────────────────────────
 route_patch = '''import os
 
-app_path = os.path.expanduser("~/Documents/trading-system/web/app.py")
+app_path = os.path.expanduser("~/signalintel/web/app.py")
 with open(app_path, "r") as f:
     content = f.read()
 
@@ -435,7 +435,7 @@ route_patch_path = os.path.join(BASE, "patch_route_legal.py")
 # Simpler, safer version
 route_patch_safe = '''import os
 
-app_path = os.path.expanduser("~/Documents/trading-system/web/app.py")
+app_path = os.path.expanduser("~/signalintel/web/app.py")
 with open(app_path, "r") as f:
     content = f.read()
 
@@ -673,7 +673,7 @@ print()
 print("=" * 60)
 print("ALL FILES CREATED. Now run:")
 print()
-print("  cd ~/Documents/trading-system")
+print("  cd ~/signalintel")
 print("  source venv/bin/activate")
 print()
 print("  # Step 1: Create DB table")
