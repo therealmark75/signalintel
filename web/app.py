@@ -29,6 +29,7 @@ from database.db import (
 )
 from config.tiers import can_create_watchlist, watchlist_limit, get_tier, next_tier
 from config.settings import FLASK_SECRET_KEY
+from signals.signal_labels import tier_short
 
 app = Flask(__name__, template_folder="templates", static_folder="static")
 app.secret_key = FLASK_SECRET_KEY
@@ -1524,10 +1525,15 @@ def api_ticker_events(ticker):
         up_tiers = {'STRONG_BUY','BUY','STRONG_HOLD'}
         down_tiers = {'SELL','STRONG_SELL','WEAK_HOLD'}
         direction = 'up' if r['new_rating'] in up_tiers else 'down' if r['new_rating'] in down_tiers else 'neutral'
+        new_label = tier_short(r['new_rating'])
+        if r['old_rating']:
+            title = f"Rating changed: {tier_short(r['old_rating'])} → {new_label}"
+        else:
+            title = f"Rating set: {new_label}"
         events.append({
             'type': 'rating',
             'date': r['date'],
-            'title': f"Rating changed: {(r['old_rating'] or '?').replace('_',' ')} → {(r['new_rating'] or '?').replace('_',' ')}",
+            'title': title,
             'detail': f"Score {r['composite_score']:.1f} · Price ${r['price_at_change']:.2f}" if r['composite_score'] and r['price_at_change'] else None,
             'direction': direction,
             'new_rating': r['new_rating'],
