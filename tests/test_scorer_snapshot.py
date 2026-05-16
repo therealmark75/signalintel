@@ -252,7 +252,16 @@ _SYNTHETIC_FINANCIALS_MAP = {
     },
 }
 
-_SYNTHETIC_INST_OWN_MAP = {}   # No tickers — all P5 neutral (inst_own_score=50.0)
+# SS07 exercises the weak-institutional-ownership path (pct_held <= 20 → 35.0).
+# Closes the P21 coverage gap: without this entry no fixture ticker drives
+# score_inst_ownership off the P5 neutral 50.0 default. The 35.0 delta from
+# neutral depresses SS07's pre-clamp raw composite further, but the existing
+# -60 Altman penalty already clamps composite_score_raw to 0.0, so SS07's
+# composite/rating fields are unchanged — only sig.inst_own_score moves
+# (50.0 → 35.0), which the per-ticker snapshot below asserts directly.
+_SYNTHETIC_INST_OWN_MAP = {
+    "SS07": {"total_pct_held": 15.0, "holder_count": 8, "filing_date": "2026-02-15"},
+}
 
 _SYNTHETIC_ANALYST_MOM_MAP = {
     "SS07": {"upgrades_90d": 0, "downgrades_90d": 4, "net_momentum": -4},
@@ -285,7 +294,7 @@ EXPECTED_SNAPSHOT = {
     "WH05": {"composite_score_raw": 38.6, "composite_score": 38.6, "rating": "SELL",        "legal_penalty": 0,  "sector_modifier_applied":  0.0},
     "WH14": {"composite_score_raw": 37.6, "composite_score": 37.6, "rating": "WEAK_HOLD",   "legal_penalty": 0,  "sector_modifier_applied":  0.0},
     "SE06": {"composite_score_raw": 32.5, "composite_score": 32.5, "rating": "SELL",        "legal_penalty": 0,  "sector_modifier_applied":  0.0},
-    "SS07": {"composite_score_raw":  0.0, "composite_score":  0.0, "rating": "STRONG_SELL", "legal_penalty": 0,  "sector_modifier_applied":  0.0},
+    "SS07": {"composite_score_raw":  0.0, "composite_score":  0.0, "rating": "STRONG_SELL", "legal_penalty": 0,  "sector_modifier_applied":  0.0, "inst_own_score": 35.0},
 }
 
 
