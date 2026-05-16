@@ -6,6 +6,8 @@ import sqlite3
 from datetime import datetime, timedelta, timezone
 import pytest
 
+from database.db import initialise_schema, insert_screener_rows
+
 
 def test_signal_scores_freshness(db):
     """Latest scored_at must be within 72 hours of now."""
@@ -233,3 +235,43 @@ def test_yahoo_institutional_holders_freshness(db):
         latest = latest.replace(tzinfo=timezone.utc)
     cutoff = datetime.now(timezone.utc) - timedelta(days=14)
     assert latest >= cutoff, f"institutional_holders last scraped {row[0]} — older than 14 days"
+
+
+# ── Schema/INSERT coupling tripwire (BUG B class) ─────────────────────────────
+
+def test_insert_screener_rows_schema_alignment(tmp_path):
+    """
+    Schema/INSERT coupling tripwire for screener_snapshots (BUG B class).
+
+    Catches: INSERT INTO screener_snapshots in db.insert_screener_rows
+    referencing a column the live schema no longer defines (OperationalError:
+    no such column), and schema NOT NULL columns missing default that the
+    insert dict does not populate (IntegrityError on insert).
+
+    Ignores: column-level type coercion, downstream readers, indexes, and
+    every other insert_* helper in db.py (the broader sweep across
+    insert_insider_trades, insert_signal_scores, etc. is queued as a
+    separate FOLLOWUP — start narrow at the locus of the original bug).
+
+    Uses initialise_schema() from production database/db.py directly against
+    a tmp_path SQLite file — zero in-test schema replica, so no drift risk.
+    """
+    db_path = str(tmp_path / "tripwire.db")
+    initialise_schema(db_path)
+    row = {
+        "ticker": "TEST", "company": "Test Inc", "sector": "Technology",
+        "industry": "Software", "country": "USA",
+        "market_cap": "1B", "pe_ratio": 20.0, "price": 100.0,
+        "change_pct": 1.0, "volume": 1_000_000,
+        "eps_growth_this_yr": 10.0, "eps_growth_next_yr": 8.0,
+        "sales_growth_5yr": 12.0, "roe": 15.0,
+        "insider_own_pct": 5.0, "insider_transactions": "0",
+        "inst_own_pct": 60.0, "short_interest_pct": 3.0, "short_ratio": 2.0,
+        "analyst_recom": 2.0, "rsi_14": 55.0, "rel_volume": 1.1,
+        "avg_volume": 500_000, "sma_50_pct": 5.0, "sma_200_pct": 8.0,
+        "high_52w_pct": -5.0, "low_52w_pct": 25.0, "beta": 1.1,
+        "forward_pe": 18.0, "peg_ratio": 1.5,
+        "price_to_sales": 4.0, "price_to_book": 3.0,
+    }
+    inserted = insert_screener_rows(db_path, [row])
+    assert inserted == 1
