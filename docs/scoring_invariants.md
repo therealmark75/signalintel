@@ -390,3 +390,19 @@ Enforcement: When CC produces an audit table entry for any function, that entry 
 ## P20 — Analyst completeness gate
 
 **P20 — Analyst completeness gate.** When two paths diverge on what an analyst making a buy/sell/hold decision actually receives, the path serving the more complete analyst experience wins, regardless of implementation cost. Engineering cost is a tiebreaker between analytically-equivalent paths, not a vetoing factor over analytically-stronger ones.
+
+---
+
+## P26 — Freshness tests fire red on first run by design
+
+**P26 — Freshness tests fire red on first run by design.** When a freshness test catches real production staleness on its first execution, the red is the audit's empirical value, not a problem to mask. Resist the impulse to loosen thresholds, add conditional skips for "known stuck" windows, or otherwise dilute the signal. The threshold is what surfaced the bug; weakening it suppresses the next bug too.
+
+The 17 May 2026 economic_calendar finding is the canonical example. `test_fmp_economic_calendar_freshness` landed in commit a25e39d with a 72h threshold (matching the daily mon-fri cadence). On first run it caught that economic_calendar had not received a new row since 2026-05-07 — 9 days of silent staleness on a daily job. The job's wrapper in main.py swallowed the failure with `try/except logger.error` and wrote no run_log entry, so the 8-day window had no observability anywhere. The test surfaced what the runtime hid.
+
+Action when this happens:
+1. Commit the test as-is. Do not loosen the threshold to make CI green.
+2. File the underlying scraper / job failure as a separate FOLLOWUP entry in PROJECT_CONTEXT.md (not as a TODO comment, not as a test skip).
+3. Let CI run red until the underlying issue is fixed. The red is doing its job: every CI run is a fresh reminder that the upstream system has not recovered.
+4. Once the underlying job produces fresh data, the test goes green automatically — no test change needed.
+
+Origin: 17 May 2026 economic_calendar staleness, surfaced by Phase 2C / Item 4 freshness test on its first commit.

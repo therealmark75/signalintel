@@ -3,92 +3,68 @@
 **Tactical session state.** Updated end of each session. For stable
 project context (who/what/how), see `PROJECT_CONTEXT.md`.
 
-Last updated: 15 May 2026, end of session (Yahoo verification, venv rebuild, SB01 fix, scheduler LaunchAgent — all shipped and pushed).
-Next session: Sunday 17 May overnight bulk-job verification, then Phase 2c direction lock. FRESH CHAT recommended.
+Last updated: 17 May 2026, end of session (six commits to origin/main across morning push + P13 fix, design brief locked across four sections in the afternoon, brand assets committed, trading-system.OLD moved to Trash).
+Next session: Monday 18 May overnight bulk-job verification (Altman Z analysis now actionable once financial_statements lands) + economic_calendar 06:30 BST cron observation. FRESH CHAT recommended.
 
 ---
 
-## JUST SHIPPED — 15 May 2026
+## JUST SHIPPED — 17 May 2026
 
-### Yahoo overnight cron verification (read-only, no commits)
+### Morning push: six commits, all pushed to origin/main
 
-First post-deployment verification of the Phase 2b-i Yahoo enrichment crons. Both priority crons fired cleanly from the new ~/signalintel path overnight 14→15 May:
+- **48db573** — test(snapshot): pin datetime.now() to 2026-05-16 for insider window stability (Phase 2A). FakeDatetime subclass monkeypatch on signals.scorer.datetime, pinned to 2026-05-16 12:00 UTC. Eliminates the 2026-05-28 time-bomb where SS07's trade window would have expired and the snapshot test would have gone red on a clock-driven schedule. No new dependency. Locked pin date corrected from the original 2026-05-14 spec after empirical sweep showed the EXPECTED_SNAPSHOT was calibrated against a 2026-05-15..19 band.
+- **b4826b0** — test(snapshot): add inst_own coverage for SS07 to close P21 gap (Phase 2B). Added `{"total_pct_held": 15.0, "holder_count": 8, "filing_date": "2026-02-15"}` for SS07. Drives `score_inst_ownership` into the `pct <= 20 → 35.0` weak-institutional-ownership branch. Composite delta is absorbed by the existing -60 Altman clamp, so SS07 stays at composite_score_raw 0.0 and rating STRONG_SELL; the new non-neutral score is asserted via a sixth field `inst_own_score: 35.0` on the SS07 row of EXPECTED_SNAPSHOT.
+- **9376f81** — test(integrity): add schema-coupling tripwire test for insert_screener_rows (Phase 2C / Item 3). `test_insert_screener_rows_schema_alignment` builds a tmp_path SQLite file via production `initialise_schema()`, calls `insert_screener_rows()` with a minimal valid row, asserts insert returns 1. BUG B class catcher: INSERT statements referencing columns the schema no longer has, or NOT NULL columns the dict doesn't populate. Scope is screener_snapshots only; broader sweep across the 7 other insert helpers queued as STRUCTURAL DEBT.
+- **a25e39d** — test(integrity): add FMP output table freshness tests, 4 new (Phase 2C / Item 4). Four tests: `test_fmp_earnings_calendar_freshness` (last_updated, 72h), `test_fmp_dividends_freshness` (last_updated, 14d), `test_fmp_price_targets_freshness` (last_updated, 14d), `test_fmp_economic_calendar_freshness` (scraped_at, 72h — economic_calendar uses scraped_at not last_updated; defined in database/db.py not scrapers/fmp_scraper.py). All four use the existing conditional-skip pattern matching test_yahoo_*_freshness. Caught real production staleness on first run, see below.
+- **cd14074** — fix(api): translate rating codes to display labels in ticker events feed (P13). One-line fix in `web/app.py:1530` replacing `(r['old_rating'] or '?').replace('_',' ')` with `tier_short()` calls from `signals.signal_labels`. NULL-aware branching: first-ever rating reads "Rating set: Stable" instead of "Rating changed: ? → STRONG HOLD". Regression test added in `tests/test_api_rating_display.py` covering both branches. Gunicorn reloaded at 10:59 BST via `launchctl kickstart -k gui/501/io.thesignalvault.gunicorn` (PID flip 30323 → 55935), browser walk on https://thesignalvault.io/ticker/LESL confirmed labels render correctly.
+- **67278de** — docs: add Signal Vault + SignalIntel brand assets. Two PNG logo files committed to docs/brand/ (4.2 MB total). Locks the brand asset reference for the design brief.
 
-- Yahoo Analyst Changes (02:00 BST): 13.2s, 903 rows into analyst_changes
-- Yahoo Earnings Priority (02:15 BST): 21.5s, 60 rows into earnings_history
+### Test count
 
-No errors in external_scrape_log. Bulk-job tables (institutional_holders, financial_statements, earnings_history bulk) remain empty pending their Sun/Mon/Tue runs. Closed via Phase 1 + Phase 1-follow-up diagnostic round.
+234 → 239 passing (5 new tests added across Phase 2 commits, 0 regressions). 1 failed: `test_fmp_economic_calendar_freshness` against real production staleness, see below. 3 skipped (financial_statements + institutional_holders + fmp_price_targets — pre-existing conditional skips on empty tables).
 
-**Corrections to 14 May HANDOFF surfaced during verification:**
-- `yahooquery_raw` table does not exist. The 14 May HANDOFF listed it as one of five Phase 2b-i enrichment tables. There are four. Empirical grep returned zero references across .py, .md, .sql files. Either planned-but-never-implemented or a name discarded before any code was written.
-- `last_error_at` column does not exist on external_scrape_log. Actual column is `last_error`. Empirical grep returned zero references in code. No silent NULL risk.
+### Three Phase 1 audits banked (read-only, feeding future implementation sessions)
 
-### SB01 snapshot baseline correction (commit 0290c10, pushed)
+- **Altman Z-score distribution analysis prep** — Phase 1 inventory laid out compute_z_raw() helper extraction approach. Actionable once financial_statements bulk job lands Monday 18 May overnight.
+- **Scraper substrate audit** — Class A dominance pattern identified: FinViz Custom view fragility is a substrate problem, not individual scraper bugs. Inventory of recurring failure modes banked for a future hardening session.
+- **P21 snapshot coverage backfill audit** — surfaced 4 items, all 4 closed in this session's Phase 2 commits (inst_own gap closed in 2B; insider time-decay locked via pin date in 2A; schema-coupling tripwire in 2C/Item 3; FMP freshness coverage in 2C/Item 4).
 
-tests/test_scorer_snapshot.py had been failing since commit 48fdf49 (14 May). Phase 1 diagnostic confirmed the scorer was producing the correct v0.13.0 output for SB01 (74.7), but EXPECTED_SNAPSHOT was set to 76.6 — a value that does not match any coherent combination of SB01's inputs and the v0.13.0 weight table.
+### Real production bug surfaced by the new test
 
-Arithmetic confirmation: 100×0.35 + 100×0.30 + 86×0.25 + 0×0.10 + 80×0.10 + 50×0.125×4 = 119.5; 119.5 / 1.60 = 74.6875 → 74.7.
+`test_fmp_economic_calendar_freshness` fires red on first run. economic_calendar has no rows since 2026-05-07 (9 days stale as of session close, vs the daily mon-fri cadence). Caught immediately by the freshness test the same day it was added. Read-only diagnostic was performed (run_log has no entries for `job_economic_calendar`, external_scrape_log has no economic entries, distribution shows only two days of data ever recorded). Root cause not investigated this session — observation-only. Test left red on origin/main by design (per the new P26 invariant). See STILL OPEN.
 
-One-line fix: EXPECTED_SNAPSHOT["SB01"] composite_score_raw and composite_score updated from 76.6 to 74.7. No scorer change, no version bump, no other fixture rows touched. P16 held: trusted the arithmetic over the recorded baseline.
+### Afternoon work: design brief locked across four sections
 
-### Venv rebuild (no commit — environment-only)
+Full content captured in PROJECT_CONTEXT.md under DESIGN BRIEF (LOCKED 17 MAY 2026). Summary:
 
-The ~/signalintel/venv was broken since the 14 May ~/Documents/trading-system → trading-system.OLD rename. python3 symlinked to the dead path; pyvenv.cfg home pointed there too. Gunicorn PID 26090 and scheduler PID 25975 were running on in-memory CLT Python interpreters and would survive until exit but could not restart.
+- **Section 1: Site Map** — post-restructure 7 top-nav items (Dashboard / Signals / Screener / Markets / Events / Watchlist / Penny) + footer reference (Methodology / About / Contact / Privacy / Terms / Risk Disclaimer / Sign Out) + admin-only /system. /earnings and /dividends demoted to Dashboard panel CTAs. /ratings renamed to /methodology with tabs (Definitions / Score Components / Backtest / Distribution); /backtest folded in as a tab. Marketing homepage now lives at / for logged-out visitors.
+- **Section 2: Dashboard Panel Specs** — 13 panel specs locked. Above-the-fold 3×2 grid (Daily Summary, Top 5 Strong Signals, Top 5 Bearish Signals, Market State, Watchlist Preview, Discovery Themes Preview). Elite-only spotlight (Penny Stock of the Day full-width). Below-the-fold 3×2 (Earnings 7d, Dividends This Week, Sector Performance, Recent Rating Changes, Insider Activity, News Headlines). Each panel has documented data sources, content rows, interactions, and CTAs.
+- **Section 3: Marketing Homepage Spec** — 8 sections locked, Public.com / Robinhood aesthetic. Hero ("Institutional-grade tools. No institution required."), Transparency (lead differentiator), Multi-factor analysis, Discovery themes, Live proof stats, Pricing (Beta-marked Option B), Final CTA, Footer.
+- **Section 4: Brand System** — Parent brand: The Signal Vault (navy + gold, Trajan serif, vault wheel mark). Product brand: SignalIntel (teal/cyan + gold, hexagonal cube + V mark). Family system: SignalCrypto / SignalForex / SignalCommodities extend same template. Logged-in app palette refinement: Option C — preserve monospace + dark, swap cyan accent → SignalIntel teal-gold gradient, refine chart palette to brand colours. Not a full rebrand, palette alignment only.
 
-Rebuild sequence:
-1. mv venv → venv.OLD (preserved, not deleted)
-2. New venv from /Library/Developer/CommandLineTools/usr/bin/python3 (3.9.6, same as before)
-3. pip install -r requirements.txt — clean, all 18 declared packages plus deps
-4. pytest: 234 passing, 2 skipped (financial_statements + institutional_holders empty, expected), 0 failures. SB01 fix verified before commit.
-5. SB01 commit landed (0290c10)
-6. launchctl kickstart -k gunicorn → new PIDs 30323/30326, lsof confirms CLT Python and ~/signalintel cwd
-7. Kill nohup scheduler 25975, nohup new one against venv/bin/python → PID 30476, banner shows v0.13.0 and HEAD 0290c10
-8. curl https://thesignalvault.io → HTTP/2 302 to /login (site live)
+### Brand assets committed (commit 67278de)
 
-venv.OLD left in place at ~/signalintel/venv.OLD. Delete after a few days of healthy operation.
+`docs/brand/SignalIntel Logo Brand.PNG` and `docs/brand/The Signal Vault Logos.PNG` (4.2 MB total). Locked brand references for the design brief.
 
-### Scheduler LaunchAgent (no commit — system config)
+### Trading-system.OLD cleanup
 
-Closed the asymmetry: gunicorn under LaunchAgent (reboot-resilient, crash-recoverable), scheduler under bare nohup (neither). Created io.thesignalvault.scheduler at ~/Library/LaunchAgents/, generated via plistlib (not heredoc XML).
-
-Locked design, with rationale where it deviates from gunicorn's plist:
-
-| Key | Value | Notes |
-|---|---|---|
-| Label | io.thesignalvault.scheduler | Matches gunicorn naming |
-| ProgramArguments | ["~/signalintel/venv/bin/python", "~/signalintel/main.py", "scheduler"] | Explicit python + script; no shebang wrapper |
-| WorkingDirectory | /Users/markn/signalintel | Required — main.py uses relative paths |
-| EnvironmentVariables PATH | /opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin | Matches gunicorn |
-| RunAtLoad | true | Starts on login/reboot |
-| KeepAlive | dict { SuccessfulExit: false } | Restart on crash, NOT on clean SIGTERM exit |
-| StandardOutPath | logs/scheduler.out.log | Separate from trading_system.log to avoid double-write (main.py FileHandler already writes there) |
-| StandardErrorPath | logs/scheduler.err.log | Catches Python tracebacks bypassing the logger |
-| ThrottleInterval | 10 | Higher than gunicorn's 5; scheduler startup is heavier (~50s signal generation cold run) |
-| ExitTimeOut | 90 | Default 20s would SIGKILL mid-job on launchctl unload. 90s lets scheduler.shutdown(wait=True) complete a worst-case ~50s signal generation cleanly. Diagnostic-noise mitigation, not data-corruption mitigation |
-| UserName | markn | Matches gunicorn |
-
-Empirical gates both proved (Step 6 + Step 8 of Phase 2):
-- KeepAlive: SIGKILL on PID 31540 → launchd respawned within ThrottleInterval (10s), new PID 31885. Crash-recovery works.
-- Clean shutdown: launchctl unload → SIGTERM → exit 0 → no respawn. SuccessfulExit=false logic works.
-
-Stale log files deleted during install: scheduler.log (18KB, dead), scheduler_stdout.log (513KB, dead from earlier nohup sessions).
-
-Final scheduler PID: 32257 (after load/unload/reload cycle).
+Verified via 6-gate read-only audit: tip commit `bd31b99` propagated to origin/main, no orphaned commits, no symlinks pointing into the old folder, remote unrelated to local path. One untracked `.claude/settings.local.json` (183 bytes, 5 permission rules) declared redundant under the global bypassPermissions mode. Moved to ~/.Trash/ via `mv` (not `rm -rf`). 610 MB recoverable until Trash empty. Verified Trash presence via `test -d` and `stat` (TCC blocks `ls ~/.Trash`).
 
 ---
 
-## CURRENT STATE (end of 15 May 2026)
+## CURRENT STATE (end of 17 May 2026)
 
-- gunicorn: PID 30323 under io.thesignalvault.gunicorn LaunchAgent
-- scheduler: PID 32257 under io.thesignalvault.scheduler LaunchAgent
-- venv: rebuilt on CLT Python 3.9.6 at /Library/Developer/CommandLineTools/usr/bin/python3, home set correctly in pyvenv.cfg
-- venv.OLD: still present at ~/signalintel/venv.OLD, delete after healthy-operation window
-- HEAD: 0290c10 — test(scorer): correct SB01 snapshot baseline from 76.6 to 74.7
-- 0 commits ahead of remote, working tree clean (modulo SQLite WAL sidecar and venv.OLD/)
-- pytest: 234 passing, 2 skipped (institutional_holders + financial_statements freshness checks awaiting bulk-job data)
-- SCORING_ENGINE_VERSION: 0.13.0
-- Yahoo enrichment tables: analyst_changes 903 rows, earnings_history 60 rows, three weekly bulk tables still empty pending Sun/Mon/Tue runs
-- Site live: HTTP/2 302 via Cloudflare → /login
+- gunicorn: PID 55935 under io.thesignalvault.gunicorn LaunchAgent (restarted today 10:59 BST to pick up P13 fix; PID flip 30323 → 55935)
+- scheduler: PID 32257 under io.thesignalvault.scheduler LaunchAgent (unchanged since 15 May)
+- HEAD: 67278de — docs: add Signal Vault + SignalIntel brand assets (will move to the doc-banking commit after this session's edits)
+- 0 commits ahead of remote: all six morning commits pushed to origin/main; brand-assets commit (67278de) and doc-banking commit (to land at end of this prompt) are local-only until Mark confirms push
+- pytest: 239 passing, 1 failed (test_fmp_economic_calendar_freshness — real production staleness, by-design red), 3 skipped (financial_statements + institutional_holders + fmp_price_targets, pre-existing empty-table conditional skips)
+- SCORING_ENGINE_VERSION: 0.13.0 (unchanged)
+- Yahoo enrichment tables: analyst_changes + earnings_history continue daily feed; institutional_holders / financial_statements / earnings_history bulk still empty pending Mon/Tue runs
+- economic_calendar: 9 days stale (last scraped 2026-05-07), red test surfaced this; root cause not investigated
+- Site live: HTTP/2 302 via Cloudflare → /login; P13 ticker events fix verified empirically on /ticker/LESL
+- trading-system.OLD: moved to ~/.Trash/ (610 MB recoverable until emptied), confirmed via test -d + stat
+- venv.OLD: still untracked in ~/signalintel/venv.OLD (out of scope for the 15 May 72h timer, can fire any time from Mon 18 May)
 
 ---
 
@@ -112,13 +88,17 @@ Final scheduler PID: 32257 (after load/unload/reload cycle).
 
 ## STILL OPEN
 
-- **Sunday 17 May overnight — institutional_holders bulk job.** Verify `sqlite3 data/trading_system.db "SELECT COUNT(*) FROM institutional_holders;"` returns nonzero. Also check external_scrape_log for the corresponding data_type row.
-- **Monday 18 May overnight — financial_statements bulk job.** Same verification pattern. AND triggers the Altman Z distribution check from URGENT FOLLOWUPS (compute Z-scores for tickers with 2+ years of financial_statements data, plot distribution, verify penalty tiers calibrated for this universe before v0.13.0 data accumulates).
-- **Tuesday 19 May overnight — earnings_history bulk job.** Same verification pattern. earnings_history will then have both the priority-cron-fed rows and the bulk-fed rows.
-- **venv.OLD deletion green-light.** Sitting at ~/signalintel/venv.OLD. Delete after ~72h of healthy operation on the rebuilt venv (so by Monday 18 May we can decide).
-- **Phase 2c direction TBD.** Programme plan lists flag substrate, rendering, end-to-end verification. Decision lock needed on: which flags first, where flag substrate lives (DB vs in-flight from signal_scores), rendering surfaces. Blocked on Yahoo bulk data volume — flag logic is only useful once enrichment tables have enough rows to produce meaningful signals.
-- **234 vs 232 tests reconciliation.** 14 May HANDOFF recorded 232 passing. 15 May venv rebuild verified 234. Two extras since then, worth a quick `git log tests/` next session to identify. Non-urgent.
-- **HANDOFF correction queued:** the 14 May entry listed five Phase 2b-i enrichment tables; correct number is four. Either the next HANDOFF update absorbs this (this one) or the 14 May entry gets retroactively corrected. Captured here, no action needed.
+### Monday 18 May verification
+
+- **financial_statements bulk job.** Verify `sqlite3 data/trading_system.db "SELECT COUNT(*) FROM financial_statements;"` returns nonzero overnight Sun→Mon. Once that lands, the **Altman Z distribution analysis** from URGENT FOLLOWUPS is actionable Tuesday morning (compute Z-scores for tickers with 2+ years of data, plot distribution, verify -10 / -60 penalty tiers calibrated for the production universe before v0.13.0 backtest data accumulates).
+- **economic_calendar 06:30 BST cron — observation window.** The scheduled run will or will not produce a fresh row Monday morning. If green, the 9-day staleness was a transient failure that has already self-resolved. If red, fresh empirical logs are available to diagnose against (vs the current 8-day-old fog).
+- **venv.OLD deletion (72h timer from 15 May).** Eligible for deletion any time from Monday 18 May onwards.
+
+### LAUNCH PREP (new bucket)
+
+- **Google Search Console indexing setup at site launch.** sitemap.xml, robots.txt, domain verification. Required before marketing homepage goes public.
+- **Open Graph / social preview meta tags on marketing homepage.** og:title, og:description, og:image. Needed for social link previews to render coherently.
+- **Analytics decision: Plausible / Fathom / GA4.** Decision shape: a privacy-friendly analytics provider (Plausible / Fathom) fits the transparency-first brand positioning locked in Section 3 of the design brief. GA4 is the conventional default but conflicts with the "we show our work" stance. Decision needed before public launch.
 
 ---
 

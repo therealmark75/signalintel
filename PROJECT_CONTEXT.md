@@ -451,6 +451,12 @@ unverified:
 - "Likely" / "Probably" / "Most likely"
 - "Pretty sure" / "Fairly confident"
 - "Looks right" / "Seems correct"
+- "Spotted issue with X" / "Appeared to" / "Appears to" without empirical
+  proof — same hedge category as "looks right". 16 May P21 audit lesson:
+  CC's hedge that SS07 "appeared to" route STRONG_SELL was verified by
+  empirical sweep, which confirmed correct routing. Apply the same
+  vigilance whenever CC frames a verification as observation rather
+  than measurement.
 - "Renders after server restart" / "Will render correctly", predictions
   are not verifications
 - "Single 404, error handling working as designed" without pasting the
@@ -686,6 +692,269 @@ Privacy/Terms/Disclaimer already on website. Stripe account active.
 
 ---
 
+## DESIGN BRIEF (LOCKED 17 MAY 2026)
+
+Multi-session design work driving the post-restructure of SignalIntel toward a polished, brand-coherent product. Brief locked across four sections in a single session. Implementation follows in subsequent sessions via frontend-design mockup pass → review → CC implementation per page.
+
+Aesthetic split locked:
+- Marketing homepage (public): Public.com / Robinhood lineage — clean, generous whitespace, hero-first
+- Logged-in app: Trade-Ideas / Trading Central density, refined toward institutional via Option C palette alignment
+
+---
+
+### SECTION 1: SITE MAP
+
+Top nav (post-restructure, 7 items + sign-out):
+Dashboard · Signals · Screener · Markets · Events · Watchlist · Penny · [Sign out]
+
+Footer / reference (not top-nav):
+Methodology · About · Contact · Privacy · Terms · Risk Disclaimer · Sign Out
+
+Admin-only (not in nav, direct URL or admin link):
+/system
+
+Full page inventory:
+- / (public) — NEW. Marketing homepage. Public-Robinhood aesthetic. Hero + differentiators + sign-up CTA.
+- /dashboard — RESTRUCTURED. Overview panel. Trade-Ideas density aesthetic. 13-panel grid.
+- /signals — NEW (extracted). Top Signals (full) + Discovery Themes (full) + tier breakdown.
+- /screener — UNCHANGED. Full 33-column screener with filter sidebar.
+- /markets — UNCHANGED. Global markets overview. Major Indices / S&P Sectors / Currencies / Crypto.
+- /events — ENHANCED. Economic events calendar. Click event → expand into detail + related news (internal expansion).
+- /watchlist — UNCHANGED.
+- /penny — UNCHANGED structure, ENHANCED gating. Visible in top nav for all tiers; content gated to Elite.
+- /penny/screener — UNCHANGED. Same gating as /penny.
+- /ticker/<symbol> — ENHANCED. New folded-in sections: Upcoming Earnings, Dividend Profile, per-ticker Economic Events.
+- /earnings — DEMOTED. Out of top nav. Accessed via Dashboard panel "View full calendar →" CTA.
+- /dividends — DEMOTED. Out of top nav. Accessed via Dashboard panel "View full dividends →" CTA.
+- /methodology — RENAMED + EXPANDED. Tabs: Definitions / Score Components / Backtest Performance / Current Distribution. Replaces /ratings.
+- /backtest — FOLDED. Now lives as a tab inside /methodology.
+- /system — DEMOTED. Removed from top nav. Footer-link or admin-only.
+- /login — UNCHANGED for now.
+
+Routing logic for public/private boundary:
+- Logged-out user visits / → marketing homepage
+- Logged-in user visits / → redirect to /dashboard
+- Logged-out user visits any private route → redirect to /login
+
+---
+
+### SECTION 2: DASHBOARD PANEL SPECS
+
+Grid layout:
+- Above the fold: 3-column × 2-row grid (6 panels)
+- Elite-only spotlight: full-width row beneath the core grid (1 panel, Elite users only)
+- Below the fold: 3-column × 2-row grid (6 panels)
+- Total: 12 panels for Free/Starter/Pro, 13 for Elite
+
+ABOVE THE FOLD
+
+Panel 1: Daily Summary (top-left, anchor position)
+- Purpose: stats roll-up of overnight market and signal activity. Set the morning tone.
+- Data sources: signal_scores (last 24h), rating_changes (last 24h), screener_snapshots (latest), markets (S&P/NASDAQ/VIX).
+- Content: 4-6 stat lines (upgrade count, downgrade count, top mover, earnings reports today, VIX state, last signal run age).
+- Interaction: each stat line clickable, routes to relevant deeper surface.
+- CTA: none. Clickable stat lines are the CTAs.
+
+Panel 2: Top 5 Strong Signals (top-center)
+- Purpose: today's strongest bullish signals.
+- Data sources: signal_scores ordered by composite_score desc, filtered to STRONG_BUY + BUY tiers.
+- Content: 5 rows: ticker, tier badge (Very Strong / Strong), composite score, one-line thesis tag.
+- Interaction: row click → ticker page.
+- CTA: "View all signals →" routes to /signals.
+
+Panel 3: Top 5 Bearish Signals (top-right)
+- Purpose: today's strongest bearish signals.
+- Data sources: signal_scores ordered by composite_score asc, filtered to SELL + STRONG_SELL tiers.
+- Content: 5 rows: ticker, tier badge (Bearish / Very Bearish), composite score, one-line thesis tag.
+- Interaction: row click → ticker page.
+- CTA: "View all bearish signals →" routes to /signals filtered to bearish tiers.
+
+Panel 4: Market State (middle-left)
+- Purpose: at-a-glance global market snapshot.
+- Data sources: existing /markets data feeds (S&P 500, NASDAQ, Dow, VIX, FTSE, Hang Seng, Nikkei).
+- Content: 6-8 index tiles: index name, current level, percentage change, micro-sparkline.
+- Interaction: tile click → external chart or internal expanded view (TBD by frontend-design).
+- CTA: "Full markets view →" routes to /markets.
+
+Panel 5: Watchlist Preview (middle-center)
+- Purpose: quick check on user's tracked tickers without leaving Dashboard.
+- Data sources: watchlists table for current user, joined with signal_scores.
+- Content: up to 5 rows from default/active watchlist: ticker, tier, score, today's change, percentage since added.
+- Empty state: "Add tickers to your watchlist to see them here →" with CTA to /watchlist.
+- Interaction: row click → ticker page.
+- CTA: "Full watchlist →" routes to /watchlist.
+
+Panel 6: Discovery Themes Preview (middle-right)
+- Purpose: surface curated discovery themes.
+- Data sources: config/themes.py joined with live counts from signal_scores / screener_snapshots.
+- Content: 4-5 theme tiles: emoji, theme name, current ticker count. (Top Signal Momentum, Oversold Signals, Insider Accumulation, Legally Clean, Undervalued.)
+- Interaction: tile click → /screener?theme=<id>.
+- CTA: "All discovery themes →" routes to /signals.
+
+ELITE-ONLY SPOTLIGHT
+
+Panel 7: Penny Stock of the Day (Elite-only, full-width)
+- Purpose: daily curated penny pick with deep context.
+- Tier gate: Elite only. Non-Elite users do not see this panel at all.
+- Data sources: existing /penny "Stock of the Day" logic.
+- Content: ticker spotlight card matching /penny Stock of the Day layout — ticker, company, price, composite breakdown (Momentum / Quality / Insider), legal risk badge, "why we're watching this" bullet points.
+- Interaction: full panel click → ticker page.
+- CTA: "Open Penny Stock Hub →" routes to /penny.
+
+BELOW THE FOLD
+
+Panel 8: Earnings Next 7 Days (bottom-row-1-left)
+- Purpose: folded-in earnings calendar preview.
+- Data sources: earnings_calendar, filtered to next 7 days.
+- Content: 5-7 rows: ticker, date, EPS estimate, signal tier badge. Ordered by date asc, then signal strength desc.
+- Interaction: row click → ticker page.
+- CTA: "View full earnings calendar →" routes to /earnings.
+
+Panel 9: Dividends This Week (bottom-row-1-center)
+- Purpose: folded-in dividends preview.
+- Data sources: dividends, filtered to ex-date or pay-date within current week.
+- Content: 5-7 rows: ticker, ex-date, yield %, annual dividend, signal tier badge.
+- Interaction: row click → ticker page.
+- CTA: "Full dividend centre →" routes to /dividends.
+
+Panel 10: Sector Performance (bottom-row-1-right)
+- Purpose: 7-day sector ETF performance snapshot.
+- Data sources: sector ETF data (XLK, XLE, XLV, XLP, XLB, XLI, XLC, XLU, XLF, XLY, XLRE).
+- Content: 11 sector rows ordered by 7-day performance: rank, sector name, percentage change, micro-bar.
+- Interaction: sector row click → /screener?sector=<name>.
+- CTA: "Full sector view →" routes to /markets (S&P Sectors tab).
+
+Panel 11: Recent Rating Changes (bottom-row-2-left)
+- Purpose: who moved tiers in last 24h.
+- Data sources: rating_changes, last 24h, ordered by scored_at desc.
+- Content: 6-8 rows: ticker, old tier → new tier (display labels per P13), score, scored_at relative time.
+- Interaction: row click → ticker page Recent Events section.
+- CTA: "All rating changes →" routes to /methodology Backtest tab.
+
+Panel 12: Insider Activity (bottom-row-2-center)
+- Purpose: cluster buys and sells from last 14d.
+- Data sources: insider_trades with cluster detection (3+ insiders in 10-day window).
+- Content: 5-7 rows: ticker, signal type (CLUSTER_BUY / CLUSTER_SALE), insider count, total transaction value, detected relative time.
+- Interaction: row click → ticker page.
+- CTA: "All insider activity →" routes to a /signals view filtered to insider signals.
+
+Panel 13: News Headlines (bottom-row-2-right)
+- Purpose: news feed.
+- Data sources: news scraper feed.
+- Content: 5-7 latest headlines: source, headline, relative time, optional ticker tag.
+- Interaction: headline click → external news URL in new tab.
+- CTA: "More news →" expands panel or opens modal (News does not get its own page — Option B locked).
+
+---
+
+### SECTION 3: MARKETING HOMEPAGE SPEC
+
+Aesthetic: Public/Robinhood lineage — clean, generous whitespace, restrained colour, hero-first. Distinct from logged-in app density but visually compatible (same brand colours, same typeface family).
+
+Audience: serious independent traders. Not institutional, not casual.
+
+Routing: logged-out at / → marketing homepage. Logged-in at / → redirect to /dashboard.
+
+Section 1: Hero
+- Headline: "Institutional-grade tools. No institution required."
+- Subtitle: "Multi-factor signal analysis, verified performance, full transparency. Built for traders who do their own work."
+- Primary CTA: "Start free trial" button
+- Secondary CTA: "Sign in" text link
+- Visual: tasteful animated scorecard radar chart OR static Dashboard screenshot with subtle motion.
+- Trust line: "No credit card required · 7-day free trial · Cancel anytime"
+
+Section 2: Transparency (lead differentiator)
+- Headline: "We show our work."
+- Subhead: "Every signal, every score, every win and every loss. Public record from day one."
+- 3-column content:
+  - Verified performance record (every rating change logged with date + price)
+  - Open methodology (9-component scoring engine documented in full)
+  - Wins and losses visible (backtest data for every signal tier, including ones that didn't work)
+- Visual: Recent Events panel screenshot from a ticker page, or backtest tier performance grid.
+
+Section 3: Multi-factor signal analysis
+- Headline: "Nine components. One score. No shortcuts."
+- Subhead: "Every ticker scored across momentum, quality, insider activity, mean reversion, volume confirmation, earnings surprise, financial strength, institutional ownership, and analyst momentum. Plus penalties for legal and bankruptcy risk."
+- Visual: scoring components radar chart from ticker page rendered as static example.
+- Side note: "Sector-strength adjusted. Updated three times daily."
+
+Section 4: Discovery themes
+- Headline: "Find what matters today."
+- Subhead: "Curated discovery themes surface what's interesting without requiring you to build screeners from scratch."
+- Visual: 4-6 theme cards using live data from system: Top Signal Momentum, Dividend Powerhouses, Oversold Signals, Earnings This Week, Insider Accumulation, Undervalued.
+- Note: live data not screenshots — makes the homepage feel current.
+
+Section 5: Live proof (numbers, not testimonials)
+- Headline: "Live as you read this."
+- 4 large stat tiles pulled from live /system data: tickers scored daily, signal scores generated, insider trades tracked, update frequency.
+- Subhead under stats: "No testimonials. Just the numbers."
+
+Section 6: Pricing (Beta-marked, Option B from earlier lock)
+- Headline: "Pricing"
+- Subhead: "Free during beta. Full pricing rolls out at general launch."
+- 4-column pricing table matching config/tiers.py: Free / Starter / Pro / Elite.
+- Each column: feature checklist (3-5 lines), "Free during beta" marker, sign-up CTA.
+- Bottom line: "All paid tiers free during beta. Pricing announced before general launch."
+
+Section 7: Final CTA
+- Headline: "Start trading with better information."
+- CTA button: "Start your free trial"
+- Footer link: "Already have an account? Sign in →"
+
+Section 8: Footer
+- Brand bar: SignalIntel logo + tagline
+- Three columns:
+  - Platform: Dashboard / Signals / Screener / Watchlist / Methodology
+  - Company: About / Contact / Methodology / Backtest results
+  - Legal: Privacy Policy / Terms of Service / Risk Disclaimer
+- Copyright line: "© 2026 Mark Nicholson Consulting Limited T/A The Signal Vault. All rights reserved."
+- Compliance line: standard SignalIntel risk disclaimer.
+
+Open visual question for frontend-design: anchored top nav for logged-out visitors (SIGNALINTEL · Methodology · Pricing · Sign in · [Start free trial])? Lean: yes, with mockup variants.
+
+---
+
+### SECTION 4: BRAND SYSTEM
+
+Parent brand: The Signal Vault
+- Wordmark: Trajan Pro / serif equivalent, navy
+- Mark: vault wheel — V centred in concentric rings, navy + gold
+- Palette: navy (#1a2a3f range), gold (#c8a04a range), white
+- Tone: institutional, heritage, trustworthy
+- Asset: docs/brand/The Signal Vault Logos.PNG (committed 17 May 2026, 67278de)
+
+Product brand: SignalIntel
+- Wordmark: stylised SIGNALINTEL
+- Mark: hexagonal cube with vertical V strokes, teal-to-gold gradient
+- Palette: teal/cyan (#3dd9d6 range), gold accent (inherits parent), navy base
+- Tone: analytical, contemporary, energetic
+- Asset: docs/brand/SignalIntel Logo Brand.PNG (committed 17 May 2026, 67278de)
+
+Lockup: THE SIGNAL VAULT | SignalIntel for footer / about / where parent-product relationship matters.
+
+Family system: SignalCrypto / SignalForex / SignalCommodities all reuse hexagonal cube + V silhouette with sector-appropriate colour overlays. Future products extend the same template.
+
+Brand surface placement:
+- Marketing homepage: SignalIntel logo prominent in hero, "Part of The Signal Vault" lockup in footer or top-bar small.
+- Logged-in app: SignalIntel logo only. Signal Vault parent brand reserved for marketing/corporate surface.
+- Footer (logged-in and logged-out): Signal Vault lockup + copyright line referencing Mark Nicholson Consulting Limited T/A The Signal Vault.
+
+Logged-in app palette refinement (Option C locked):
+- Preserve current monospace typewriter font and dark background (the distinctive elements)
+- Swap cyan accent → SignalIntel teal-gold gradient
+- Soften grid pattern
+- Refine chart palette to brand colours
+- Background may stay black or shift to very dark navy (frontend-design decision)
+- Not a full rebrand — palette alignment only
+
+Implementation sequence (multi-session):
+1. Marketing homepage mockup (Section 3 + Section 4)
+2. Dashboard restructure mockup (Section 2 + Section 4)
+3. Methodology page mockup (Section 1 detail + Section 4)
+4. Per-page CC implementation (1-2 sessions per page after mockups locked)
+
+---
+
 ## HOW TO COMMUNICATE WITH MARK
 
 **Do:**
@@ -734,6 +1003,18 @@ field decision before any code was written), and 12 May BUG A circuit
 breaker session (Phase 1 surfaced the `ThreadPoolExecutor(3)` threading
 correction that HANDOFF had wrong; Phase 2 locked threshold=10,
 threading.Lock, FMPRateLimitError name, Option A propagation).
+
+17 May 2026 session demonstrated four Phase 1 audits + four Phase 2
+implementations in a single day (Phase 2A pin date, Phase 2B inst_own
+coverage, Phase 2C/Item 3 schema tripwire, Phase 2C/Item 4 FMP
+freshness, plus the P13 audit → P13 Fix 1). The pattern scales when
+audits are bounded (single concern per Phase 1) and decisions are
+locked atomically between phases (each Phase 2 starts from a frozen
+set of decisions, no decision drift mid-implementation). The same day
+also surfaced two pattern stress points: a misread file comment that
+sent Phase 2A to a wrong pin date (recovered via empirical sweep
+during Phase 2 — STOP-and-surface worked), and a freshness test red
+on first run that the by-design rule (P26) tells us to commit anyway.
 
 Phase 1 diagnostic must inventory NOT just current read/write paths
 but anything that would resurrect dropped state on restart (startup
@@ -1193,6 +1474,25 @@ URGENT (pre-launch, decision-not-engineering):
   Decide whether to invalidate v0.9.0 backtest history publicly, or
   document the caveat and retain it.
 
+- ECONOMIC_CALENDAR SCRAPER DIAGNOSTIC (17 May 2026): Real production
+  staleness surfaced by `test_fmp_economic_calendar_freshness` on its
+  first run. Last scraped_at: 2026-05-07T06:30:00 (9 days stale as of
+  session close). Only two days of data ever recorded in the table
+  (2026-05-05 and 2026-05-07). Daily mon-fri 06:30 BST cron registered
+  in main.py:775-779. Wait for Monday 18 May 06:30 BST cron outcome
+  before diagnosing: green = transient self-resolved; red = fresh
+  failure to diagnose with live logs (vs the current 8-day-old fog).
+
+- RUN_LOG OBSERVABILITY GAP ON job_economic_calendar (17 May 2026):
+  Unlike every other major job (signal_generation, news_calendar,
+  insider_scrape, screener_scrape, yahoo_*), job_economic_calendar
+  in main.py:767-773 writes no run_log entry on success or failure.
+  The try/except logger.error swallows exceptions and writes nothing
+  persistent. This is why the 8-day silent failure window went
+  undetected until the freshness test was added. Add run_log
+  SUCCESS / FAILED writes to bring observability in line with sister
+  jobs. Small, contained change.
+
 STRUCTURAL DEBT:
 
 - PHASE 2C DIRECTION TBD (14 May 2026): Programme plan for Phase 2c
@@ -1248,6 +1548,71 @@ STRUCTURAL DEBT:
   expanding (~87 tickers as of 9 May, up from 77 on 8 May). Worth
   revisiting whether the ⚖️ card design scales as coverage grows.
 
+- SCHEMA-COUPLING TRIPWIRE BROADER SWEEP (17 May 2026): Phase 2C
+  landed `test_insert_screener_rows_schema_alignment` (commit 9376f81)
+  covering screener_snapshots only. Extend the pattern to the seven
+  remaining insert helpers: insert_insider_trades, insert_signal_scores,
+  insert_economic_calendar, plus the four Yahoo insert helpers
+  (analyst_changes, earnings_history, financial_statements,
+  institutional_holders). Roughly 7 parallel tests, near-identical
+  structure to the existing one. Closes the BUG B class catcher across
+  the full insert surface.
+
+- SHADOWED TIER MAP CONVERGENCE (17 May 2026, P13 Fix 2): Nine templates
+  currently define their own TIER_SHORT / TIER_LABELS maps inline
+  (index.html, watchlist.html, screener.html, penny.html,
+  penny_screener.html, backtest.html, ticker.html, ratings.html — Jinja
+  + JS variants). signals/signal_labels.py is the canonical Python
+  source. Risk: drift across templates if labels change. Approach:
+  shared Jinja partial _tier_macros.html (matching existing
+  _nav.html / _footer.html pattern) that injects both the Jinja and
+  JS maps as JSON-rendered globals. Each template drops its local
+  shadow and includes the partial. Eliminates the drift surface.
+
+- ALERTER.PY DEAD-CODE RESOLUTION (17 May 2026, P13 Fix 3):
+  alerts/alerter.py:61, 233 render raw rating codes (P13 violation),
+  but the module has zero non-test imports in production. Either
+  patch with tier_short() calls and leave for potential future
+  revival, or delete the module entirely. Decision shape, not
+  engineering work — pick a side and execute in <15 minutes.
+
+- COMPUTE_Z_RAW() HELPER EXTRACTION (17 May 2026, Altman analysis
+  prep): Phase 1 Altman audit flagged this. Extract the Altman Z
+  formula from score_altman_penalty() into a pure compute_z_raw()
+  helper so analysis scripts can reuse the math without copying the
+  formula. Enables the Altman Z distribution check (URGENT bucket)
+  to run cleanly without duplicating logic.
+
+DESIGN WORK (new bucket, 17 May 2026):
+
+- DESIGN BRIEF LOCKED 17 MAY 2026: Full four-section content (Site
+  Map, 13 Dashboard panel specs, 8-section Marketing Homepage spec,
+  Brand System with Option C palette) lives in this document under
+  DESIGN BRIEF (LOCKED 17 MAY 2026). Drives the multi-session
+  implementation sequence below.
+
+- NEXT PHASE: frontend-design mockup pass on Marketing Homepage
+  (design brief Section 3 + Section 4 brand). Public/Robinhood
+  aesthetic, "Institutional-grade tools. No institution required."
+  hero. Mockup → review → CC implementation. Estimated 1-2 CC
+  sessions for the page itself after the mockup is locked.
+
+- THEN: Dashboard restructure mockup (Section 2 13-panel grid +
+  Section 4 palette refinement). Highest-density page in the app;
+  panel specs are detailed, but mockup is critical to lock
+  spacing, hierarchy, and the Elite-only spotlight rendering before
+  implementation.
+
+- THEN: Methodology page mockup (Section 1 detail + Section 4).
+  Tabs: Definitions / Score Components / Backtest / Distribution.
+  Folds in current /backtest and replaces /ratings.
+
+- IMPLEMENTATION CADENCE: 1-2 CC sessions per page after mockups
+  locked. Total surface: marketing homepage + dashboard restructure +
+  methodology + ticker page enhancements (folded-in Upcoming Earnings,
+  Dividend Profile, per-ticker Economic Events). Likely 6-10 CC
+  sessions to ship the full restructure once mockups are in hand.
+
 SMALL / COSMETIC:
 
 - DATA RETENTION STRATEGY (post-Yahoo): screener_snapshots grows ~33k
@@ -1275,6 +1640,23 @@ SMALL / COSMETIC:
 
 - FAVICON 404 in browser console: pre-existing, low priority,
   cosmetic only.
+
+- SQLITE WAL ARTIFACTS IN GIT STATUS (17 May 2026): data/trading_system.db-shm
+  and data/trading_system.db-wal are transient SQLite shared-memory /
+  write-ahead-log sidecars that flip on every test run touching the
+  live DB. They've surfaced in `git status` across every Phase 2
+  commit on 17 May, requiring manual exclusion from each commit.
+  Add both to .gitignore. 5-minute job. Note: the .db file itself is
+  intentionally tracked (production data), only the WAL sidecars
+  should be ignored.
+
+- CHART TIMEFRAME SYNC BUG (17 May 2026, beta-testing pickup): On
+  ticker pages, the top timeframe buttons (5m / 15m / 1H / 1D / 1W)
+  and the chart-level timeframe buttons are not synced. Clicking a
+  chart-level button updates the chart but the top buttons do not
+  reflect the new state. Cosmetic UI bug, not a data issue. Surface
+  in the next ticker-page implementation session if it's not already
+  fixed as part of the post-restructure ticker page rebuild.
 
 ---
 
