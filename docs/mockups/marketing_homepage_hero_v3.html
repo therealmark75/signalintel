@@ -1,0 +1,885 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SignalIntel — hero mockup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT,WONK@9..144,300..900,0..100,0..1&family=Inter+Tight:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    /* Palette pulled from the SignalIntel brand map (updated to new wheel mark identity) */
+    --navy-950: #060f1c;
+    --navy-900: #0a1729;
+    --navy-800: #0f2540;
+    --navy-700: #163356;
+    --navy-600: #1f4570;
+    --green-500: #2ea850;
+    --green-400: #3ec762;
+    --green-300: #5dd97e;
+    --green-200: #8fe9a6;
+    --gold-500: #c9a04a;
+    --gold-400: #d4b06a;
+    --ink-50:   #f6f7f9;
+    --ink-100:  #e8ebf0;
+    --ink-200:  #cfd5e0;
+    --ink-400:  #8a93a6;
+    --ink-600:  #4a5366;
+    --ink-800:  #1a2230;
+
+    --font-display: 'Fraunces', 'Cormorant Garamond', Georgia, serif;
+    --font-body: 'Inter Tight', system-ui, sans-serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    background: var(--navy-950);
+    color: var(--ink-50);
+    font-family: var(--font-body);
+    font-feature-settings: "ss01", "cv11";
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+
+  /* ─── PARENT-BRAND UTILITY BAR ─────────────────────────────── */
+  .parent-bar {
+    background: var(--navy-950);
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    padding: 8px 0;
+    font-size: 12px;
+    color: var(--ink-400);
+    letter-spacing: 0.02em;
+  }
+  .parent-bar-inner {
+    max-width: 1320px;
+    margin: 0 auto;
+    padding: 0 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .parent-bar-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .vault-wheel {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+  }
+  .parent-bar-left span:first-of-type {
+    color: var(--ink-200);
+    font-weight: 500;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    font-size: 11px;
+  }
+  .parent-bar-divider {
+    color: var(--navy-600);
+    margin: 0 4px;
+  }
+  .parent-bar-right {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  .parent-bar-right a {
+    color: var(--ink-400);
+    text-decoration: none;
+    transition: color 0.18s;
+  }
+  .parent-bar-right a:hover { color: var(--ink-100); }
+  .live-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--green-500);
+    margin-right: 6px;
+    box-shadow: 0 0 0 0 rgba(62,199,98,0.7);
+    animation: livepulse 2.4s ease-out infinite;
+  }
+  @keyframes livepulse {
+    0%   { box-shadow: 0 0 0 0 rgba(62,199,98,0.5); }
+    70%  { box-shadow: 0 0 0 8px rgba(62,199,98,0); }
+    100% { box-shadow: 0 0 0 0 rgba(62,199,98,0); }
+  }
+
+  /* ─── PRIMARY NAV ──────────────────────────────────────────── */
+  .nav {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    background: rgba(8, 17, 31, 0.85);
+    backdrop-filter: blur(12px) saturate(140%);
+    -webkit-backdrop-filter: blur(12px) saturate(140%);
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+  }
+  .nav-inner {
+    max-width: 1320px;
+    margin: 0 auto;
+    padding: 18px 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .nav-logo {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    text-decoration: none;
+    color: var(--ink-50);
+  }
+  .nav-mark { width: 32px; height: 32px; }
+  .nav-wordmark {
+    font-family: var(--font-body);
+    font-size: 22px;
+    font-weight: 600;
+    letter-spacing: -0.015em;
+    color: var(--ink-50);
+  }
+  .nav-wordmark .intel { color: var(--green-400); font-weight: 700; }
+  .nav-links {
+    display: flex;
+    align-items: center;
+    gap: 36px;
+  }
+  .nav-links a {
+    color: var(--ink-200);
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 500;
+    letter-spacing: 0.01em;
+    transition: color 0.18s;
+  }
+  .nav-links a:hover { color: var(--green-400); }
+  .nav-cta {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+  }
+  .nav-signin {
+    color: var(--ink-200);
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 500;
+  }
+  .nav-signin:hover { color: var(--ink-100); }
+  .btn-primary {
+    background: linear-gradient(135deg, var(--green-400) 0%, var(--green-500) 100%);
+    color: var(--navy-950);
+    padding: 10px 20px;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 600;
+    text-decoration: none;
+    letter-spacing: 0.005em;
+    transition: transform 0.18s, box-shadow 0.18s;
+    border: none;
+    cursor: pointer;
+    display: inline-block;
+  }
+  .btn-primary:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 8px 24px rgba(62,199,98,0.28);
+  }
+
+  /* ─── HERO ─────────────────────────────────────────────────── */
+  .hero {
+    position: relative;
+    padding: 96px 32px 120px;
+    overflow: hidden;
+  }
+  .hero-bg {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    overflow: hidden;
+  }
+  .hero-bg::before {
+    content: '';
+    position: absolute;
+    top: -20%; left: 60%;
+    width: 800px; height: 800px;
+    background: radial-gradient(circle, rgba(62,199,98,0.10) 0%, rgba(62,199,98,0) 60%);
+    filter: blur(20px);
+  }
+  .hero-bg::after {
+    content: '';
+    position: absolute;
+    bottom: -30%; left: -10%;
+    width: 700px; height: 700px;
+    background: radial-gradient(circle, rgba(36,61,108,0.45) 0%, rgba(36,61,108,0) 65%);
+    filter: blur(40px);
+  }
+  .hero-grid {
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
+    background-size: 64px 64px;
+    mask-image: radial-gradient(ellipse at 50% 30%, rgba(0,0,0,0.7) 0%, transparent 70%);
+  }
+
+  .hero-inner {
+    max-width: 1320px;
+    margin: 0 auto;
+    position: relative;
+    z-index: 2;
+    display: grid;
+    grid-template-columns: 1.05fr 0.95fr;
+    gap: 72px;
+    align-items: center;
+  }
+
+  /* ─── HERO LEFT: copy ─────────────────────────────────────── */
+  .hero-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 14px 6px 8px;
+    border: 1px solid rgba(62,199,98,0.22);
+    background: rgba(62,199,98,0.06);
+    border-radius: 100px;
+    font-size: 12px;
+    color: var(--green-200);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    font-weight: 500;
+    margin-bottom: 32px;
+    opacity: 0;
+    animation: rise 0.8s 0.1s ease-out forwards;
+  }
+  .hero-tag-pill {
+    background: var(--green-400);
+    color: var(--navy-950);
+    padding: 2px 8px;
+    border-radius: 100px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+  }
+
+  .hero-headline {
+    font-family: var(--font-display);
+    font-size: clamp(48px, 5.6vw, 84px);
+    line-height: 1.02;
+    letter-spacing: -0.025em;
+    color: var(--ink-50);
+    font-weight: 360;
+    font-variation-settings: "opsz" 144, "SOFT" 30;
+    margin-bottom: 28px;
+    opacity: 0;
+    animation: rise 0.9s 0.25s ease-out forwards;
+  }
+  .hero-headline .accent {
+    font-style: italic;
+    font-weight: 300;
+    background: linear-gradient(135deg, var(--green-400) 0%, var(--green-500) 60%, var(--gold-400) 110%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    font-variation-settings: "opsz" 144, "SOFT" 60, "WONK" 1;
+  }
+
+  .hero-sub {
+    font-size: 19px;
+    line-height: 1.55;
+    color: var(--ink-200);
+    max-width: 540px;
+    font-weight: 400;
+    margin-bottom: 44px;
+    opacity: 0;
+    animation: rise 0.9s 0.4s ease-out forwards;
+  }
+
+  .hero-ctas {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    margin-bottom: 28px;
+    opacity: 0;
+    animation: rise 0.9s 0.55s ease-out forwards;
+  }
+  .btn-primary-lg {
+    background: linear-gradient(135deg, var(--green-400) 0%, var(--green-500) 100%);
+    color: var(--navy-950);
+    padding: 16px 28px;
+    border-radius: 8px;
+    font-size: 15px;
+    font-weight: 600;
+    text-decoration: none;
+    letter-spacing: 0.005em;
+    transition: transform 0.18s, box-shadow 0.18s;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .btn-primary-lg:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 32px rgba(62,199,98,0.32);
+  }
+  .btn-primary-lg svg {
+    transition: transform 0.18s;
+  }
+  .btn-primary-lg:hover svg {
+    transform: translateX(3px);
+  }
+  .btn-secondary {
+    background: transparent;
+    color: var(--ink-100);
+    padding: 16px 8px;
+    font-size: 15px;
+    font-weight: 500;
+    text-decoration: none;
+    letter-spacing: 0.005em;
+    border-bottom: 1px solid rgba(255,255,255,0.18);
+    transition: border-color 0.18s, color 0.18s;
+  }
+  .btn-secondary:hover {
+    color: var(--green-400);
+    border-bottom-color: var(--green-400);
+  }
+
+  .hero-trust {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    font-size: 13px;
+    color: var(--ink-400);
+    font-family: var(--font-mono);
+    opacity: 0;
+    animation: rise 0.9s 0.7s ease-out forwards;
+  }
+  .hero-trust span {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .hero-trust .check {
+    color: var(--green-500);
+    font-size: 11px;
+  }
+
+  /* ─── HERO RIGHT: visual — stylised live scorecard ─────────── */
+  .scorecard {
+    position: relative;
+    width: 100%;
+    max-width: 540px;
+    margin-left: auto;
+    opacity: 0;
+    animation: rise 1.1s 0.5s ease-out forwards;
+  }
+
+  .scorecard-frame {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    background: linear-gradient(160deg, rgba(20,37,64,0.7) 0%, rgba(13,27,47,0.7) 100%);
+    border: 1px solid rgba(93,217,126,0.18);
+    border-radius: 20px;
+    backdrop-filter: blur(8px);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  .scorecard-frame::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(circle at 30% 20%, rgba(62,199,98,0.08), transparent 40%),
+      radial-gradient(circle at 80% 70%, rgba(200,160,74,0.04), transparent 40%);
+  }
+
+  .scorecard-header {
+    position: relative;
+    padding: 22px 26px 18px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+  }
+  .scorecard-ticker {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+  }
+  .scorecard-ticker .symbol {
+    font-family: var(--font-mono);
+    font-size: 20px;
+    font-weight: 500;
+    color: var(--ink-50);
+    letter-spacing: 0.04em;
+  }
+  .scorecard-ticker .name {
+    font-size: 12px;
+    color: var(--ink-400);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .scorecard-rating {
+    font-size: 11px;
+    padding: 4px 10px;
+    border-radius: 4px;
+    background: rgba(62,199,98,0.12);
+    color: var(--green-500);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    font-weight: 600;
+    border: 1px solid rgba(62,199,98,0.25);
+  }
+
+  .scorecard-body {
+    position: relative;
+    flex: 1;
+    padding: 24px 26px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 0;
+  }
+  .scorecard-radar {
+    width: 100%;
+    max-width: 340px;
+    aspect-ratio: 1;
+  }
+
+  .scorecard-footer {
+    position: relative;
+    padding: 16px 26px;
+    background: linear-gradient(180deg, transparent 0%, rgba(8,17,31,0.4) 100%);
+    border-top: 1px solid rgba(255,255,255,0.04);
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+  }
+  .footer-stat {
+    text-align: left;
+  }
+  .footer-stat .label {
+    font-size: 10px;
+    color: var(--ink-400);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 4px;
+    font-weight: 500;
+  }
+  .footer-stat .value {
+    font-family: var(--font-mono);
+    font-size: 16px;
+    color: var(--ink-100);
+    font-weight: 500;
+  }
+  .footer-stat .value.up { color: var(--green-500); }
+
+  /* Scan line on radar */
+  .scan-sweep {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform-origin: 0 0;
+    width: 45%;
+    height: 1px;
+    background: linear-gradient(90deg, rgba(62,199,98,0.7) 0%, rgba(62,199,98,0) 100%);
+    animation: sweep 6s linear infinite;
+    pointer-events: none;
+  }
+  @keyframes sweep {
+    0%   { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+
+  /* Floating data chips around the scorecard */
+  .float-chip {
+    position: absolute;
+    background: rgba(13,27,47,0.92);
+    border: 1px solid rgba(93,217,126,0.22);
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--ink-100);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    animation: bob 6s ease-in-out infinite;
+  }
+  .float-chip .dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+  }
+  .float-chip-1 {
+    top: 18%; left: -8%;
+    animation-delay: 0s;
+  }
+  .float-chip-2 {
+    top: 58%; right: -10%;
+    animation-delay: 1.5s;
+  }
+  .float-chip-3 {
+    bottom: 12%; left: -4%;
+    animation-delay: 3s;
+  }
+  @keyframes bob {
+    0%, 100% { transform: translateY(0); }
+    50%      { transform: translateY(-8px); }
+  }
+
+  /* ─── BELOW-FOLD TRANSITION HINT ──────────────────────────── */
+  .transition-band {
+    position: relative;
+    background: linear-gradient(180deg, var(--navy-950) 0%, var(--ink-50) 100%);
+    padding: 80px 32px 0;
+  }
+  .transition-inner {
+    max-width: 1320px;
+    margin: 0 auto;
+    text-align: center;
+    padding-bottom: 80px;
+  }
+  .transition-eyebrow {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--ink-400);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    margin-bottom: 18px;
+  }
+  .transition-headline {
+    font-family: var(--font-display);
+    font-size: clamp(32px, 4vw, 56px);
+    color: var(--ink-100);
+    font-weight: 380;
+    font-variation-settings: "opsz" 144, "SOFT" 30;
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+    max-width: 720px;
+    margin: 0 auto;
+  }
+  .transition-headline em {
+    font-style: italic;
+    color: var(--green-400);
+    font-weight: 320;
+    margin: 0 0.15em;
+  }
+  .scroll-cue {
+    position: absolute;
+    bottom: -40px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 1px;
+    height: 80px;
+    background: linear-gradient(180deg, rgba(255,255,255,0.4) 0%, transparent 100%);
+  }
+  .scroll-cue::after {
+    content: '';
+    position: absolute;
+    bottom: 0; left: -3px;
+    width: 7px; height: 7px;
+    background: var(--green-400);
+    border-radius: 50%;
+    box-shadow: 0 0 12px var(--green-400);
+  }
+
+  /* ─── ANIMATION KEYFRAMES ─────────────────────────────────── */
+  @keyframes rise {
+    0%   { opacity: 0; transform: translateY(16px); }
+    100% { opacity: 1; transform: translateY(0); }
+  }
+
+  /* ─── MOCKUP META BAR (delete on real implementation) ─────── */
+  .mockup-meta {
+    position: fixed;
+    bottom: 16px; right: 16px;
+    background: rgba(8,17,31,0.9);
+    border: 1px solid rgba(255,255,255,0.08);
+    color: var(--ink-400);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    padding: 6px 10px;
+    border-radius: 4px;
+    z-index: 100;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+
+  /* ─── MEDIA QUERIES ───────────────────────────────────────── */
+  @media (max-width: 980px) {
+    .hero-inner { grid-template-columns: 1fr; gap: 56px; }
+    .scorecard { margin-left: 0; max-width: 460px; }
+    .nav-links { display: none; }
+    .parent-bar-right { gap: 16px; }
+  }
+  @media (max-width: 640px) {
+    .hero { padding: 64px 24px 80px; }
+    .nav-inner { padding: 16px 24px; }
+    .parent-bar-inner { padding: 0 24px; }
+    .hero-ctas { flex-direction: column; align-items: stretch; gap: 12px; }
+    .btn-primary-lg, .btn-secondary { text-align: center; justify-content: center; }
+    .hero-trust { flex-wrap: wrap; gap: 12px; }
+    .float-chip { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ──────── PARENT-BRAND UTILITY BAR ──────── -->
+<div class="parent-bar">
+  <div class="parent-bar-inner">
+    <div class="parent-bar-left">
+      <!-- Signal Vault wheel mark (gold V centred in concentric navy rings) -->
+      <svg class="vault-wheel" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <!-- Outer ring with cardinal gaps -->
+        <g stroke="#0f2540" stroke-width="2.5" fill="none">
+          <path d="M 16 2 A 14 14 0 0 1 30 16"/>
+          <path d="M 30 16 A 14 14 0 0 1 16 30"/>
+          <path d="M 16 30 A 14 14 0 0 1 2 16"/>
+          <path d="M 2 16 A 14 14 0 0 1 16 2"/>
+        </g>
+        <!-- Inner ring with cardinal gaps -->
+        <g stroke="#0f2540" stroke-width="1.6" fill="none">
+          <path d="M 16 7 A 9 9 0 0 1 25 16"/>
+          <path d="M 25 16 A 9 9 0 0 1 16 25"/>
+          <path d="M 16 25 A 9 9 0 0 1 7 16"/>
+          <path d="M 7 16 A 9 9 0 0 1 16 7"/>
+        </g>
+        <!-- Gold V/arrow centred -->
+        <path d="M 11 12 L 16 22 L 21 12 Z" fill="#c9a04a"/>
+        <path d="M 13.5 12 L 16 17 L 18.5 12 Z" fill="#0f2540"/>
+      </svg>
+      <span>The Signal Vault</span>
+      <span class="parent-bar-divider">|</span>
+      <span>SignalIntel · the equities product</span>
+    </div>
+    <div class="parent-bar-right">
+      <a href="#"><span class="live-dot"></span>Live · 10,807 tickers scored today</a>
+      <a href="#methodology">Methodology</a>
+      <a href="#contact">Contact</a>
+    </div>
+  </div>
+</div>
+
+<!-- ──────── PRIMARY NAV ──────── -->
+<nav class="nav">
+  <div class="nav-inner">
+    <a href="/" class="nav-logo" aria-label="SignalIntel home">
+      <!-- SignalIntel vault wheel mark (SVG recreation of the new brand mark) -->
+      <svg class="nav-mark" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <!-- Outer ring with cardinal gaps -->
+        <g stroke="#0f2540" stroke-width="5" fill="none">
+          <path d="M 32 4 A 28 28 0 0 1 60 32" stroke-linecap="butt"/>
+          <path d="M 60 32 A 28 28 0 0 1 32 60" stroke-linecap="butt"/>
+          <path d="M 32 60 A 28 28 0 0 1 4 32" stroke-linecap="butt"/>
+          <path d="M 4 32 A 28 28 0 0 1 32 4" stroke-linecap="butt"/>
+        </g>
+        <!-- Inner ring with cardinal gaps, rotated -->
+        <g stroke="#0f2540" stroke-width="3.5" fill="none">
+          <path d="M 32 12 A 20 20 0 0 1 52 32"/>
+          <path d="M 52 32 A 20 20 0 0 1 32 52"/>
+          <path d="M 32 52 A 20 20 0 0 1 12 32"/>
+          <path d="M 12 32 A 20 20 0 0 1 32 12"/>
+        </g>
+        <!-- Green ascending bar chart centre -->
+        <g fill="#3ec762">
+          <rect x="22" y="34" width="5" height="14" rx="0.5"/>
+          <rect x="29.5" y="28" width="5" height="20" rx="0.5"/>
+          <rect x="37" y="20" width="5" height="28" rx="0.5"/>
+        </g>
+        <!-- Highlight cap on tallest bar -->
+        <rect x="37" y="20" width="5" height="4" fill="#5dd97e"/>
+      </svg>
+      <span class="nav-wordmark">Signal<span class="intel">Intel</span></span>
+    </a>
+    <div class="nav-links">
+      <a href="#how">How it works</a>
+      <a href="#methodology">Methodology</a>
+      <a href="#performance">Performance</a>
+      <a href="#pricing">Pricing</a>
+    </div>
+    <div class="nav-cta">
+      <a href="#login" class="nav-signin">Sign in</a>
+      <a href="#signup" class="btn-primary">Start free trial</a>
+    </div>
+  </div>
+</nav>
+
+<!-- ──────── HERO ──────── -->
+<section class="hero">
+  <div class="hero-bg">
+    <div class="hero-grid"></div>
+  </div>
+  <div class="hero-inner">
+
+    <!-- LEFT: copy -->
+    <div class="hero-copy">
+      <div class="hero-tag">
+        <span class="hero-tag-pill">Beta</span>
+        Multi-factor signal analysis for independent traders
+      </div>
+
+      <h1 class="hero-headline">
+        Institutional-grade<br>
+        tools. <span class="accent">No institution</span><br>
+        required.
+      </h1>
+
+      <p class="hero-sub">
+        Multi-factor signal analysis, verified performance, full transparency.
+        Built for traders who do their own work.
+      </p>
+
+      <div class="hero-ctas">
+        <a href="#signup" class="btn-primary-lg">
+          Start free trial
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path d="M3 7 L11 7 M7 3 L11 7 L7 11" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </a>
+        <a href="#signin" class="btn-secondary">Sign in</a>
+      </div>
+
+      <div class="hero-trust">
+        <span><span class="check">●</span> No credit card</span>
+        <span><span class="check">●</span> 7-day free trial</span>
+        <span><span class="check">●</span> Cancel anytime</span>
+      </div>
+    </div>
+
+    <!-- RIGHT: live scorecard visual -->
+    <div class="scorecard">
+      <div class="scorecard-frame">
+
+        <div class="scorecard-header">
+          <div class="scorecard-ticker">
+            <span class="symbol">NVDA</span>
+            <span class="name">NVIDIA Corp</span>
+          </div>
+          <span class="scorecard-rating">Very Strong</span>
+        </div>
+
+        <div class="scorecard-body">
+          <!-- 9-component radar -->
+          <svg class="scorecard-radar" viewBox="-180 -180 360 360" xmlns="http://www.w3.org/2000/svg">
+            <!-- Concentric polygons (9 sides) -->
+            <g fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="1">
+              <!-- Build a 9-sided polygon at radii 30, 60, 90, 120, 150 -->
+              <polygon points="0,-150 96.4,-116.7 147.7,-44.5 130.0,52.2 51.4,140.9 -51.4,140.9 -130.0,52.2 -147.7,-44.5 -96.4,-116.7" />
+              <polygon points="0,-120 77.1,-93.3 118.1,-35.6 104.0,41.8 41.1,112.7 -41.1,112.7 -104.0,41.8 -118.1,-35.6 -77.1,-93.3" />
+              <polygon points="0,-90 57.8,-70.0 88.6,-26.7 78.0,31.3 30.8,84.5 -30.8,84.5 -78.0,31.3 -88.6,-26.7 -57.8,-70.0" />
+              <polygon points="0,-60 38.6,-46.7 59.1,-17.8 52.0,20.9 20.6,56.4 -20.6,56.4 -52.0,20.9 -59.1,-17.8 -38.6,-46.7" />
+              <polygon points="0,-30 19.3,-23.3 29.5,-8.9 26.0,10.4 10.3,28.2 -10.3,28.2 -26.0,10.4 -29.5,-8.9 -19.3,-23.3" />
+            </g>
+            <!-- Axes -->
+            <g stroke="rgba(255,255,255,0.05)" stroke-width="1">
+              <line x1="0" y1="0" x2="0" y2="-150"/>
+              <line x1="0" y1="0" x2="96.4" y2="-116.7"/>
+              <line x1="0" y1="0" x2="147.7" y2="-44.5"/>
+              <line x1="0" y1="0" x2="130.0" y2="52.2"/>
+              <line x1="0" y1="0" x2="51.4" y2="140.9"/>
+              <line x1="0" y1="0" x2="-51.4" y2="140.9"/>
+              <line x1="0" y1="0" x2="-130.0" y2="52.2"/>
+              <line x1="0" y1="0" x2="-147.7" y2="-44.5"/>
+              <line x1="0" y1="0" x2="-96.4" y2="-116.7"/>
+            </g>
+            <!-- Filled score polygon (NVDA-ish high marks) -->
+            <polygon
+              points="0,-135 86.8,-105.0 125.5,-37.8 95.3,38.3 38.5,105.7 -36.0,98.7 -88.4,35.5 -103.4,-31.2 -67.5,-81.6"
+              fill="rgba(62,199,98,0.15)"
+              stroke="rgba(93,217,126,0.95)"
+              stroke-width="2"
+              stroke-linejoin="round"/>
+            <!-- Score dots -->
+            <g fill="#5dd97e">
+              <circle cx="0" cy="-135" r="3.5"/>
+              <circle cx="86.8" cy="-105.0" r="3.5"/>
+              <circle cx="125.5" cy="-37.8" r="3.5"/>
+              <circle cx="95.3" cy="38.3" r="3.5"/>
+              <circle cx="38.5" cy="105.7" r="3.5"/>
+              <circle cx="-36.0" cy="98.7" r="3.5"/>
+              <circle cx="-88.4" cy="35.5" r="3.5"/>
+              <circle cx="-103.4" cy="-31.2" r="3.5"/>
+              <circle cx="-67.5" cy="-81.6" r="3.5"/>
+            </g>
+            <!-- Axis labels -->
+            <g font-family="JetBrains Mono, monospace" font-size="10" fill="rgba(255,255,255,0.55)" text-anchor="middle">
+              <text x="0" y="-162">MOMENTUM</text>
+              <text x="111" y="-128">QUALITY</text>
+              <text x="170" y="-40">INSIDER</text>
+              <text x="148" y="62">REVERSION</text>
+              <text x="62" y="158">VOLUME</text>
+              <text x="-62" y="158">EARNINGS</text>
+              <text x="-148" y="62">PIOTROSKI</text>
+              <text x="-170" y="-40">INST OWN</text>
+              <text x="-111" y="-128">ANALYST</text>
+            </g>
+            <!-- Centre badge -->
+            <g>
+              <circle cx="0" cy="0" r="32" fill="rgba(8,17,31,0.85)" stroke="rgba(93,217,126,0.4)" stroke-width="1"/>
+              <text x="0" y="-3" text-anchor="middle" font-family="Fraunces, serif" font-size="22" font-weight="500" fill="#5dd97e">87</text>
+              <text x="0" y="12" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="8" fill="rgba(255,255,255,0.5)" letter-spacing="1">COMPOSITE</text>
+            </g>
+            <!-- Radar sweep -->
+            <line class="scan-sweep" x1="0" y1="0" x2="140" y2="0"
+                  stroke="rgba(93,217,126,0.7)" stroke-width="1"
+                  style="transform-origin: center; animation: sweep 6s linear infinite;"/>
+          </svg>
+        </div>
+
+        <div class="scorecard-footer">
+          <div class="footer-stat">
+            <div class="label">Price</div>
+            <div class="value">$487.20</div>
+          </div>
+          <div class="footer-stat">
+            <div class="label">12m target</div>
+            <div class="value up">$612</div>
+          </div>
+          <div class="footer-stat">
+            <div class="label">Legal risk</div>
+            <div class="value up">Clean ✓</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Floating data chips -->
+      <div class="float-chip float-chip-1">
+        <span class="dot" style="background: var(--green-500);"></span>
+        Rating: HOLD → Very Strong
+      </div>
+      <div class="float-chip float-chip-2">
+        <span class="dot" style="background: var(--green-400);"></span>
+        Insider cluster buy detected
+      </div>
+      <div class="float-chip float-chip-3">
+        <span class="dot" style="background: var(--gold-400);"></span>
+        Piotroski F-score: 8 / 9
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ──────── BELOW-FOLD TRANSITION HINT ──────── -->
+<section class="transition-band">
+  <div class="transition-inner">
+    <div class="transition-eyebrow">Scroll · Section 2</div>
+    <h2 class="transition-headline">
+      We <em>show </em> our work.
+    </h2>
+    <div class="scroll-cue"></div>
+  </div>
+</section>
+
+<div class="mockup-meta">SignalIntel · Marketing Homepage · Hero mockup v1</div>
+
+</body>
+</html>
