@@ -3,114 +3,120 @@
 **Tactical session state.** Updated end of each session. For stable
 project context (who/what/how), see `PROJECT_CONTEXT.md`.
 
-Last updated: 17 May 2026, end of session (six commits to origin/main across morning push + P13 fix, design brief locked across four sections in the afternoon, brand assets committed, trading-system.OLD moved to Trash).
-Next session: Monday 18 May overnight bulk-job verification (Altman Z analysis now actionable once financial_statements lands) + economic_calendar 06:30 BST cron observation. FRESH CHAT recommended.
+Last updated: 18 May 2026, end of session. Mark away Tuesday 19 May and Wednesday 20 May. Next implementation session: Thursday 21 May.
 
 ---
 
-## JUST SHIPPED — 17 May 2026
+## JUST SHIPPED — 18 May 2026
 
-### Morning push: six commits, all pushed to origin/main
+Two parallel tracks today: a morning implementation session (FMP entitlement observability shipped to production) and an afternoon strategy + design session (Phase 3 added, Phase 2c added, brand refresh, marketing homepage hero mockup locked).
 
-- **48db573** — test(snapshot): pin datetime.now() to 2026-05-16 for insider window stability (Phase 2A). FakeDatetime subclass monkeypatch on signals.scorer.datetime, pinned to 2026-05-16 12:00 UTC. Eliminates the 2026-05-28 time-bomb where SS07's trade window would have expired and the snapshot test would have gone red on a clock-driven schedule. No new dependency. Locked pin date corrected from the original 2026-05-14 spec after empirical sweep showed the EXPECTED_SNAPSHOT was calibrated against a 2026-05-15..19 band.
-- **b4826b0** — test(snapshot): add inst_own coverage for SS07 to close P21 gap (Phase 2B). Added `{"total_pct_held": 15.0, "holder_count": 8, "filing_date": "2026-02-15"}` for SS07. Drives `score_inst_ownership` into the `pct <= 20 → 35.0` weak-institutional-ownership branch. Composite delta is absorbed by the existing -60 Altman clamp, so SS07 stays at composite_score_raw 0.0 and rating STRONG_SELL; the new non-neutral score is asserted via a sixth field `inst_own_score: 35.0` on the SS07 row of EXPECTED_SNAPSHOT.
-- **9376f81** — test(integrity): add schema-coupling tripwire test for insert_screener_rows (Phase 2C / Item 3). `test_insert_screener_rows_schema_alignment` builds a tmp_path SQLite file via production `initialise_schema()`, calls `insert_screener_rows()` with a minimal valid row, asserts insert returns 1. BUG B class catcher: INSERT statements referencing columns the schema no longer has, or NOT NULL columns the dict doesn't populate. Scope is screener_snapshots only; broader sweep across the 7 other insert helpers queued as STRUCTURAL DEBT.
-- **a25e39d** — test(integrity): add FMP output table freshness tests, 4 new (Phase 2C / Item 4). Four tests: `test_fmp_earnings_calendar_freshness` (last_updated, 72h), `test_fmp_dividends_freshness` (last_updated, 14d), `test_fmp_price_targets_freshness` (last_updated, 14d), `test_fmp_economic_calendar_freshness` (scraped_at, 72h — economic_calendar uses scraped_at not last_updated; defined in database/db.py not scrapers/fmp_scraper.py). All four use the existing conditional-skip pattern matching test_yahoo_*_freshness. Caught real production staleness on first run, see below.
-- **cd14074** — fix(api): translate rating codes to display labels in ticker events feed (P13). One-line fix in `web/app.py:1530` replacing `(r['old_rating'] or '?').replace('_',' ')` with `tier_short()` calls from `signals.signal_labels`. NULL-aware branching: first-ever rating reads "Rating set: Stable" instead of "Rating changed: ? → STRONG HOLD". Regression test added in `tests/test_api_rating_display.py` covering both branches. Gunicorn reloaded at 10:59 BST via `launchctl kickstart -k gui/501/io.thesignalvault.gunicorn` (PID flip 30323 → 55935), browser walk on https://thesignalvault.io/ticker/LESL confirmed labels render correctly.
-- **67278de** — docs: add Signal Vault + SignalIntel brand assets. Two PNG logo files committed to docs/brand/ (4.2 MB total). Locks the brand asset reference for the design brief.
+### Morning implementation: FMP entitlement observability (3 commits, pushed)
+
+Triggered by 18 May 06:30 BST economic_calendar cron firing red against real production staleness — the test_fmp_economic_calendar_freshness test (added 17 May) caught an 11-day silent failure. Empirical root cause: FMP returned HTTP 402 on /economic-calendar and the scraper layer treated it as "no data" rather than "entitlement broken." Three layers of swallow stacked: `_get()` returned None on the warning, `fetch_economic_calendar()` coerced None to `[]`, the job handler logged "0 events saved" and wrote nothing to run_log. 11 days of silence.
+
+- **7e8ce60** — `feat(fmp): add FMPEntitlementError + Telegram alert dedup helper`. New `FMPEntitlementError` class in `scrapers/fmp_scraper.py` with `status_code` and `path` attributes. `_get()` raises on HTTP 401/402/403, mirrors the FMPRateLimitError 429-streak pattern. Branch order preserved: 200 → 429 → 401/402/403 → else. `notifications/telegram.py` gains `_last_fmp_alert_at` module-level dedup dict and `send_alert_rate_limited(key, message, min_interval_s=86400)` helper. In-memory dedup state is process-local — restart resets the dict, documented in the docstring.
+- **d5dea2a** — `feat(scheduler): wire FMPEntitlementError + run_log into FMP handlers`. All three FMP job handlers (`job_economic_calendar`, `job_fmp_earnings`, `job_fmp_dividends`) edited to identical shape: SUCCESS log_run write on green runs, FMPEntitlementError except clause writes FAILED log_run + fires rate-limited Telegram alert, generic Exception catches other failures. job_name values locked: `economic_calendar`, `fmp_earnings`, `fmp_dividends`. Closes the 17 May "RUN_LOG OBSERVABILITY GAP ON job_economic_calendar" FOLLOWUP, extended to all three FMP jobs.
+- **9558e6a** — `test(fmp): cover entitlement error escalation + Telegram dedup`. New `tests/test_fmp_entitlement_error.py` with 6 tests: 402/401/403 raise FMPEntitlementError; 500 does NOT raise (5xx stays in retry loop); job_economic_calendar writes FAILED on entitlement error; Telegram dedup boundary cases (first fire, within-window suppression, different-key fires, past-window re-fires). All stub requests.get + time.sleep, no real HTTP. economic_calendar handler test reconstructs the handler body locally because the real handler is nested inside main.py's scheduler setup — queued as FOLLOWUP to lift handlers to module-level.
+
+### Scheduler restart, banner verified
+
+Old PID 32257 (running since 15 May 20:57 BST) killed via `launchctl kickstart -k gui/501/io.thesignalvault.scheduler`. New PID 86234 started 18 May 11:33:23 BST. Startup banner confirmed SCORING_ENGINE_VERSION 0.13.0, git HEAD 9558e6a, ISO start time. Smoke-test imported FMPEntitlementError from running interpreter context, attributes resolved correctly, message format matches locked spec. Zero ERROR/FAILED/Traceback entries from the new process in first 10 seconds.
 
 ### Test count
 
-234 → 239 passing (5 new tests added across Phase 2 commits, 0 regressions). 1 failed: `test_fmp_economic_calendar_freshness` against real production staleness, see below. 3 skipped (financial_statements + institutional_holders + fmp_price_targets — pre-existing conditional skips on empty tables).
+239 → 247 passing (+6 new entitlement tests, +2 from prior session pickup, 0 regressions). 1 failed: `test_fmp_economic_calendar_freshness` against real production staleness — by-design red per P26, this commit adds observability not entitlement repair. The underlying FMP 402 is a vendor/plan decision pending Mark's account review. 1 skipped (fmp_price_targets empty).
 
-### Three Phase 1 audits banked (read-only, feeding future implementation sessions)
+### Afternoon strategy session (Athena chat, no code)
 
-- **Altman Z-score distribution analysis prep** — Phase 1 inventory laid out compute_z_raw() helper extraction approach. Actionable once financial_statements bulk job lands Monday 18 May overnight.
-- **Scraper substrate audit** — Class A dominance pattern identified: FinViz Custom view fragility is a substrate problem, not individual scraper bugs. Inventory of recurring failure modes banked for a future hardening session.
-- **P21 snapshot coverage backfill audit** — surfaced 4 items, all 4 closed in this session's Phase 2 commits (inst_own gap closed in 2B; insider time-decay locked via pin date in 2A; schema-coupling tripwire in 2C/Item 3; FMP freshness coverage in 2C/Item 4).
+Beta feedback from Guy (friend, casual amateur trader, Trading212 pie-copier) triggered a 90-minute strategy session. 5 feedback points raised: (1) product feels bewildering / too much terminology; (2) markets page chart timespans unlabelled; (3) no LSE; (4) global search suggestions clipped; (5) /backtest page purpose unclear. Plus volunteered context: pulling out of stocks short-term due to Trump volatility.
 
-### Real production bug surfaced by the new test
+Decisions locked (full content lives in PROJECT_CONTEXT after this update):
 
-`test_fmp_economic_calendar_freshness` fires red on first run. economic_calendar has no rows since 2026-05-07 (9 days stale as of session close, vs the daily mon-fri cadence). Caught immediately by the freshness test the same day it was added. Read-only diagnostic was performed (run_log has no entries for `job_economic_calendar`, external_scrape_log has no economic entries, distribution shows only two days of data ever recorded). Root cause not investigated this session — observation-only. Test left red on origin/main by design (per the new P26 invariant). See STILL OPEN.
+1. **New Phase 3 added**: LSE + HK markets, Lite ticker page + Lite dashboard + profile toggle (Lite default for new signups, Power view for current users), /learn hub with 10 modules, YouTube companion series (10 × 30min). Driver: tagline "institutional trading tools for non-institutional traders" only earns its keep if the surface is accessible to non-power-users. Existing Phase 3 renumbers to Phase 4, existing Phase 4 to Phase 5.
+2. **New Phase 2c identified**: Multi-user notifications substrate. Current Telegram alerts fire only to Mark's chat_id (system-level secrets). Per-user Telegram linking flow + per-user alert routing + SendGrid email alerts bundled into one coherent notifications phase. Hard blocker for paywall — can't charge users for alerts they don't receive.
+3. **LSE + HK must land before paywall.** Brand sits behind a UK Ltd; can't reasonably charge UK users for US-only product. Substrate work non-trivial: different ticker conventions, fundamentals sources, market hours, sector taxonomies. Yahoo covers globally which helps; FinViz substitute for UK/HK fundamentals is the open question.
 
-### Afternoon work: design brief locked across four sections
+Decisions deferred:
 
-Full content captured in PROJECT_CONTEXT.md under DESIGN BRIEF (LOCKED 17 MAY 2026). Summary:
+- **Pricing.** Don't ask Guy what he'd pay yet. Three reasons: answer is worthless without him seeing the completed product (anchored on current bewildering surface), shifts beta-test relationship into sales mode at wrong moment, real pricing signal comes from specific question ("would you pay £X?") asked of several beta testers post-Phase 3. Right pricing windows: pre-launch survey of 10-15 testers with specific number, or Van Westendorp 4-question survey if cohort grows to 30+. Park as Phase 3 / pre-paywall problem.
 
-- **Section 1: Site Map** — post-restructure 7 top-nav items (Dashboard / Signals / Screener / Markets / Events / Watchlist / Penny) + footer reference (Methodology / About / Contact / Privacy / Terms / Risk Disclaimer / Sign Out) + admin-only /system. /earnings and /dividends demoted to Dashboard panel CTAs. /ratings renamed to /methodology with tabs (Definitions / Score Components / Backtest / Distribution); /backtest folded in as a tab. Marketing homepage now lives at / for logged-out visitors.
-- **Section 2: Dashboard Panel Specs** — 13 panel specs locked. Above-the-fold 3×2 grid (Daily Summary, Top 5 Strong Signals, Top 5 Bearish Signals, Market State, Watchlist Preview, Discovery Themes Preview). Elite-only spotlight (Penny Stock of the Day full-width). Below-the-fold 3×2 (Earnings 7d, Dividends This Week, Sector Performance, Recent Rating Changes, Insider Activity, News Headlines). Each panel has documented data sources, content rows, interactions, and CTAs.
-- **Section 3: Marketing Homepage Spec** — 8 sections locked, Public.com / Robinhood aesthetic. Hero ("Institutional-grade tools. No institution required."), Transparency (lead differentiator), Multi-factor analysis, Discovery themes, Live proof stats, Pricing (Beta-marked Option B), Final CTA, Footer.
-- **Section 4: Brand System** — Parent brand: The Signal Vault (navy + gold, Trajan serif, vault wheel mark). Product brand: SignalIntel (teal/cyan + gold, hexagonal cube + V mark). Family system: SignalCrypto / SignalForex / SignalCommodities extend same template. Logged-in app palette refinement: Option C — preserve monospace + dark, swap cyan accent → SignalIntel teal-gold gradient, refine chart palette to brand colours. Not a full rebrand, palette alignment only.
+Completeness audit: SignalIntel is ~40% complete. Time-to-paid-launch estimate 4-6 months at current pace. Phase 1 substrate ~85%, Phase 2 paywall 0%, Phase 2c notifications 0% (~2-3 weeks), Phase 3 LSE/HK/Lite/Learn 0% (6-10 weeks core + 30-50 hrs video production), Phase 4 and 5 at 0%.
 
-### Brand assets committed (commit 67278de)
+### Afternoon design session (mockup pass, locked)
 
-`docs/brand/SignalIntel Logo Brand.PNG` and `docs/brand/The Signal Vault Logos.PNG` (4.2 MB total). Locked brand references for the design brief.
+Marketing homepage hero + above-fold mockup banked. Aesthetic direction: Hybrid C palette (navy hero, off-white below-fold). Two-tier nav: Signal Vault parent utility bar + SignalIntel primary nav. Hero composition asymmetric — headline left, live 9-component radar scorecard right with three floating data chips (rating change, insider cluster, Piotroski F-score). Type system: Fraunces serif display + Inter Tight body + JetBrains Mono stats. Green-to-gold gradient on the "No institution" headline accent ties product brand to parent brand. Static HTML/CSS, ~885 lines, lives at `docs/mockups/marketing_homepage_hero_v3.html`.
 
-### Trading-system.OLD cleanup
+### Brand asset refresh
 
-Verified via 6-gate read-only audit: tip commit `bd31b99` propagated to origin/main, no orphaned commits, no symlinks pointing into the old folder, remote unrelated to local path. One untracked `.claude/settings.local.json` (183 bytes, 5 permission rules) declared redundant under the global bypassPermissions mode. Moved to ~/.Trash/ via `mv` (not `rm -rf`). 610 MB recoverable until Trash empty. Verified Trash presence via `test -d` and `stat` (TCC blocks `ls ~/.Trash`).
+The 17 May logo PNGs are superseded. New unified vault-wheel family system locked: SignalIntel (green bar chart), Signal Vault (gold V/arrow), SignalCrypto (purple C), SignalForex (teal W), SignalCommodities (orange flame), SignalBonds (blue column). All products share concentric ring structure with product-specific centre glyph + colour. Old PNGs (`SignalIntel Logo Brand.PNG`, `The Signal Vault Logos.PNG`) deleted. New `The_Signal_Vault_Brand_Map.png` committed to `docs/brand/`. PROJECT_CONTEXT Section 4 palette corrected from teal/cyan to green-primary.
 
 ---
 
-## CURRENT STATE (end of 17 May 2026)
+## CURRENT STATE (end of 18 May 2026)
 
-- gunicorn: PID 55935 under io.thesignalvault.gunicorn LaunchAgent (restarted today 10:59 BST to pick up P13 fix; PID flip 30323 → 55935)
-- scheduler: PID 32257 under io.thesignalvault.scheduler LaunchAgent (unchanged since 15 May)
-- HEAD: 67278de — docs: add Signal Vault + SignalIntel brand assets (will move to the doc-banking commit after this session's edits)
-- 0 commits ahead of remote: all six morning commits pushed to origin/main; brand-assets commit (67278de) and doc-banking commit (to land at end of this prompt) are local-only until Mark confirms push
-- pytest: 239 passing, 1 failed (test_fmp_economic_calendar_freshness — real production staleness, by-design red), 3 skipped (financial_statements + institutional_holders + fmp_price_targets, pre-existing empty-table conditional skips)
+- gunicorn: PID 55935 under io.thesignalvault.gunicorn LaunchAgent (unchanged from 17 May P13 restart)
+- scheduler: PID 86234 under io.thesignalvault.scheduler LaunchAgent (restarted today 11:33 BST onto v0.13.0 + entitlement observability code)
+- HEAD on origin/main: 9558e6a (test(fmp): cover entitlement error escalation + Telegram dedup) — push tonight's doc-and-asset commits when ready
+- 0 commits ahead of remote for the FMP entitlement work (already pushed)
+- 4 commits ahead of remote pending push (this session): brand assets, mockup, PROJECT_CONTEXT update, HANDOFF update
+- pytest: 247 passing, 1 failed (test_fmp_economic_calendar_freshness — real production staleness), 1 skipped (fmp_price_targets empty)
 - SCORING_ENGINE_VERSION: 0.13.0 (unchanged)
-- Yahoo enrichment tables: analyst_changes + earnings_history continue daily feed; institutional_holders / financial_statements / earnings_history bulk still empty pending Mon/Tue runs
-- economic_calendar: 9 days stale (last scraped 2026-05-07), red test surfaced this; root cause not investigated
-- Site live: HTTP/2 302 via Cloudflare → /login; P13 ticker events fix verified empirically on /ticker/LESL
-- trading-system.OLD: moved to ~/.Trash/ (610 MB recoverable until emptied), confirmed via test -d + stat
-- venv.OLD: still untracked in ~/signalintel/venv.OLD (out of scope for the 15 May 72h timer, can fire any time from Mon 18 May)
+- Yahoo enrichment tables: analyst_changes + earnings_history continue daily feed; financial_statements bulk job running today, 3.5M rows / 4,703 distinct tickers populated as of 07:56 BST; institutional_holders + earnings_history bulk pending Tue/Wed
+- economic_calendar: still 11 days stale at last scrape, but now under observability — next 06:30 BST fire (Tuesday) will write FAILED to run_log + fire Telegram alert if 402 persists; SUCCESS to run_log if entitlement restored
+- Site live: HTTP/2 302 via Cloudflare → /login
+- venv.OLD: 72h timer elapsed today, safe to delete
+- trading-system.OLD: already emptied from Trash (610 MB recovered)
 
 ---
 
-## PROCESS TELLS — 15 May 2026
+## PROCESS TELLS — 18 May 2026
 
-- **Phase 1 + Phase 1-follow-up sequence on Yahoo verification.** Two short read-only diagnostic rounds beat one large one. First round confirmed crons fired and produced data, surfaced two open questions (yahooquery_raw, last_error_at). Follow-up grep round closed both empirically in 2 minutes. Cleaner than batching into a single multi-part prompt with branching gates.
-
-- **P16 absolutism on SB01.** The snapshot recorded 76.6 with a "Do NOT modify — fix the refactor instead" comment. The arithmetic said 74.7. Trusting the arithmetic (not the comment, not the recorded baseline) was the right call. Future-Athena: comments asserting a value is correct do not make the value correct.
-
-- **ExitTimeOut: 90 explicit note in HANDOFF.** Without this, future-Athena sees the number, doesn't know why it's not the launchd default 20s, and may second-guess. The line "ExitTimeOut: 90 lets scheduler.shutdown(wait=True) complete a worst-case ~50s signal generation cleanly" is the rationale, and the rationale belongs in HANDOFF, not in the plist as a comment (launchctl is picky about plist XML).
-
-- **Venv rebuild Phase 1 inventory found zero project-code contamination.** Confirmed empirically before touching anything. Without that sweep we'd have been guessing whether a full rebuild was sufficient or whether other project-side path references needed cleanup. Phase 1 read-only diagnostics earn their weight on any environmental change with potential for hidden references.
-
-- **CC discipline held cleanly across the day.** No scope drift, no negative-instruction failures, no doc edits. The venv rebuild (12-step Phase 2) and scheduler LaunchAgent install (8-step Phase 2) both ran end-to-end without stops. STOP-on-broken-venv at Gate 2 of the SB01 prompt was correctly observed (CC did the edit, hit the broken venv, stopped, reported — did not try to fix the venv mid-prompt).
-
-- **Pre-existing CC plugin terminal noise.** Throughout the day every Bash tool call surfaced "Failed with non-blocking status code: /bin/sh: node: command not found" and "Bun not found" warnings. These are pre-tool / post-tool hook errors from the Superpowers plugin that was installed but not enabled in the project. Non-blocking, no functional impact, ignorable. Worth knowing about so future sessions don't waste time investigating.
-
-- **Mid-session terminal-window confusion (caught early).** A paste from a different project (Betfair / greyhound stats) landed in the SignalIntel chat. Caught and discarded before any action. Adds nothing to process — just a reminder that the multi-terminal workflow has the risk surface of "right command, wrong window." Athena response should always be to demand a `pwd` + `git remote -v` confirmation before touching anything if the output looks unfamiliar.
+- **402 observability fix sequence ran clean Phase 1 + Phase 2.** Phase 1 inventory identified the three-layer swallow chain (_get → fetch → refresh → job handler) and proposed the FMPEntitlementError-mirrors-FMPRateLimitError shape. Decision lock collapsed six open questions to locked answers in a single exchange. Phase 2 implemented to spec with one Gate 5 condensation hiccup (CC summarised the test file paste instead of pasting) — caught via the diagnostic gap-closure prompt pattern from 14 May. Resolved before commit.
+- **Gate 4 paste appeared to show broken Python syntax (orphan `log_run(...` lines without closing parens, `except` immediately following). Diagnostic prompt confirmed source on disk was intact — chat client rendering had truncated continuation lines.** Lesson: when paste output looks structurally impossible (orphan calls, missing parens), re-elicit via `sed -n` or `cat` before alarming. Symmetric with the 14 May "Diagnose before alarming" lesson — applies to render artefacts as well as git status surprises.
+- **Athena's first reflex on Guy's bewilderment was to frame him as "outside the target user."** Mark pushed back correctly. The product tagline explicitly promises to serve non-institutional traders; dismissing a non-institutional trader's confusion is a positioning failure, not a user-fit observation. Lesson: when a beta tester's struggle is in tension with what the tagline promises, the tagline is the audit target. Logged as P27.
+- **Pricing instinct was right — declined to give Guy a "what would you pay" question on demand.** Three concrete reasons given (anchoring on current surface, beta→sales tone shift, methodology fit). Specific later-stage methodologies queued (specific-price-test of 10-15 testers, or Van Westendorp if 30+). Pattern worth keeping: when asked to act on something where the answer is unreliable, decline + redirect to the right question at the right time + name the methodology.
+- **Brand-asset mid-session refresh handled cleanly.** v2 mockup locked, brand assets refreshed underneath, v3 mockup rebuilt in ~20 minutes (palette sweep + SVG mark swap + wordmark restyle). Lesson: skin-changes on a locked composition are cheap when the composition decisions are isolated from the colour decisions in the first place. CSS variables + isolated SVG marks earned their architecture here.
+- **Frontend-design skill produced an artifact directly in chat rather than handing to CC.** Mark and Athena reviewed inline, locked v3, then prepared a single banking prompt for CC to commit the artifact alongside brand and doc changes. Pattern: design-first → review-in-chat → CC commits the file. CC never touched the mockup HTML, only banked it.
+- **Doc consolidation timing decision.** Two parallel sessions (implementation + strategy + design) produced enough decisions that targeted str_replace edits to PROJECT_CONTEXT carried real risk of conflict. Athena drafted full rewrites of both HANDOFF (full) and targeted PROJECT_CONTEXT insertions (Phase 2c block, Phase 3 block + renumbering, Section 4 palette correction, 2 new process lessons, P27 invariant). Single banking prompt fires all changes atomically.
 
 ---
 
 ## STILL OPEN
 
-### Monday 18 May verification
+### Tuesday 19 May (while Mark away)
 
-- **financial_statements bulk job.** Verify `sqlite3 data/trading_system.db "SELECT COUNT(*) FROM financial_statements;"` returns nonzero overnight Sun→Mon. Once that lands, the **Altman Z distribution analysis** from URGENT FOLLOWUPS is actionable Tuesday morning (compute Z-scores for tickers with 2+ years of data, plot distribution, verify -10 / -60 penalty tiers calibrated for the production universe before v0.13.0 backtest data accumulates).
-- **economic_calendar 06:30 BST cron — observation window.** The scheduled run will or will not produce a fresh row Monday morning. If green, the 9-day staleness was a transient failure that has already self-resolved. If red, fresh empirical logs are available to diagnose against (vs the current 8-day-old fog).
-- **venv.OLD deletion (72h timer from 15 May).** Eligible for deletion any time from Monday 18 May onwards.
+- **economic_calendar 06:30 BST cron — observation.** First fire under new observability. If green: 11-day staleness self-resolved, FMP entitlement restored. If red: Telegram alert + run_log FAILED row written, audit trail intact, decision queued for Mark's return on FMP plan tier.
+- **fmp_earnings 06:05 BST cron — observation.** First fire under new observability. Same pattern: SUCCESS or FAILED row, alert if entitlement broken.
+- **institutional_holders bulk job (Sunday → Monday overnight run).** Already partially populated per 18 May query. Will continue accumulating.
+- **earnings_history bulk job (Tuesday overnight).** Verify Wednesday morning that the bulk job has populated rows. Check `external_scrape_log` for EARNINGS entries dated 2026-05-20 and `SELECT COUNT(*) FROM earnings_history`.
 
-### LAUNCH PREP (new bucket)
+### Wednesday 20 May (while Mark away)
 
-- **Google Search Console indexing setup at site launch.** sitemap.xml, robots.txt, domain verification. Required before marketing homepage goes public.
-- **Open Graph / social preview meta tags on marketing homepage.** og:title, og:description, og:image. Needed for social link previews to render coherently.
-- **Analytics decision: Plausible / Fathom / GA4.** Decision shape: a privacy-friendly analytics provider (Plausible / Fathom) fits the transparency-first brand positioning locked in Section 3 of the design brief. GA4 is the conventional default but conflicts with the "we show our work" stance. Decision needed before public launch.
+- **fmp_dividends weekly cron is Sunday 03:00 BST**, so not relevant this week — next fire 25 May.
+- **No active monitoring needed.** All observability is now passive (run_log writes + Telegram alerts on failure).
+
+### Thursday 21 May (Mark returns)
+
+- **FMP plan tier decision.** Based on Tuesday + Wednesday cron outcomes, decide: (a) upgrade FMP plan to restore /economic-calendar entitlement, (b) swap economic_calendar to alternative source, (c) drop the economic_calendar feature. The 402 detector now buys observability without enforcing a decision.
+- **Altman Z distribution check.** financial_statements bulk job populated 3.5M rows today; the queued URGENT FOLLOWUP from 14 May is now actionable. Compute Z-scores for production tickers with 2+ years data, plot distribution, verify -10 / -60 penalty tier calibration before v0.13.0 backtest data accumulates meaningfully. Phase 1 audit already banked from 17 May session.
+- **Marketing homepage Section 2 mockup pass.** Locked aesthetic from Section 1 (this session). Section 2 is the Transparency / "We show our work" differentiator section. Aesthetic flips from dark hero to light Public.com territory. Frontend-design produces, review inline, lock.
+- **venv.OLD deletion.** 72h elapsed Monday afternoon, safe to delete any time Thursday.
+
+### Queued (no fixed date)
+
+- **HANDOFF self-edit discipline.** P24 holds. Both docs updated only via explicit Mark-or-Athena-initiated CC prompts.
+- **Mark replied to Guy** covering all 5 feedback points + 5 beta-test asks + coffee invite. Awaiting Guy's response. Beta-tester correspondence will feed Phase 3 design decisions.
 
 ---
 
-## NOTES FOR FRESH-CHAT ATHENA
+## NOTES FOR FRESH-CHAT ATHENA (THURSDAY 21 MAY)
 
-- Read PROJECT_CONTEXT.md first (stable), then this HANDOFF.
-- Today's three substantive pieces of work: Yahoo verification (read-only, no commits), SB01 snapshot fix (commit 0290c10 pushed), venv rebuild (environment-only, no commits), scheduler LaunchAgent (system config, no commits).
-- Both gunicorn and scheduler are now reboot-resilient under LaunchAgents. The Mac Mini can reboot and the platform self-heals.
-- If continuing on Sunday: first action is the institutional_holders bulk-job verification query in STILL OPEN above. Run before anything else to bank or surface that result.
-- If continuing on Monday: same pattern, plus the Altman Z distribution check is now actionable (it was queued from 14 May and gated on financial_statements data).
-- The Superpowers plugin is installed in CC but not enabled. Athena flagged it as a candidate for Phase 2c implementation work or for the Altman Z distribution analysis. Re-evaluate when one of those sessions starts.
-- venv.OLD still on disk. Don't delete without 72h+ confidence interval on the new venv.
+- Read PROJECT_CONTEXT.md first (stable), then this HANDOFF. PROJECT_CONTEXT was updated 18 May with: Phase 2c notifications block, Phase 3 LSE/HK + Lite + Learn block, Phase 4 + 5 renumbering, Section 4 palette correction (green-primary, not teal), four new process lessons (positioning-not-user-fit, pricing-question-timing, frontend-design workflow, render-artefact diagnostic), and new invariant P27.
+- Two days of Yahoo + FMP cron observation logs will be waiting. First action: query run_log for Tue + Wed entries on fmp_earnings, economic_calendar, fmp_dividends. Check Telegram alerts received during the window. This empirically validates the 18 May entitlement observability work.
+- Marketing homepage hero mockup v3 is locked. Lives at `docs/mockups/marketing_homepage_hero_v3.html`. Brand assets at `docs/brand/The_Signal_Vault_Brand_Map.png` are canonical. Next design work: Section 2 mockup pass (Transparency differentiator, "We show our work" headline). Aesthetic flips from dark hero to light below-fold per Hybrid C lock.
+- Phase 3 is now the largest pre-paywall workstream. LSE + HK + Lite + Learn + YouTube. 6-10 weeks core engineering + 30-50 hours video production. Phase 2c (notifications) sits between Yahoo completion and Phase 3 start.
+- Altman Z distribution check is now data-ready (3.5M financial_statements rows landed today). Highest-leverage analytical work available; should fire before deeper v0.13.0 backtest analysis begins.
 
 ---
 
