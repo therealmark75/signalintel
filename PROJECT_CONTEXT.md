@@ -435,6 +435,7 @@ ID when relevant.
 | P24 | Doc-file header text is descriptive metadata, never standing permission for CC to write. Headers such as "Updated end of each session" describe the file's intended use, not an instruction CC may act on. CC must not self-initiate edits to HANDOFF.md or PROJECT_CONTEXT.md. Editing instructions must come from Mark or Athena in-turn. Implementation prompts spanning multiple commits are the highest-risk pattern — CC reaches for end-of-session housekeeping when the implementation work concludes. Mitigation: include "do not modify HANDOFF.md or PROJECT_CONTEXT.md" on all implementation prompts regardless of stated scope |
 | P25 | macOS TCC restricts launchd-spawned processes from reading files under ~/Documents/, ~/Desktop, ~/Downloads, and other protected paths, even after granting Full Disk Access to /sbin/launchd in System Settings. Service-managed processes (LaunchDaemons, LaunchAgents) MUST run from non-protected paths. SignalIntel lives at ~/signalintel as a result. Pattern recognition: a "PermissionError: [Errno 1] Operation not permitted" on a file under ~/Documents/ from a launchd-spawned process is TCC restriction, not Unix permissions. Granting FDA to launchctl in System Settings does NOT resolve the underlying TCC scope. The 15 May 2026 session burned ~90 minutes diagnosing this before the path migration; future deployments should default to home-root paths (~/signalintel, ~/my-project) rather than ~/Documents/. |
 | P26 | XML content in shell heredocs is corrupted by chat renderers — angle-bracket tags (`<string>`, `<key>`) are interpreted as HTML and stripped during copy-paste from the chat interface to terminal. Use Python plistlib (or equivalent) to write plist files programmatically, then verify the contents via `/usr/libexec/PlistBuddy -c "Print :ProgramArguments" <path>` before installing. The 15 May 2026 LaunchAgent diagnosis cycle confirmed this: three identical-looking heredoc rewrites all lost the `-w` flag because `<string>-w</string>` rendered as an HTML attribute and disappeared. PlistBuddy verification on disk is empirical and unambiguous. |
+| P27 | Beta tester confusion is a positioning audit, not a user-fit observation. When a beta tester struggles with a product whose tagline explicitly promises to serve them (here: "institutional-grade tools for non-institutional traders"), Athena's first move must be to audit whether the tagline still matches the surface, not to dismiss the tester as "outside the target user." Dismissing the tester is a positioning failure dressed up as taste. Logged 18 May 2026 from Guy's feedback session. Future Athena: when reflex is to frame a tester as wrong-user, check the tagline first. |
 
 ---
 
@@ -654,14 +655,91 @@ modify code outside the prompt's explicit scope.
 - Pre-commit hook for diff review on auth-adjacent files (mechanical
   Scope Discipline enforcement)
 
-### Phase 3
+### Phase 2c (NEW, 18 May 2026): Multi-user notifications substrate
+
+Hard blocker for paywall. Current Telegram alerts fire only to Mark's
+system-level bot_token + chat_id. No per-user subscription flow.
+Bundling Telegram per-user routing + SendGrid email alerts into one
+coherent notifications phase. Half-shipped notifications would be a
+worse user experience than no notifications.
+
+- Per-user Telegram linking flow: generate unique linking code →
+  user runs /start on the bot → capture chat_id → write to new
+  `user_telegram` table keyed on user_id
+- Per-user alert routing: rewrite `send_telegram_alert()` to iterate
+  users with linked chat_id + watchlist alerts_enabled + tier gate
+- Tier gating decision for Telegram alerts (Starter+ or all tiers?
+  Update `docs/tier_matrix.md`)
+- SendGrid email alerts (already on backlog; bundle here so users
+  without Telegram aren't excluded — most UK non-tech users)
+- UI surfaces: profile/settings page (link/unlink Telegram +
+  email preferences), watchlist page (already has alert bells),
+  virtual portfolio page, ticker page (alert-me affordance)
+
+Estimate: 2-3 weeks. Sits between Yahoo pipeline completion and
+Phase 3 start.
+
+### Phase 3 (NEW, 18 May 2026): UK/HK markets + Lite mode + Learn hub
+
+Triggered by Guy (beta tester, 18 May) bouncing off product
+density and asking about UK stocks. Tagline "institutional-grade
+tools for non-institutional traders" only earns its keep if the
+surface is accessible to non-power-users. Lite is a learning ramp
+plus a TAM expansion — current Power view stays for users who want
+the density, Lite is the default for new signups.
+
+LSE + HK market addition (must land before paywall):
+- LSE: UK stocks, .L convention, UK fundamentals source TBD
+  (FinViz is US-only). Substrate work: ticker conventions,
+  fundamentals sources, market hours (BST/GMT), sector taxonomies
+  that need normalising against existing SECTORS list.
+- HK: Hong Kong stocks, .HK convention, HK fundamentals source TBD.
+  Same substrate concerns plus 8h time zone offset.
+- Yahoo covers global tickers natively which helps; UK/HK fundamentals
+  alternative to FinViz is the open engineering question.
+- Estimate has wide error bars: 4 weeks to 3 months depending on
+  fundamentals sourcing answer.
+
+Lite mode (renderer addition, not parallel scoring path):
+- Lite ticker page: composite as single 0-100 dial + plain-English
+  one-line summary per component. Reads same component registry
+  as Power view — registry refactor on 11 May already supports
+  parallel renderers.
+- Lite dashboard: top 5 signals with one-sentence rationale each
+- Profile toggle: Lite / Power view, Lite default for new signups,
+  existing users default to Power view
+- Inline glossary hover from every Lite numeric, linked to relevant
+  Learn module
+
+/learn hub (10 modules):
+1. Composite scoring (how 9 components combine)
+2. Momentum signals
+3. Insider activity signals
+4. Mean reversion
+5. Legal risk and penalties
+6. Volume confirmation
+7. 7-tier rating system (Very Strong through Very Bearish)
+8. Backtesting and verified performance
+9. Watchlists and alerts
+10. Descriptive-not-directive language (why we say "Strong Signal"
+    not "Buy")
+
+YouTube companion series:
+- 10 × ~30 minute videos, one per /learn module
+- Weekly cadence
+- Marketing + SEO leverage; content workstream separate from
+  engineering
+
+Estimate: 6-10 weeks core engineering + 30-50 hours video production.
+
+### Phase 4 (was Phase 3)
 
 - Macro overlay
 - Sector heatmap
 - Monthly tournaments + referral programme
 - Public signal record (verified performance log)
 
-### Phase 4
+### Phase 5 (was Phase 4)
 
 - Public launch
 - React Native mobile app
@@ -926,7 +1004,7 @@ Parent brand: The Signal Vault
 Product brand: SignalIntel
 - Wordmark: stylised SIGNALINTEL
 - Mark: hexagonal cube with vertical V strokes, teal-to-gold gradient
-- Palette: teal/cyan (#3dd9d6 range), gold accent (inherits parent), navy base
+- Palette: green primary (#3ec762, #5dd97e light, #2ea850 deep), navy base (#0f2540), gold reserved for parent-brand lockup
 - Tone: analytical, contemporary, energetic
 - Asset: docs/brand/SignalIntel Logo Brand.PNG (committed 17 May 2026, 67278de)
 
@@ -941,7 +1019,7 @@ Brand surface placement:
 
 Logged-in app palette refinement (Option C locked):
 - Preserve current monospace typewriter font and dark background (the distinctive elements)
-- Swap cyan accent → SignalIntel teal-gold gradient
+- Swap cyan accent → SignalIntel green-gold gradient (green primary, gold reserved for parent-brand touchpoints)
 - Soften grid pattern
 - Refine chart palette to brand colours
 - Background may stay black or shift to very dark navy (frontend-design decision)
@@ -1444,6 +1522,99 @@ Athena should treat subsequent CC suggestions as suspect until they're
 empirically verified against on-disk state. P22 (session date is
 empirical) extends to "session state is empirical" — verify before
 acting.
+
+### Beta tester is a positioning audit (18 May 2026 lesson)
+
+Guy (friend, casual amateur trader, Trading212 pie-copier) shared 5
+beta-feedback points on 18 May. Athena's first reflex was to dismiss
+him as "outside the target user" — the product is for sophisticated
+independent traders, not casual pie-copiers, so his bewilderment at
+the terminology wasn't a product problem.
+
+Mark pushed back. The tagline locked on 17 May was "institutional-grade
+tools for non-institutional traders." Guy is literally a
+non-institutional trader. Dismissing his confusion as wrong-user is a
+positioning failure — the tagline promises to serve him, and the
+surface doesn't.
+
+Lesson: when reflex is to frame a beta tester as wrong-user, check the
+tagline first. If the tagline promises to serve them, the audit target
+is the surface, not the user. Codified as P27.
+
+Downstream: this lesson triggered the entire Phase 3 (Lite + Learn)
+addition. Without Mark's pushback, the right product decision would
+have been deferred indefinitely.
+
+### Pricing-question timing discipline (18 May 2026 lesson)
+
+Mark asked whether to ask Guy what he'd pay for SignalIntel. Athena
+declined to suggest doing so, for three concrete reasons:
+
+1. The answer is worthless without Guy seeing the completed product.
+   Anchoring on the current bewildering surface produces a price he'd
+   pay for a less-good product, not the actual one.
+2. Asking shifts the beta-test relationship from "honest critic" into
+   "sales target" at exactly the wrong moment. Beta value depends on
+   feedback honesty.
+3. The right pricing signal comes from a specific question
+   ("would you pay £X per month for the launched product?") asked of
+   several beta testers at a calibrated time (post-Phase 3).
+
+Pattern worth keeping: when asked to act on something where the
+answer is unreliable, decline + redirect to the right question at
+the right time + name the methodology. Athena named two methodologies
+for later: (a) specific-price-test of 10-15 beta testers with a
+single number, (b) Van Westendorp 4-question survey if cohort grows
+to 30+.
+
+Adjacency signal capture is fair game now (does Guy pay for adjacent
+products: FT, Bloomberg, financial newsletters, paid Substacks?).
+That data feeds eventual price-test calibration without contaminating
+the beta-test relationship.
+
+### Frontend-design mockup workflow (18 May 2026 lesson)
+
+The marketing homepage Section 1 hero mockup was produced in three
+versions across a single chat session, without CC touching any code:
+
+- v1: built directly by Athena via the frontend-design skill, rendered
+  as an HTML artifact, reviewed inline. v1 had a scorecard collapse
+  bug from circular CSS sizing.
+- v2: bug fixed in chat via str_replace edits to the artifact file.
+  Reviewed inline.
+- v3: brand asset refresh landed mid-session (vault-wheel system
+  replaced hex-cube). Palette swept end-to-end (teal → green), nav
+  marks rebuilt, wordmark restyled to match new brand. Reviewed inline.
+
+Lesson: design-first → review-in-chat → CC banks the locked file.
+CC never wrote or modified the mockup. The artifact lives at
+`docs/mockups/marketing_homepage_hero_v3.html` as a reference for
+the eventual CC implementation session against `web/templates/`.
+
+This pattern is faster than Phase 1 + Phase 2 for visual work
+because review happens inline rather than waiting for CC to render
+output. Architectural decisions (composition, type, motion) lock
+before visual decisions (palette, marks) so a mid-session brand
+refresh becomes a 20-minute palette sweep rather than a rebuild.
+
+### Render-artefact diagnostic check (18 May 2026 lesson)
+
+CC's Gate 4 paste during the FMP entitlement Phase 2 verification
+appeared to show broken Python syntax: orphan `log_run(...` lines
+without closing parens, `except` clauses appearing immediately
+after. Athena's first instinct was that the file was syntactically
+broken. The diagnostic prompt that followed re-elicited the file
+content via `sed -n` and `cat`, plus a `py_compile` syntactic check,
+and confirmed the source on disk was intact — the chat client had
+truncated continuation lines on render.
+
+Lesson: when paste output looks structurally impossible (orphan
+function calls, missing parens, mid-function-body except clauses),
+re-elicit via sed/cat + py_compile before alarming. This is
+symmetric with the 14 May "Diagnose before alarming" lesson —
+applies to chat client render artefacts as well as git status
+surprises. The discipline is empirical: investigate origin before
+framing as a violation or a bug.
 
 ---
 
