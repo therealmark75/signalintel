@@ -47,6 +47,15 @@ Banked together in commit 7f8014d as: 1 rename + 3 additions, 1,471 lines added 
 
 Current commit covers HANDOFF rewrite (this file) + PROJECT_CONTEXT targeted edits (new PROCESS LESSON for artefact-bytes verification + DESIGN BRIEF implementation sequence update reflecting Section 2/3 banked and Dashboard as next).
 
+### Block 4: End-of-day cleanup — repo rename + stale folder deletion
+
+Two cleanup actions taken after the banking commit:
+
+- **GitHub repo renamed `trading-system` → `signalintel`.** Brand alignment; local repo lives at `~/signalintel` since the 15 May 2026 Phase 2c migration, GitHub was still under the old name. GitHub auto-redirects old URLs but local remote updated explicitly: `git remote set-url origin https://github.com/therealmark75/signalintel.git`. Both fetch + push lines now point at signalintel.git.
+- **Stale `~/trading-system` folder deleted.** 10.4 MB vestigial directory predating the Phase 2c migration, last modified 24 April 2026. Confirmed safe to remove (not a git repo, no active processes referencing). Distinct from `~/Documents/trading-system.OLD` (the 24-hour-safety-window copy, eligible for deletion separately).
+
+No code changes. PROJECT_CONTEXT.md required no edits — Phase 2c migration was already documented at line 643, GitHub URL was not referenced anywhere in either doc.
+
 ### Test count at session close
 
 247 passing, 1 failed (test_fmp_economic_calendar_freshness — real production staleness by design per P26), 1 skipped (4 prior + Yahoo gains − adjustments from this morning's commits). Test count drift from earlier sessions tracked in STILL OPEN.
