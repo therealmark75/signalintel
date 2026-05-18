@@ -431,11 +431,12 @@ ID when relevant.
 | P20 | Analyst completeness gate. When two paths diverge on what an analyst making a buy/sell/hold decision receives, the analytically-stronger path wins regardless of engineering cost. Engineering cost is a tiebreaker between analytically-equivalent paths only |
 | P21 | Profile coverage matrices in Phase 2 prompts require explicit per-row verification gates confirming each matrix row produced the expected rating — not just that the total ticker count matches. Total-count agreement does not imply per-row correctness; synthetic inputs designed for "deep bearish" can inadvertently maximise a reversion scorer and route through HOLD before STRONG_SELL (14 May 2026, SS07 diagnosis B) |
 | P22 | Session date is empirical context, not conversation-primed context. Any session involving "yesterday / today / tonight / overnight" temporal reasoning must ground on the actual current date stated explicitly at session start. Both CC and Athena are subject to date-blindness from primed context; the discipline is symmetric |
-| P23 | Auth-adjacent side-effects require explicit escalation in audit, not just disclosure. Commits that add or modify side-effects in auth-adjacent functions (`current_user()`, login, logout, session handling, tier checks) must flag the change in the audit table with "AUTH SIDE-EFFECT — REQUIRES REVIEW" or equivalent. Disclosure in a commit-message bullet is necessary but not sufficient. The 7 May 2026 BUG-001-REOPENED backdoor was introduced in commit 9e02e7d (May 6 18:26), disclosed in that commit's bullet, then misdescribed in commit 7949805 the next morning — neither instance flagged the side-effect for review. P17 would not have caught this; the function was named, just not escalated. The pre-commit hook for auth-adjacent diff review (FOLLOWUPS) is the mechanical enforcement layer for P23 |
+| P23 | Auth-adjacent side-effects require explicit escalation in audit, not just disclosure. Commits that add or modify side-effects in auth-adjacent functions (`current_user()`, login, logout, session handling, tier checks) must flag the change in the audit table with "AUTH SIDE-EFFECT — REQUIRES REVIEW" or equivalent. Disclosure in a commit-message bullet is necessary but not sufficient. The 7 May 2026 BUG-001-REOPENED backdoor was introduced in commit 9e02e7d (May 6 18:26), disclosed in that commit's bullet, then misdescribed in commit 7949805 the next morning — neither instance flagged the side-effect for review. P17 would not have caught this; the function was named, just not escalated. The pre-commit hook for auth-adjacent diff review (`scripts/git-hooks/pre-commit`, installed via `scripts/install-hooks.sh`, see CLAUDE.md) is the mechanical enforcement layer for P23, live on origin since 18 May 2026 (commits 0851963 + 8fe91a0 + 851221a). |
 | P24 | Doc-file header text is descriptive metadata, never standing permission for CC to write. Headers such as "Updated end of each session" describe the file's intended use, not an instruction CC may act on. CC must not self-initiate edits to HANDOFF.md or PROJECT_CONTEXT.md. Editing instructions must come from Mark or Athena in-turn. Implementation prompts spanning multiple commits are the highest-risk pattern — CC reaches for end-of-session housekeeping when the implementation work concludes. Mitigation: include "do not modify HANDOFF.md or PROJECT_CONTEXT.md" on all implementation prompts regardless of stated scope |
 | P25 | macOS TCC restricts launchd-spawned processes from reading files under ~/Documents/, ~/Desktop, ~/Downloads, and other protected paths, even after granting Full Disk Access to /sbin/launchd in System Settings. Service-managed processes (LaunchDaemons, LaunchAgents) MUST run from non-protected paths. SignalIntel lives at ~/signalintel as a result. Pattern recognition: a "PermissionError: [Errno 1] Operation not permitted" on a file under ~/Documents/ from a launchd-spawned process is TCC restriction, not Unix permissions. Granting FDA to launchctl in System Settings does NOT resolve the underlying TCC scope. The 15 May 2026 session burned ~90 minutes diagnosing this before the path migration; future deployments should default to home-root paths (~/signalintel, ~/my-project) rather than ~/Documents/. |
 | P26 | XML content in shell heredocs is corrupted by chat renderers — angle-bracket tags (`<string>`, `<key>`) are interpreted as HTML and stripped during copy-paste from the chat interface to terminal. Use Python plistlib (or equivalent) to write plist files programmatically, then verify the contents via `/usr/libexec/PlistBuddy -c "Print :ProgramArguments" <path>` before installing. The 15 May 2026 LaunchAgent diagnosis cycle confirmed this: three identical-looking heredoc rewrites all lost the `-w` flag because `<string>-w</string>` rendered as an HTML attribute and disappeared. PlistBuddy verification on disk is empirical and unambiguous. |
 | P27 | Beta tester confusion is a positioning audit, not a user-fit observation. When a beta tester struggles with a product whose tagline explicitly promises to serve them (here: "institutional-grade tools for non-institutional traders"), Athena's first move must be to audit whether the tagline still matches the surface, not to dismiss the tester as "outside the target user." Dismissing the tester is a positioning failure dressed up as taste. Logged 18 May 2026 from Guy's feedback session. Future Athena: when reflex is to frame a tester as wrong-user, check the tagline first. |
+| P28 | Locked design patterns require at least a smoke-test invocation before being treated as ground truth. The Phase 1 + Phase 2 pattern produces design decisions that lock specific values, helper patterns, and snippets of code (regexes, shell idioms, FD redirections, SQL fragments). On-paper review can miss bugs that only surface on first execution. The 18 May 2026 auth-adjacent pre-commit hook ship surfaced this: the locked `exec 3</dev/tty 2>/dev/null` pattern from Phase 1 passed design review but silently redirected stderr for the rest of the shell on the success path, killing the user-facing "Commit aborted" message. Fix was one line (`{ exec 3</dev/tty; } 2>/dev/null` to scope the redirect) but the bug only emerged in the empirical verification walk. Discipline: when Phase 1 locks a non-trivial code pattern, Phase 2 prompts must include an explicit smoke-test step that exercises the pattern in isolation before it's integrated into the full implementation. Generalisation of P3 (verify in browser, not just tests) to design-phase decisions. |
 
 ---
 
@@ -652,8 +653,6 @@ modify code outside the prompt's explicit scope.
 - Earnings calendar
 - Short squeeze signals (high short interest + STRONG_BUY confluence)
 - Options flow (Unusual Whales)
-- Pre-commit hook for diff review on auth-adjacent files (mechanical
-  Scope Discipline enforcement)
 
 ### Phase 2c (NEW, 18 May 2026): Multi-user notifications substrate
 
@@ -1632,6 +1631,40 @@ applies to chat client render artefacts as well as git status
 surprises. The discipline is empirical: investigate origin before
 framing as a violation or a bug.
 
+### Parallel CC sessions on the same repo need flagging at session start (18 May 2026 lesson)
+
+During the auth-adjacent pre-commit hook ship, the verification walk 
+STOP'd at the amend step with unexpected modifications in the working 
+tree (`signals/scorer.py`, `tests/test_phase2b_scorers.py`). CC's 
+diagnostic was textbook: mtime forensics, mapped earlier checkpoints, 
+refused to proceed without authorisation. Athena's first read was 
+that the modifications were CC artefacts from the stderr-bug diagnostic 
+loop. Mark surfaced the actual cause: a second CC session was running 
+Altman Z'' development in another terminal against the same repo, in 
+parallel.
+
+Lesson: when Mark mentions a long-running task or another CC session, 
+Athena must plan for the working-tree implications at session start, 
+not discover them mid-walk. Options at session start include branch 
+isolation for one workstream, sequencing prompts so only one CC writes 
+at a time, or accepting the parallelism with explicit "carry the 
+other-session modifications through, never stage them" instructions 
+baked into every prompt. The risk surface is shared HEAD, shared 
+working tree, shared `git status` — not file conflicts (different 
+files generally don't conflict), but state-confusion during 
+multi-step operations like amend + verification walk.
+
+The hook walk completed cleanly because the resume prompt was 
+rewritten with explicit other-session handling after the STOP. That's 
+the right shape — but it's better caught at session start than at 
+the first STOP.
+
+Operational rule: at the start of any session where Mark mentions 
+parallel work, Athena asks one clarifying question — "what files is 
+the other session likely to touch?" — and plans the prompt sequence 
+around that surface. The answer goes into the session's mental model 
+before any CC prompt fires.
+
 ---
 
 ## FOLLOWUPS
@@ -1709,9 +1742,6 @@ STRUCTURAL DEBT:
   the session. Yahoo brings its own data and may supersede some columns.
 
 - TEST ISOLATION REFACTOR: tonight's watchlist data-loss bug (commit ffd5b8a) was patched via save-and-restore in the offending test's teardown. Underlying issue: tests/test_smoke.py and likely other test files run against the live production DB (data/trading_system.db) with no isolation. Proper fix: pytest fixture creating a temp DB per test run, with schema init and teardown. Multi-session work. Migration scope: every test currently importing from `database.db` and connecting to DATABASE_PATH directly, plus conftest.py fixture changes. Estimated 20+ test files affected.
-
-- PRE-COMMIT HOOK for diff review on auth-adjacent files (Phase 2
-  infrastructure, mechanical Scope Discipline enforcement).
 
 - SCHEDULER LAUNCHAGENT (15 May 2026): Phase 2c migrated gunicorn to LaunchAgent for reboot resilience. The scheduler (currently PID after migration) is still a foreground process started via `nohup python main.py scheduler`. It survives logout (reparented to launchd PID 1) but does NOT survive reboot. Symmetric LaunchAgent treatment needed: regenerate plist via plistlib pattern, point at ~/signalintel/venv/bin/python and ~/signalintel/main.py, load to launchctl. ~30 minutes work, dependency-free from any current work in flight.
 
