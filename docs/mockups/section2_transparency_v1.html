@@ -1,0 +1,759 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SignalIntel — Section 2 mockup (Transparency)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT,WONK@9..144,300..900,0..100,0..1&family=Inter+Tight:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    /* Palette continues from Section 1, surfaces flipped to light */
+    --navy-950: #060f1c;
+    --navy-900: #0a1729;
+    --navy-800: #0f2540;
+    --navy-700: #163356;
+    --navy-600: #1f4570;
+    --green-500: #2ea850;
+    --green-400: #3ec762;
+    --green-300: #5dd97e;
+    --green-200: #b8edc6;
+    --green-50:  #e8f7ed;
+    --red-500:   #c44545;
+    --red-100:   #f9e1e1;
+    --gold-500:  #c9a04a;
+    --ink-50:    #f8f9fb;
+    --ink-100:   #eef1f5;
+    --ink-200:   #d9dee7;
+    --ink-300:   #b8c0cc;
+    --ink-400:   #8a93a6;
+    --ink-500:   #5a6478;
+    --ink-600:   #3a4358;
+    --ink-700:   #232b3d;
+    --ink-800:   #141a2b;
+
+    --font-display: 'Fraunces', 'Cormorant Garamond', Georgia, serif;
+    --font-body: 'Inter Tight', system-ui, sans-serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    background: var(--ink-50);
+    color: var(--ink-700);
+    font-family: var(--font-body);
+    font-feature-settings: "ss01", "cv11";
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+
+  /* ─── TOP STRIP: faint reminder we are mid-page ─── */
+  .scroll-indicator {
+    background: var(--navy-950);
+    height: 60px;
+    position: relative;
+  }
+  .scroll-indicator::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg, var(--navy-950) 0%, var(--ink-50) 100%);
+  }
+
+  /* ─── SECTION 2: TRANSPARENCY ─── */
+  .transparency {
+    position: relative;
+    padding: 96px 32px 140px;
+    background: var(--ink-50);
+    overflow: hidden;
+  }
+  .transparency-inner {
+    max-width: 1320px;
+    margin: 0 auto;
+    position: relative;
+    z-index: 2;
+  }
+
+  /* Faint decorative grid behind everything */
+  .transparency::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(var(--ink-200) 1px, transparent 1px),
+      linear-gradient(90deg, var(--ink-200) 1px, transparent 1px);
+    background-size: 80px 80px;
+    opacity: 0.4;
+    mask-image: radial-gradient(ellipse at 50% 30%, rgba(0,0,0,0.5) 0%, transparent 70%);
+    pointer-events: none;
+  }
+
+  /* ─── HEADER BLOCK ─── */
+  .section-header {
+    display: grid;
+    grid-template-columns: 1.1fr 1fr;
+    gap: 80px;
+    align-items: end;
+    margin-bottom: 72px;
+  }
+
+  .eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--green-500);
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    font-weight: 500;
+    margin-bottom: 24px;
+  }
+  .eyebrow::before {
+    content: '';
+    width: 32px;
+    height: 1px;
+    background: var(--green-500);
+  }
+
+  .section-headline {
+    font-family: var(--font-display);
+    font-size: clamp(48px, 5.4vw, 78px);
+    line-height: 1.0;
+    letter-spacing: -0.025em;
+    color: var(--ink-800);
+    font-weight: 360;
+    font-variation-settings: "opsz" 144, "SOFT" 30;
+  }
+  .section-headline em {
+    font-style: italic;
+    color: var(--green-500);
+    font-weight: 320;
+    margin: 0 0.08em;
+    font-variation-settings: "opsz" 144, "SOFT" 60, "WONK" 1;
+  }
+
+  .section-sub {
+    font-size: 19px;
+    line-height: 1.6;
+    color: var(--ink-500);
+    max-width: 460px;
+    padding-bottom: 12px;
+  }
+
+  /* ─── ANCHOR VISUAL: Recent Events panel ─── */
+  .events-panel {
+    background: white;
+    border-radius: 16px;
+    border: 1px solid var(--ink-200);
+    box-shadow:
+      0 1px 2px rgba(15,37,64,0.04),
+      0 8px 28px rgba(15,37,64,0.08),
+      0 32px 64px rgba(15,37,64,0.04);
+    overflow: hidden;
+    position: relative;
+    margin-bottom: 96px;
+  }
+
+  .events-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 22px 32px;
+    border-bottom: 1px solid var(--ink-100);
+    background: linear-gradient(180deg, white 0%, var(--ink-50) 100%);
+  }
+  .events-header-left {
+    display: flex;
+    align-items: baseline;
+    gap: 16px;
+  }
+  .events-header h3 {
+    font-family: var(--font-display);
+    font-size: 22px;
+    font-weight: 500;
+    color: var(--ink-800);
+    letter-spacing: -0.01em;
+  }
+  .events-header .scope {
+    font-size: 13px;
+    color: var(--ink-400);
+    font-family: var(--font-mono);
+  }
+  .events-header-right {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    font-size: 12px;
+    color: var(--ink-500);
+    font-family: var(--font-mono);
+    letter-spacing: 0.04em;
+  }
+  .live-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--green-500);
+    font-weight: 500;
+    text-transform: uppercase;
+  }
+  .live-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--green-400);
+    box-shadow: 0 0 0 0 rgba(62,199,98,0.5);
+    animation: livepulse 2.4s ease-out infinite;
+  }
+  @keyframes livepulse {
+    0%   { box-shadow: 0 0 0 0 rgba(62,199,98,0.5); }
+    70%  { box-shadow: 0 0 0 8px rgba(62,199,98,0); }
+    100% { box-shadow: 0 0 0 0 rgba(62,199,98,0); }
+  }
+
+  /* ─── Events table ─── */
+  .events-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+  }
+  .events-table thead th {
+    padding: 14px 32px;
+    text-align: left;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--ink-400);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--ink-100);
+    background: var(--ink-50);
+  }
+  .events-table thead th.num { text-align: right; }
+  .events-table tbody td {
+    padding: 16px 32px;
+    border-bottom: 1px solid var(--ink-100);
+    vertical-align: middle;
+  }
+  .events-table tbody tr:last-child td { border-bottom: none; }
+  .events-table tbody tr:hover { background: var(--ink-50); }
+
+  .ticker-cell {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+  .ticker-symbol {
+    font-family: var(--font-mono);
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--ink-800);
+    letter-spacing: 0.04em;
+  }
+  .ticker-company {
+    font-size: 12px;
+    color: var(--ink-400);
+    margin-top: 2px;
+  }
+
+  .date-cell {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--ink-500);
+  }
+
+  .rating-transition {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 13px;
+  }
+  .rating-from {
+    color: var(--ink-400);
+    font-weight: 400;
+  }
+  .arrow {
+    color: var(--ink-300);
+    font-size: 11px;
+  }
+  .rating-to {
+    font-weight: 600;
+    padding: 3px 9px;
+    border-radius: 4px;
+    font-size: 12px;
+    letter-spacing: 0.02em;
+  }
+  .rating-to.very-strong { background: var(--green-50); color: var(--green-500); border: 1px solid var(--green-200); }
+  .rating-to.strong { background: var(--green-50); color: var(--green-500); border: 1px solid var(--green-200); }
+  .rating-to.stable { background: #e8f1fb; color: #2b5a8e; border: 1px solid #c3d8ed; }
+  .rating-to.neutral { background: var(--ink-100); color: var(--ink-500); border: 1px solid var(--ink-200); }
+  .rating-to.soft { background: #fdf0d8; color: #976414; border: 1px solid #f0d8a0; }
+  .rating-to.bearish { background: var(--red-100); color: var(--red-500); border: 1px solid #f0c4c4; }
+
+  .price-cell {
+    text-align: right;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--ink-700);
+  }
+  .return-cell {
+    text-align: right;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 500;
+  }
+  .return-cell.up { color: var(--green-500); }
+  .return-cell.down { color: var(--red-500); }
+  .return-cell .pill {
+    display: inline-block;
+    padding: 3px 9px;
+    border-radius: 4px;
+  }
+  .return-cell.up .pill { background: var(--green-50); }
+  .return-cell.down .pill { background: var(--red-100); }
+
+  .status-cell {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .status-cell.open { color: var(--ink-400); }
+  .status-cell.closed { color: var(--ink-500); }
+
+  /* Caption beneath table */
+  .events-caption {
+    padding: 20px 32px;
+    background: var(--ink-50);
+    border-top: 1px solid var(--ink-100);
+    font-size: 13px;
+    color: var(--ink-500);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .events-caption strong {
+    color: var(--ink-700);
+    font-weight: 600;
+  }
+  .events-caption a {
+    color: var(--green-500);
+    text-decoration: none;
+    font-weight: 500;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .events-caption a:hover {
+    text-decoration: underline;
+  }
+
+  /* ─── 3-COLUMN PROOF POINTS ─── */
+  .proof-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 56px;
+  }
+  .proof-col {
+    padding-top: 24px;
+    border-top: 1px solid var(--ink-200);
+    position: relative;
+  }
+  .proof-col::before {
+    content: '';
+    position: absolute;
+    top: -1px;
+    left: 0;
+    width: 32px;
+    height: 2px;
+    background: var(--green-500);
+  }
+
+  .proof-number {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--green-500);
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    margin-bottom: 12px;
+    font-weight: 500;
+  }
+  .proof-headline {
+    font-family: var(--font-display);
+    font-size: 28px;
+    color: var(--ink-800);
+    font-weight: 400;
+    line-height: 1.15;
+    letter-spacing: -0.015em;
+    margin-bottom: 16px;
+    font-variation-settings: "opsz" 36, "SOFT" 30;
+  }
+  .proof-body {
+    font-size: 15px;
+    line-height: 1.6;
+    color: var(--ink-500);
+    margin-bottom: 24px;
+  }
+  .proof-stat {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    padding-top: 16px;
+    border-top: 1px dashed var(--ink-200);
+  }
+  .proof-stat-value {
+    font-family: var(--font-mono);
+    font-size: 22px;
+    font-weight: 500;
+    color: var(--ink-800);
+  }
+  .proof-stat-label {
+    font-size: 12px;
+    color: var(--ink-400);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    line-height: 1.4;
+  }
+
+  /* ─── BOTTOM PULL-QUOTE STRIP ─── */
+  .pull-quote {
+    margin-top: 120px;
+    padding-top: 48px;
+    border-top: 1px solid var(--ink-200);
+    text-align: center;
+  }
+  .pull-quote blockquote {
+    font-family: var(--font-display);
+    font-size: clamp(24px, 2.6vw, 34px);
+    line-height: 1.35;
+    color: var(--ink-700);
+    font-weight: 380;
+    font-variation-settings: "opsz" 96, "SOFT" 30;
+    max-width: 760px;
+    margin: 0 auto;
+    letter-spacing: -0.01em;
+  }
+  .pull-quote blockquote em {
+    color: var(--green-500);
+    font-weight: 320;
+  }
+  .pull-quote .attribution {
+    margin-top: 18px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--ink-400);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+  }
+
+  /* ─── BOTTOM TRANSITION (HINTING SECTION 3 BACK TO DARK) ─── */
+  .transition-band-down {
+    background: linear-gradient(180deg, var(--ink-50) 0%, var(--ink-100) 100%);
+    height: 80px;
+  }
+
+  /* ─── MOCKUP META BAR ─── */
+  .mockup-meta {
+    position: fixed;
+    bottom: 16px; right: 16px;
+    background: var(--ink-800);
+    color: var(--ink-300);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    padding: 6px 10px;
+    border-radius: 4px;
+    z-index: 100;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+
+  /* ─── ANIMATION ON SCROLL-INTO-VIEW (simplified: fire on load with delay) ─── */
+  .events-panel,
+  .proof-col,
+  .pull-quote {
+    opacity: 0;
+    transform: translateY(20px);
+    animation: rise-in 0.9s ease-out forwards;
+  }
+  .events-panel { animation-delay: 0.2s; }
+  .proof-col:nth-child(1) { animation-delay: 0.6s; }
+  .proof-col:nth-child(2) { animation-delay: 0.75s; }
+  .proof-col:nth-child(3) { animation-delay: 0.9s; }
+  .pull-quote { animation-delay: 1.1s; }
+
+  @keyframes rise-in {
+    0%   { opacity: 0; transform: translateY(20px); }
+    100% { opacity: 1; transform: translateY(0); }
+  }
+
+  /* ─── MEDIA QUERIES ─── */
+  @media (max-width: 1080px) {
+    .section-header { grid-template-columns: 1fr; gap: 32px; align-items: start; }
+    .section-sub { padding-bottom: 0; }
+    .proof-grid { grid-template-columns: 1fr; gap: 40px; }
+  }
+  @media (max-width: 720px) {
+    .transparency { padding: 64px 20px 100px; }
+    .events-header { padding: 16px 20px; flex-direction: column; align-items: flex-start; gap: 12px; }
+    .events-table thead th,
+    .events-table tbody td { padding: 12px 16px; font-size: 13px; }
+    .events-table thead th.hide-mobile,
+    .events-table tbody td.hide-mobile { display: none; }
+    .ticker-company { display: none; }
+    .events-caption { padding: 16px 20px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Top strip carrying gradient down from Section 1 hero -->
+<div class="scroll-indicator"></div>
+
+<!-- ──────── SECTION 2: TRANSPARENCY ──────── -->
+<section class="transparency">
+  <div class="transparency-inner">
+
+    <!-- Header block: headline left, supporting prose right -->
+    <div class="section-header">
+      <div>
+        <div class="eyebrow">02 / Transparency</div>
+        <h2 class="section-headline">
+          We <em>show</em><br>
+          our work.
+        </h2>
+      </div>
+      <p class="section-sub">
+        Every signal, every score, every win and every loss.
+        Public record from day one. No survivorship bias, no cherry-picked
+        success stories, no track record that starts after the bad trades.
+      </p>
+    </div>
+
+    <!-- Anchor visual: live Recent Events panel -->
+    <div class="events-panel">
+      <div class="events-header">
+        <div class="events-header-left">
+          <h3>Recent Rating Changes</h3>
+          <span class="scope">All tickers · Last 30 days</span>
+        </div>
+        <div class="events-header-right">
+          <span class="live-indicator"><span class="live-dot"></span>Live</span>
+          <span>11,807 changes logged · since launch</span>
+        </div>
+      </div>
+
+      <table class="events-table">
+        <thead>
+          <tr>
+            <th>Ticker</th>
+            <th class="hide-mobile">Date</th>
+            <th>Rating change</th>
+            <th class="num hide-mobile">Price at change</th>
+            <th class="num">Return since</th>
+            <th class="hide-mobile">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>
+              <div class="ticker-cell">
+                <div>
+                  <div class="ticker-symbol">NVDA</div>
+                  <div class="ticker-company">NVIDIA Corp</div>
+                </div>
+              </div>
+            </td>
+            <td class="date-cell hide-mobile">12 May 2026</td>
+            <td>
+              <div class="rating-transition">
+                <span class="rating-from">Stable</span>
+                <span class="arrow">→</span>
+                <span class="rating-to very-strong">Very Strong</span>
+              </div>
+            </td>
+            <td class="price-cell hide-mobile">$432.10</td>
+            <td class="return-cell up"><span class="pill">+12.8%</span></td>
+            <td class="status-cell open hide-mobile">Open</td>
+          </tr>
+          <tr>
+            <td>
+              <div class="ticker-cell">
+                <div>
+                  <div class="ticker-symbol">MSFT</div>
+                  <div class="ticker-company">Microsoft Corp</div>
+                </div>
+              </div>
+            </td>
+            <td class="date-cell hide-mobile">08 May 2026</td>
+            <td>
+              <div class="rating-transition">
+                <span class="rating-from">Neutral</span>
+                <span class="arrow">→</span>
+                <span class="rating-to strong">Strong</span>
+              </div>
+            </td>
+            <td class="price-cell hide-mobile">$418.75</td>
+            <td class="return-cell up"><span class="pill">+4.2%</span></td>
+            <td class="status-cell open hide-mobile">Open</td>
+          </tr>
+          <tr>
+            <td>
+              <div class="ticker-cell">
+                <div>
+                  <div class="ticker-symbol">PLTR</div>
+                  <div class="ticker-company">Palantir Technologies</div>
+                </div>
+              </div>
+            </td>
+            <td class="date-cell hide-mobile">02 May 2026</td>
+            <td>
+              <div class="rating-transition">
+                <span class="rating-from">Strong</span>
+                <span class="arrow">→</span>
+                <span class="rating-to bearish">Bearish</span>
+              </div>
+            </td>
+            <td class="price-cell hide-mobile">$28.40</td>
+            <td class="return-cell down"><span class="pill">−9.4%</span></td>
+            <td class="status-cell closed hide-mobile">Closed</td>
+          </tr>
+          <tr>
+            <td>
+              <div class="ticker-cell">
+                <div>
+                  <div class="ticker-symbol">AAPL</div>
+                  <div class="ticker-company">Apple Inc</div>
+                </div>
+              </div>
+            </td>
+            <td class="date-cell hide-mobile">29 Apr 2026</td>
+            <td>
+              <div class="rating-transition">
+                <span class="rating-from">Stable</span>
+                <span class="arrow">→</span>
+                <span class="rating-to neutral">Neutral</span>
+              </div>
+            </td>
+            <td class="price-cell hide-mobile">$182.94</td>
+            <td class="return-cell down"><span class="pill">−1.3%</span></td>
+            <td class="status-cell open hide-mobile">Open</td>
+          </tr>
+          <tr>
+            <td>
+              <div class="ticker-cell">
+                <div>
+                  <div class="ticker-symbol">TSM</div>
+                  <div class="ticker-company">Taiwan Semiconductor</div>
+                </div>
+              </div>
+            </td>
+            <td class="date-cell hide-mobile">24 Apr 2026</td>
+            <td>
+              <div class="rating-transition">
+                <span class="rating-from">Neutral</span>
+                <span class="arrow">→</span>
+                <span class="rating-to very-strong">Very Strong</span>
+              </div>
+            </td>
+            <td class="price-cell hide-mobile">$148.30</td>
+            <td class="return-cell up"><span class="pill">+18.6%</span></td>
+            <td class="status-cell open hide-mobile">Open</td>
+          </tr>
+          <tr>
+            <td>
+              <div class="ticker-cell">
+                <div>
+                  <div class="ticker-symbol">RIVN</div>
+                  <div class="ticker-company">Rivian Automotive</div>
+                </div>
+              </div>
+            </td>
+            <td class="date-cell hide-mobile">21 Apr 2026</td>
+            <td>
+              <div class="rating-transition">
+                <span class="rating-from">Soft</span>
+                <span class="arrow">→</span>
+                <span class="rating-to bearish">Bearish</span>
+              </div>
+            </td>
+            <td class="price-cell hide-mobile">$11.85</td>
+            <td class="return-cell down"><span class="pill">−14.2%</span></td>
+            <td class="status-cell closed hide-mobile">Closed</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="events-caption">
+        <span><strong>Yes — we publish the losses too.</strong> Every rating change is logged with date and price at change. Filter by tier, sort by return, see every call we&apos;ve ever made.</span>
+        <a href="#full-record">See the full record →</a>
+      </div>
+    </div>
+
+    <!-- 3-column proof points -->
+    <div class="proof-grid">
+      <div class="proof-col">
+        <div class="proof-number">01 — Verified record</div>
+        <h3 class="proof-headline">Every signal logged with date and price at change.</h3>
+        <p class="proof-body">
+          Rating tier transitions write to a permanent audit table the moment they happen.
+          We can&apos;t edit history. You can&apos;t pretend a bad call didn&apos;t happen.
+        </p>
+        <div class="proof-stat">
+          <span class="proof-stat-value">11,807</span>
+          <span class="proof-stat-label">Rating changes logged<br>since launch</span>
+        </div>
+      </div>
+
+      <div class="proof-col">
+        <div class="proof-number">02 — Open methodology</div>
+        <h3 class="proof-headline">Nine scoring components, documented in full.</h3>
+        <p class="proof-body">
+          Momentum, quality, insider activity, mean reversion, volume, earnings surprise,
+          financial strength, institutional ownership, analyst momentum. Plus legal and
+          bankruptcy penalties. Every weight, every threshold, every input.
+        </p>
+        <div class="proof-stat">
+          <span class="proof-stat-value">v0.13.0</span>
+          <span class="proof-stat-label">Engine version<br>publicly stamped</span>
+        </div>
+      </div>
+
+      <div class="proof-col">
+        <div class="proof-number">03 — Wins and losses</div>
+        <h3 class="proof-headline">Backtest data for every tier. Including the ones that didn&apos;t work.</h3>
+        <p class="proof-body">
+          Win rate by tier. Average return by tier. Drawdown distribution by tier.
+          Public, dated, sourced. We&apos;re not selling you a track record that starts
+          after the bad trades.
+        </p>
+        <div class="proof-stat">
+          <span class="proof-stat-value">7</span>
+          <span class="proof-stat-label">Signal tiers, all<br>independently tracked</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Pull quote / mission statement -->
+    <div class="pull-quote">
+      <blockquote>
+        We&apos;re building the platform we wished existed when we were learning to trade.
+        One where you can <em>see the work behind the call</em>, where losses are part of
+        the record, where the methodology isn&apos;t a black box.
+      </blockquote>
+      <div class="attribution">— Mark Nicholson · Founder, The Signal Vault</div>
+    </div>
+
+  </div>
+</section>
+
+<div class="transition-band-down"></div>
+
+<div class="mockup-meta">SignalIntel · Section 2 (Transparency) · Mockup v1</div>
+
+</body>
+</html>

@@ -1,0 +1,712 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>SignalIntel — Section 3 mockup v1</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400;1,9..144,500&family=Inter+Tight:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    /* SignalIntel green palette (locked 17 May 2026) */
+    --green-primary: #3ec762;
+    --green-light: #5dd97e;
+    --green-deep: #2ea850;
+    --green-glow: rgba(62, 199, 98, 0.12);
+    --green-soft: rgba(62, 199, 98, 0.06);
+    --green-border: rgba(62, 199, 98, 0.22);
+
+    /* Signal Vault parent gold (for radar pulse + accent) */
+    --gold: #c8a04a;
+    --gold-light: #d4b56e;
+
+    /* Light Public.com aesthetic */
+    --bg: #fafaf7;
+    --bg-soft: #f3f3ee;
+    --bg-card: #ffffff;
+    --ink: #0e1116;
+    --ink-soft: #2a2f37;
+    --ink-muted: #5b6470;
+    --ink-faint: #8a929e;
+    --line: rgba(14, 17, 22, 0.08);
+    --line-soft: rgba(14, 17, 22, 0.05);
+
+    /* Tier colours (used in component cell accents) */
+    --tier-very-strong: #2ea850;
+    --tier-strong: #5dd97e;
+    --tier-stable: #93d5a4;
+    --tier-neutral: #b5b8b0;
+    --tier-soft: #d4a155;
+    --tier-bearish: #d97757;
+    --tier-very-bearish: #c4524a;
+
+    /* Typography */
+    --serif: 'Fraunces', Georgia, serif;
+    --sans: 'Inter Tight', -apple-system, BlinkMacSystemFont, sans-serif;
+    --mono: 'JetBrains Mono', 'SF Mono', Menlo, monospace;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: var(--sans);
+    background: var(--bg);
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    line-height: 1.5;
+  }
+
+  .section {
+    max-width: 1240px;
+    margin: 0 auto;
+    padding: 120px 60px 140px;
+    position: relative;
+  }
+
+  /* ─── Section eyebrow ─── */
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--green-deep);
+    letter-spacing: 0.05em;
+    margin-bottom: 28px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .eyebrow::before {
+    content: '';
+    width: 36px;
+    height: 1px;
+    background: var(--green-deep);
+  }
+
+  /* ─── Headline + intro row ─── */
+  .header-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 80px;
+    margin-bottom: 72px;
+    align-items: end;
+  }
+
+  .headline {
+    font-family: var(--serif);
+    font-size: 64px;
+    line-height: 1.05;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+    font-weight: 400;
+  }
+  .headline em {
+    font-style: italic;
+    color: var(--green-deep);
+    font-weight: 400;
+  }
+  .headline-line { display: block; }
+
+  .intro {
+    font-size: 17px;
+    line-height: 1.6;
+    color: var(--ink-soft);
+    max-width: 460px;
+    padding-bottom: 18px;
+  }
+  .intro strong {
+    font-weight: 500;
+    color: var(--ink);
+  }
+
+  /* ─── Radar centrepiece ─── */
+  .radar-wrap {
+    background: var(--bg-card);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 56px 60px 64px;
+    margin-bottom: 72px;
+    position: relative;
+  }
+
+  .radar-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 48px;
+    padding-bottom: 28px;
+    border-bottom: 1px solid var(--line-soft);
+  }
+
+  .radar-title-block h3 {
+    font-family: var(--serif);
+    font-size: 22px;
+    font-weight: 500;
+    color: var(--ink);
+    margin-bottom: 6px;
+  }
+
+  .radar-subtitle {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--ink-muted);
+    letter-spacing: 0.04em;
+  }
+
+  .radar-meta {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--ink-muted);
+  }
+  .composite-score {
+    font-family: var(--serif);
+    font-size: 38px;
+    font-weight: 500;
+    color: var(--ink);
+    line-height: 1;
+  }
+  .composite-label {
+    text-align: right;
+  }
+  .composite-label .tier-badge {
+    display: inline-block;
+    margin-top: 4px;
+    padding: 3px 10px;
+    border-radius: 999px;
+    background: rgba(147, 213, 164, 0.18);
+    color: #4a7c5a;
+    font-family: var(--sans);
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+  }
+
+  .radar-canvas {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 16px 0 8px;
+  }
+
+  /* Hover labels for the 9 spokes */
+  .radar-svg {
+    display: block;
+    max-width: 100%;
+    height: auto;
+  }
+
+  .ticker-context {
+    text-align: center;
+    margin-top: 28px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--ink-faint);
+    letter-spacing: 0.04em;
+  }
+  .ticker-context strong {
+    color: var(--ink-muted);
+    font-weight: 500;
+  }
+
+  /* ─── 9-cell component strip ─── */
+  .components-strip-wrap {
+    margin-bottom: 80px;
+  }
+
+  .strip-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 28px;
+  }
+  .strip-title {
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 22px;
+    font-weight: 400;
+    color: var(--ink);
+  }
+  .strip-engine {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--ink-muted);
+    letter-spacing: 0.04em;
+  }
+  .strip-engine .dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--green-primary);
+    margin-right: 8px;
+    vertical-align: 1px;
+    box-shadow: 0 0 8px var(--green-glow);
+  }
+
+  .components-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1px;
+    background: var(--line);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+
+  .component-cell {
+    background: var(--bg-card);
+    padding: 28px 26px;
+    position: relative;
+    transition: background 0.15s;
+  }
+  .component-cell:hover {
+    background: var(--green-soft);
+  }
+  .component-cell.future {
+    background: #fbfbf7;
+    position: relative;
+  }
+  .component-cell.future::after {
+    content: 'v0.14';
+    position: absolute;
+    top: 22px;
+    right: 22px;
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--gold);
+    background: rgba(200, 160, 74, 0.08);
+    padding: 2px 7px;
+    border-radius: 4px;
+    letter-spacing: 0.04em;
+  }
+
+  .cell-index {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--ink-faint);
+    letter-spacing: 0.05em;
+    margin-bottom: 14px;
+  }
+  .cell-name {
+    font-family: var(--sans);
+    font-size: 17px;
+    font-weight: 500;
+    color: var(--ink);
+    margin-bottom: 6px;
+    letter-spacing: -0.005em;
+  }
+  .cell-weight {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--green-deep);
+    margin-bottom: 12px;
+    font-weight: 500;
+  }
+  .component-cell.future .cell-weight {
+    color: var(--gold);
+  }
+  .cell-desc {
+    font-size: 13px;
+    line-height: 1.45;
+    color: var(--ink-muted);
+  }
+
+  /* ─── Modifiers row (Legal + Altman + Sector) ─── */
+  .modifiers-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 24px;
+    margin-bottom: 80px;
+  }
+
+  .modifier-card {
+    background: var(--bg-card);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 24px 26px;
+  }
+
+  .modifier-eyebrow {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--ink-faint);
+    letter-spacing: 0.06em;
+    margin-bottom: 12px;
+    text-transform: uppercase;
+  }
+  .modifier-name {
+    font-family: var(--serif);
+    font-size: 19px;
+    font-weight: 500;
+    color: var(--ink);
+    margin-bottom: 8px;
+  }
+  .modifier-name .penalty {
+    font-family: var(--mono);
+    font-size: 14px;
+    color: var(--tier-bearish);
+    font-weight: 400;
+    margin-left: 8px;
+  }
+  .modifier-name .multiplier {
+    font-family: var(--mono);
+    font-size: 14px;
+    color: var(--gold);
+    font-weight: 400;
+    margin-left: 8px;
+  }
+  .modifier-desc {
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--ink-muted);
+  }
+
+  /* ─── Bottom closing strip ─── */
+  .closing {
+    border-top: 1px solid var(--line);
+    padding-top: 56px;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 80px;
+    align-items: center;
+  }
+
+  .closing-text {
+    font-family: var(--serif);
+    font-size: 26px;
+    line-height: 1.35;
+    color: var(--ink);
+    font-weight: 400;
+    letter-spacing: -0.01em;
+    max-width: 720px;
+  }
+  .closing-text em {
+    font-style: italic;
+    color: var(--green-deep);
+  }
+
+  .closing-cta {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 8px;
+  }
+  .closing-link {
+    font-family: var(--sans);
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--green-deep);
+    text-decoration: none;
+    border-bottom: 1px solid var(--green-deep);
+    padding-bottom: 2px;
+  }
+  .closing-meta {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--ink-faint);
+    letter-spacing: 0.04em;
+  }
+
+  /* ─── Mockup marker (bottom-right corner) ─── */
+  .mockup-marker {
+    position: fixed;
+    bottom: 12px;
+    right: 12px;
+    font-family: var(--mono);
+    font-size: 10px;
+    color: rgba(255, 255, 255, 0.5);
+    background: rgba(14, 17, 22, 0.85);
+    padding: 6px 10px;
+    border-radius: 4px;
+    letter-spacing: 0.06em;
+    z-index: 100;
+  }
+
+  @media (max-width: 960px) {
+    .section { padding: 80px 32px 100px; }
+    .header-row {
+      grid-template-columns: 1fr;
+      gap: 32px;
+    }
+    .headline { font-size: 56px; }
+    .components-grid { grid-template-columns: repeat(2, 1fr); }
+    .modifiers-row { grid-template-columns: 1fr; }
+    .radar-wrap { padding: 32px 24px; }
+    .closing { grid-template-columns: 1fr; gap: 32px; }
+    .closing-cta { align-items: flex-start; }
+  }
+</style>
+</head>
+<body>
+
+<section class="section">
+
+  <div class="eyebrow">03 / METHODOLOGY</div>
+
+  <div class="header-row">
+    <h2 class="headline">
+      <span class="headline-line">Nine components.</span>
+      <span class="headline-line">One score.</span>
+      <span class="headline-line"><em>No shortcuts.</em></span>
+    </h2>
+    <p class="intro">
+      Every ticker is scored across <strong>nine independent signals</strong>, weighted,
+      sector-adjusted, and stamped with the engine version that produced it.
+      No black boxes. No proprietary mystery. Every weight, every threshold, every penalty —
+      documented and public.
+    </p>
+  </div>
+
+  <!-- ─── Radar centrepiece ─── -->
+  <div class="radar-wrap">
+
+    <div class="radar-header">
+      <div class="radar-title-block">
+        <h3>Scoring breakdown — AAPL</h3>
+        <div class="radar-subtitle">Live · Tuesday 19 May 2026 · 09:14 BST</div>
+      </div>
+      <div class="radar-meta">
+        <div class="composite-label">
+          <div style="font-size: 11px; letter-spacing: 0.05em;">COMPOSITE</div>
+          <div class="tier-badge">Stable</div>
+        </div>
+        <div class="composite-score">61.2</div>
+      </div>
+    </div>
+
+    <div class="radar-canvas">
+      <svg class="radar-svg" viewBox="0 0 760 600" xmlns="http://www.w3.org/2000/svg" aria-labelledby="radar-title" role="img">
+        <title id="radar-title">9-component radar chart showing AAPL scoring breakdown</title>
+
+        <defs>
+          <radialGradient id="radar-glow" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stop-color="#3ec762" stop-opacity="0.14" />
+            <stop offset="60%" stop-color="#3ec762" stop-opacity="0.05" />
+            <stop offset="100%" stop-color="#3ec762" stop-opacity="0" />
+          </radialGradient>
+        </defs>
+
+        <!-- Centre glow -->
+        <circle cx="380" cy="300" r="200" fill="url(#radar-glow)" />
+
+        <!-- 4 concentric rings at 25/50/75/100 percent of full radius -->
+        <g stroke="rgba(14, 17, 22, 0.06)" stroke-width="0.75" fill="none">
+          <polygon points="380,250 412.1,236.7 424.2,266.3 418.3,300.0 392.1,322.0 367.9,322.0 341.7,300.0 335.8,266.3 347.9,236.7" />
+          <polygon points="380,200 444.3,173.4 468.5,232.6 456.6,300.0 404.2,344.0 355.8,344.0 303.4,300.0 291.5,232.6 315.7,173.4" />
+          <polygon points="380,150 476.4,110.1 512.7,198.9 494.9,300.0 416.3,366.0 343.7,366.0 265.1,300.0 247.3,198.9 283.6,110.1" />
+          <polygon points="380,100 508.6,146.8 576.9,265.3 553.2,400.0 448.4,487.9 311.6,487.9 206.8,400.0 183.1,265.3 251.4,146.8" stroke="rgba(14, 17, 22, 0.10)" />
+        </g>
+
+        <!-- 9 spokes from centre out to 100 percent ring vertices -->
+        <g stroke="rgba(14, 17, 22, 0.05)" stroke-width="0.75">
+          <line x1="380" y1="300" x2="380" y2="100" />
+          <line x1="380" y1="300" x2="508.6" y2="146.8" />
+          <line x1="380" y1="300" x2="576.9" y2="265.3" />
+          <line x1="380" y1="300" x2="553.2" y2="400.0" />
+          <line x1="380" y1="300" x2="448.4" y2="487.9" />
+          <line x1="380" y1="300" x2="311.6" y2="487.9" />
+          <line x1="380" y1="300" x2="206.8" y2="400.0" />
+          <line x1="380" y1="300" x2="183.1" y2="265.3" />
+          <line x1="380" y1="300" x2="251.4" y2="146.8" />
+        </g>
+
+        <!--
+          AAPL scoring polygon. Strong on Quality and Institutional Ownership,
+          soft on Momentum and Mean Reversion. Composite around 61.
+          Scores: Momentum=38, Quality=82, Insider=52, Reversion=32, Volume=58,
+          Earnings=45, Piotroski=71, InstOwn=88, AnalystMom=74
+        -->
+        <polygon
+          points="380,224 485.4,174.2 482.4,281.9 435.4,332.0 419.7,409.0 349.2,384.6 256.0,371.0 206.7,269.4 293.6,186.6"
+          fill="rgba(62, 199, 98, 0.16)"
+          stroke="#2ea850"
+          stroke-width="2"
+          stroke-linejoin="round"
+        />
+
+        <!-- Vertex dots. Green for live (v0.13.0), gold for v0.14 future components. -->
+        <g>
+          <circle cx="380" cy="224" r="5" fill="#2ea850" />
+          <circle cx="485.4" cy="174.2" r="5" fill="#2ea850" />
+          <circle cx="482.4" cy="281.9" r="5" fill="#2ea850" />
+          <circle cx="435.4" cy="332.0" r="5" fill="#2ea850" />
+          <circle cx="419.7" cy="409.0" r="5" fill="#2ea850" />
+          <circle cx="349.2" cy="384.6" r="5" fill="#c8a04a" />
+          <circle cx="256.0" cy="371.0" r="5" fill="#c8a04a" />
+          <circle cx="206.7" cy="269.4" r="5" fill="#c8a04a" />
+          <circle cx="293.6" cy="186.6" r="5" fill="#c8a04a" />
+        </g>
+
+        <!-- Component labels positioned outside the 100 percent ring with clear offset -->
+        <g font-family="JetBrains Mono, monospace" font-size="11" fill="#2a2f37">
+          <text x="380" y="78" text-anchor="middle" font-weight="500">MOMENTUM</text>
+          <text x="380" y="92" text-anchor="middle" font-size="10" fill="#5b6470">38</text>
+
+          <text x="540" y="138" text-anchor="start" font-weight="500">QUALITY</text>
+          <text x="540" y="152" text-anchor="start" font-size="10" fill="#5b6470">82</text>
+
+          <text x="600" y="262" text-anchor="start" font-weight="500">INSIDER</text>
+          <text x="600" y="276" text-anchor="start" font-size="10" fill="#5b6470">52</text>
+
+          <text x="580" y="412" text-anchor="start" font-weight="500">REVERSION</text>
+          <text x="580" y="426" text-anchor="start" font-size="10" fill="#5b6470">32</text>
+
+          <text x="470" y="514" text-anchor="start" font-weight="500">VOLUME</text>
+          <text x="470" y="528" text-anchor="start" font-size="10" fill="#5b6470">58</text>
+
+          <text x="290" y="514" text-anchor="end" font-weight="500">EARNINGS</text>
+          <text x="290" y="528" text-anchor="end" font-size="10" fill="#c8a04a">45 · v0.14</text>
+
+          <text x="180" y="412" text-anchor="end" font-weight="500">PIOTROSKI</text>
+          <text x="180" y="426" text-anchor="end" font-size="10" fill="#c8a04a">71 · v0.14</text>
+
+          <text x="160" y="262" text-anchor="end" font-weight="500">INST. OWN</text>
+          <text x="160" y="276" text-anchor="end" font-size="10" fill="#c8a04a">88 · v0.14</text>
+
+          <text x="220" y="138" text-anchor="end" font-weight="500">ANALYST MOM</text>
+          <text x="220" y="152" text-anchor="end" font-size="10" fill="#c8a04a">74 · v0.14</text>
+        </g>
+
+        <!-- Centre score badge -->
+        <g>
+          <circle cx="380" cy="300" r="40" fill="#fafaf7" stroke="rgba(14, 17, 22, 0.15)" stroke-width="1" />
+          <text x="380" y="298" text-anchor="middle" font-family="Fraunces, serif" font-size="22" font-weight="500" fill="#0e1116">61.2</text>
+          <text x="380" y="316" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="9" fill="#5b6470" letter-spacing="0.05em">COMPOSITE</text>
+        </g>
+
+        <!-- Engine version stamp -->
+        <text x="740" y="588" text-anchor="end" font-family="JetBrains Mono, monospace" font-size="10" fill="#8a929e" letter-spacing="0.04em">v0.13.0 · 09:14:32 BST</text>
+      </svg>
+    </div>
+
+    <div class="ticker-context">
+      <strong>AAPL</strong> · Apple Inc · A "Stable" call — strong on quality and institutional backing, soft on momentum and mean reversion. The engine doesn't care about brand recognition.
+    </div>
+
+  </div>
+
+  <!-- ─── 9-cell component strip ─── -->
+  <div class="components-strip-wrap">
+
+    <div class="strip-header">
+      <div class="strip-title">What we measure</div>
+      <div class="strip-engine"><span class="dot"></span>Scoring engine v0.13.0 → v0.14 (Yahoo pipeline)</div>
+    </div>
+
+    <div class="components-grid">
+
+      <!-- Row 1: Live (v0.13.0) -->
+      <div class="component-cell">
+        <div class="cell-index">01</div>
+        <div class="cell-name">Momentum</div>
+        <div class="cell-weight">Weight 0.35</div>
+        <div class="cell-desc">Price action, moving-average crossovers, RSI bands, trend strength over 20-, 50-, and 200-day windows.</div>
+      </div>
+
+      <div class="component-cell">
+        <div class="cell-index">02</div>
+        <div class="cell-name">Quality</div>
+        <div class="cell-weight">Weight 0.30</div>
+        <div class="cell-desc">Earnings consistency, P/E and PEG ratios, sales growth, return-on-equity, balance-sheet health.</div>
+      </div>
+
+      <div class="component-cell">
+        <div class="cell-index">03</div>
+        <div class="cell-name">Insider activity</div>
+        <div class="cell-weight">Weight 0.25</div>
+        <div class="cell-desc">Open-market buys and sells from SEC Form 4 filings. Cluster detection on coordinated insider action.</div>
+      </div>
+
+      <!-- Row 2: Live (v0.13.0) -->
+      <div class="component-cell">
+        <div class="cell-index">04</div>
+        <div class="cell-name">Mean reversion</div>
+        <div class="cell-weight">Weight 0.10</div>
+        <div class="cell-desc">Statistical distance from 52-week range, RSI extremes, 50-day moving average displacement.</div>
+      </div>
+
+      <div class="component-cell">
+        <div class="cell-index">05</div>
+        <div class="cell-name">Volume confirmation</div>
+        <div class="cell-weight">Weight 0.10</div>
+        <div class="cell-desc">Relative volume crossed with price-change direction. Four-tier scoring: climax, confirmed, mild, low.</div>
+      </div>
+
+      <div class="component-cell future">
+        <div class="cell-index">06</div>
+        <div class="cell-name">Earnings surprise</div>
+        <div class="cell-weight">Weight 0.125</div>
+        <div class="cell-desc">Beat or miss versus analyst consensus, weighted by surprise magnitude and recency.</div>
+      </div>
+
+      <!-- Row 3: Coming with v0.14 -->
+      <div class="component-cell future">
+        <div class="cell-index">07</div>
+        <div class="cell-name">Piotroski F-score</div>
+        <div class="cell-weight">Weight 0.125</div>
+        <div class="cell-desc">Nine-factor financial-strength composite covering profitability, leverage, and operating efficiency.</div>
+      </div>
+
+      <div class="component-cell future">
+        <div class="cell-index">08</div>
+        <div class="cell-name">Institutional ownership</div>
+        <div class="cell-weight">Weight 0.125</div>
+        <div class="cell-desc">13F-filed holdings percentage and concentration. Higher institutional backing = stronger conviction signal.</div>
+      </div>
+
+      <div class="component-cell future">
+        <div class="cell-index">09</div>
+        <div class="cell-name">Analyst momentum</div>
+        <div class="cell-weight">Weight 0.125</div>
+        <div class="cell-desc">Direction and magnitude of analyst rating changes over the trailing 90 days. Upgrades weighted heavier than downgrades.</div>
+      </div>
+
+    </div>
+
+  </div>
+
+  <!-- ─── Modifiers row ─── -->
+  <div class="modifiers-row">
+
+    <div class="modifier-card">
+      <div class="modifier-eyebrow">Modifier 01 · Additive</div>
+      <div class="modifier-name">Legal risk<span class="penalty">−5 to −60</span></div>
+      <div class="modifier-desc">SEC EDGAR-sourced classification across six tiers, from minor disclosures to active criminal proceedings. Applied as a direct penalty before clamping.</div>
+    </div>
+
+    <div class="modifier-card">
+      <div class="modifier-eyebrow">Modifier 02 · Additive</div>
+      <div class="modifier-name">Bankruptcy risk<span class="penalty">0 to −60</span></div>
+      <div class="modifier-desc">Altman Z-score across four tiers. All-or-nothing — any missing input zeroes the penalty. Distinct from broader quality scoring.</div>
+    </div>
+
+    <div class="modifier-card">
+      <div class="modifier-eyebrow">Modifier 03 · Multiplicative</div>
+      <div class="modifier-name">Sector strength<span class="multiplier">±7.5%</span></div>
+      <div class="modifier-desc">Relative sector performance modifier. Strong sectors get a tailwind, weak sectors a headwind. Bounded so it shapes but never dominates.</div>
+    </div>
+
+  </div>
+
+  <!-- ─── Closing strip ─── -->
+  <div class="closing">
+    <div class="closing-text">
+      Sector-adjusted. Updated three times daily. Version-stamped on every score so you can
+      see which engine produced which call — and <em>which calls survived which engines</em>.
+    </div>
+    <div class="closing-cta">
+      <a href="#" class="closing-link">Read the full methodology →</a>
+      <span class="closing-meta">Engine v0.13.0 · 9 components in v0.14</span>
+    </div>
+  </div>
+
+</section>
+
+<div class="mockup-marker">SIGNALINTEL · SECTION 3 (METHODOLOGY) · MOCKUP V2</div>
+
+</body>
+</html>
