@@ -1026,10 +1026,16 @@ Logged-in app palette refinement (Option C locked):
 - Not a full rebrand — palette alignment only
 
 Implementation sequence (multi-session):
-1. Marketing homepage mockup (Section 3 + Section 4)
-2. Dashboard restructure mockup (Section 2 + Section 4)
-3. Methodology page mockup (Section 1 detail + Section 4)
-4. Per-page CC implementation (1-2 sessions per page after mockups locked)
+
+Mockup pass — status as of 18 May 2026:
+- ✅ Marketing homepage Hero v3 (banked 17 May 2026, commit 3d4ca9a)
+- ✅ Marketing homepage Section 2 / Transparency v1 (banked 18 May 2026, commit 7f8014d)
+- ✅ Marketing homepage Section 3 / Methodology v2 (banked 18 May 2026, commit 7f8014d)
+- ⏭️ NEXT: Dashboard restructure mockup (13-panel grid per brief Section 2 — above-the-fold 3x2 core, Elite-only Penny Stock spotlight full-width, below-the-fold 3x2). Highest-leverage next design problem because (a) Dashboard is the most-visited logged-in page once paywall lands, (b) it tests whether the Hybrid C palette refinement works in the dense, dark, monospace logged-in environment (only the light Public.com aesthetic has been proven so far), (c) the 13-panel grid is the hardest remaining design problem in the brief and better solved while context is fresh.
+- Pending: Marketing homepage Sections 4-8 (Discovery themes, Live proof stats, Pricing, Final CTA, Footer). Each is a variation on the now-locked design language; can be drafted as a batch later when ready to ship the full homepage to CC for implementation.
+- Pending: Methodology page mockup (Section 1 detail). Replaces /ratings, folds in /backtest as a tab.
+
+Per-page CC implementation: 1-2 sessions per page after mockups locked. Total surface remains ~6-10 CC sessions to ship the full restructure once mockups are in hand.
 
 ---
 
@@ -1349,6 +1355,16 @@ and main.py file description as the canonical invocation. Future
 restart prompts should use `python main.py scheduler`; bare `python
 main.py` will fail-fast with a usage message, which is the right
 ergonomics (the alternative would be silent misconfiguration).
+
+### Artefact description must match artefact bytes (18 May 2026 lesson)
+
+When banking design or reference artefacts (PNGs, mockup HTMLs, exported assets), the description in the commit message must be verified against the actual file on disk before the prompt is fired, not after CC catches a mismatch. The 18 May 2026 brand-assets banking commit (7f8014d) caught this empirically: Athena described `Signal_Vault_Brand_System.png` to CC as a richer asset (lockup variations, family system previews, four future-product accent colours) than what landed on disk. The file was byte-identical to the morning's `The_Signal_Vault_Brand_Map.png` (MD5 ac994315e52251040cc409250660b6c0 for both). Git's rename detection saw it; the staged diff showed a 100%-similarity rename, not a delete-plus-add. CC honoured the STOP-on-staging-anomaly gate and surfaced the discrepancy before commit.
+
+The lesson is symmetric with the 14 May "diagnose before alarming" entry but applied to Athena's artefact descriptions rather than CC's gate output. Both lessons share the same root: P16 absolutism on empirical verification applies to anyone authoring text that asserts facts, including Athena. A quick `md5` or `git diff --stat -M` against the previous commit's version would have caught the byte-identity before Phase 1 ran. The verification gate worked exactly as designed; the meta-lesson is that the gate could have been pre-empted with one minute of disk-state checking before the prompt fired.
+
+Pattern for future design-artefact banking: before writing the commit message that describes a file's content, run `md5 <new_file>` and compare against `git show <last_commit>:<old_filename> | md5` if any prior version of the same conceptual asset exists in git history. If the hashes match, the description must reflect a rename or no-op, not a content upgrade.
+
+---
 
 ### Diagnose before alarming (14 May 2026 lesson)
 
