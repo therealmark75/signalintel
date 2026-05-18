@@ -348,11 +348,30 @@ def job_fmp_earnings():
     start = time.time()
     logger.info("JOB START: FMP earnings calendar")
     try:
-        from scrapers.fmp_scraper import job_refresh_earnings
+        from scrapers.fmp_scraper import job_refresh_earnings, FMPEntitlementError
+        from notifications.telegram import send_alert_rate_limited
         n = job_refresh_earnings(DATABASE_PATH, days_ahead=30)
         logger.info(f"JOB DONE: FMP Earnings | {n} records | {time.time()-start:.1f}s")
+        log_run(DATABASE_PATH, "fmp_earnings", "SUCCESS", n,
+                duration_s=time.time()-start)
+    except FMPEntitlementError as e:
+        logger.error(f"[JOB] FMP Earnings entitlement failure: {e}")
+        log_run(DATABASE_PATH, "fmp_earnings", "FAILED",
+                error_msg=f"FMP entitlement: {e}",
+                duration_s=time.time()-start)
+        send_alert_rate_limited(
+            (e.path, e.status_code),
+            f"🚨 SignalIntel — FMP entitlement failure\n\n"
+            f"Job: fmp_earnings\n"
+            f"Endpoint: /earnings-calendar\n"
+            f"Error: {e}\n\n"
+            f"Check FMP plan tier. Job suppressed until entitlement restored.",
+        )
     except Exception as e:
         logger.error(f"FMP Earnings FAILED: {e}")
+        log_run(DATABASE_PATH, "fmp_earnings", "FAILED",
+                error_msg=str(e),
+                duration_s=time.time()-start)
 
 
 def job_fmp_dividends():
@@ -360,11 +379,30 @@ def job_fmp_dividends():
     start = time.time()
     logger.info("JOB START: FMP dividend refresh")
     try:
-        from scrapers.fmp_scraper import job_refresh_dividends
+        from scrapers.fmp_scraper import job_refresh_dividends, FMPEntitlementError
+        from notifications.telegram import send_alert_rate_limited
         n = job_refresh_dividends(DATABASE_PATH)
         logger.info(f"JOB DONE: FMP Dividends | {n} records | {time.time()-start:.1f}s")
+        log_run(DATABASE_PATH, "fmp_dividends", "SUCCESS", n,
+                duration_s=time.time()-start)
+    except FMPEntitlementError as e:
+        logger.error(f"[JOB] FMP Dividends entitlement failure: {e}")
+        log_run(DATABASE_PATH, "fmp_dividends", "FAILED",
+                error_msg=f"FMP entitlement: {e}",
+                duration_s=time.time()-start)
+        send_alert_rate_limited(
+            (e.path, e.status_code),
+            f"🚨 SignalIntel — FMP entitlement failure\n\n"
+            f"Job: fmp_dividends\n"
+            f"Endpoint: /dividends\n"
+            f"Error: {e}\n\n"
+            f"Check FMP plan tier. Job suppressed until entitlement restored.",
+        )
     except Exception as e:
         logger.error(f"FMP Dividends FAILED: {e}")
+        log_run(DATABASE_PATH, "fmp_dividends", "FAILED",
+                error_msg=str(e),
+                duration_s=time.time()-start)
 
 
 def job_daily_summary():
@@ -765,12 +803,32 @@ def main():
 
         # Economic calendar refresh (daily, 06:30)
         def job_economic_calendar():
+            start = time.time()
             try:
-                from scrapers.fmp_scraper import refresh_economic_calendar
+                from scrapers.fmp_scraper import refresh_economic_calendar, FMPEntitlementError
+                from notifications.telegram import send_alert_rate_limited
                 n = refresh_economic_calendar(DATABASE_PATH)
                 logger.info(f"[JOB] Economic calendar: {n} events saved")
+                log_run(DATABASE_PATH, "economic_calendar", "SUCCESS", n,
+                        duration_s=time.time()-start)
+            except FMPEntitlementError as e:
+                logger.error(f"[JOB] Economic calendar entitlement failure: {e}")
+                log_run(DATABASE_PATH, "economic_calendar", "FAILED",
+                        error_msg=f"FMP entitlement: {e}",
+                        duration_s=time.time()-start)
+                send_alert_rate_limited(
+                    (e.path, e.status_code),
+                    f"🚨 SignalIntel — FMP entitlement failure\n\n"
+                    f"Job: economic_calendar\n"
+                    f"Endpoint: /economic-calendar\n"
+                    f"Error: {e}\n\n"
+                    f"Check FMP plan tier. Job suppressed until entitlement restored.",
+                )
             except Exception as e:
                 logger.error(f"[JOB] Economic calendar error: {e}")
+                log_run(DATABASE_PATH, "economic_calendar", "FAILED",
+                        error_msg=str(e),
+                        duration_s=time.time()-start)
 
         scheduler.add_job(
             job_economic_calendar,
