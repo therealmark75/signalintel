@@ -1,0 +1,146 @@
+#!/usr/bin/env bash
+# Auth-adjacent pre-commit hook — P23 mechanical enforcement.
+# Tracked source: scripts/git-hooks/pre-commit
+# Activated copy: .git/hooks/pre-commit (symlink, via scripts/install-hooks.sh)
+# See CLAUDE.md and PROJECT_CONTEXT.md P23 for the discipline this enforces.
+
+set -u
+
+# Defensive: git never passes args to pre-commit. install-hooks.sh probes
+# the executable bit via --self-test. Any args → harmless no-op + exit 0.
+if [[ $# -gt 0 ]]; then
+    echo "pre-commit hook is installed"
+    exit 0
+fi
+
+# --- File-path triggers (locked Phase 1) ---
+FILE_PATH_LITERAL=(
+    "web/app.py"
+    "config/tiers.py"
+    "tests/conftest.py"
+)
+FILE_PATH_GLOBS=(
+    "web/auth*.py"
+    "web/login*.py"
+    "web/session*.py"
+)
+
+# Conditional test-file trigger: tests/test_*.py only counts if its diff
+# contains session_transaction or sess[ (closes the Phase 1 A.1 gap).
+CONDITIONAL_TEST_GLOB="tests/test_*.py"
+CONDITIONAL_TEST_PATTERN='session_transaction|sess\['
+
+# Application-code scope for diff-content matching. Excludes scripts/ so
+# the hook does not match its own source on installation commits.
+APP_PATH_REGEX='^(web/|config/|tests/|signals/|scrapers/|database/|main\.py$)'
+
+# Diff-content patterns (locked Phase 1).
+CONTENT_REGEX='current_user\b|@login_required\b|session\[|\.session_transaction\b|\bsess\s*\[|def[[:space:]]+(login|logout|register|authenticate|login_required|current_user)[[:space:]]*\(|def[[:space:]]+(_set_user_tier|_get_user_tier)\b|app\.route\(.*"/(login|logout|register)"'
+
+# --- Collect staged paths ---
+STAGED_PATHS=()
+while IFS= read -r line; do
+    [[ -n "$line" ]] && STAGED_PATHS+=("$line")
+done < <(git diff --cached --name-only --diff-filter=ACMR)
+
+if [[ ${#STAGED_PATHS[@]} -eq 0 ]]; then
+    exit 0
+fi
+
+MATCHED=()
+
+path_matches_literal() {
+    local path="$1" lit
+    for lit in "${FILE_PATH_LITERAL[@]}"; do
+        [[ "$path" == "$lit" ]] && return 0
+    done
+    return 1
+}
+
+path_matches_glob() {
+    local path="$1" g
+    for g in "${FILE_PATH_GLOBS[@]}"; do
+        # shellcheck disable=SC2053
+        [[ "$path" == $g ]] && return 0
+    done
+    return 1
+}
+
+path_matches_conditional_test() {
+    local path="$1"
+    # shellcheck disable=SC2053
+    [[ "$path" == $CONDITIONAL_TEST_GLOB ]] || return 1
+    git diff --cached -U0 -- "$path" 2>/dev/null \
+        | grep -E '^\+' | grep -vE '^\+\+\+' \
+        | grep -qE "$CONDITIONAL_TEST_PATTERN"
+}
+
+# --- Pass 1: file-path triggers ---
+for p in "${STAGED_PATHS[@]}"; do
+    if path_matches_literal "$p" \
+        || path_matches_glob "$p" \
+        || path_matches_conditional_test "$p"; then
+        MATCHED+=("$p")
+    fi
+done
+
+# --- Pass 2: diff-content triggers on application Python paths ---
+for p in "${STAGED_PATHS[@]}"; do
+    skip=0
+    for m in "${MATCHED[@]:-}"; do
+        [[ "$p" == "$m" ]] && { skip=1; break; }
+    done
+    [[ $skip -eq 1 ]] && continue
+    [[ "$p" =~ $APP_PATH_REGEX ]] || continue
+    [[ "$p" == *.py ]] || continue
+    if git diff --cached -U0 -- "$p" 2>/dev/null \
+        | grep -E '^\+' | grep -vE '^\+\+\+' \
+        | grep -qE "$CONTENT_REGEX"; then
+        MATCHED+=("$p")
+    fi
+done
+
+# --- If still empty, non-auth-adjacent commit → silent pass ---
+if [[ ${#MATCHED[@]} -eq 0 ]]; then
+    exit 0
+fi
+
+# --- Header + diff + P23 reminder ---
+echo ""
+echo "============================================"
+echo "AUTH-ADJACENT CHANGE DETECTED"
+echo "============================================"
+git diff --cached -- "${MATCHED[@]}"
+echo "============================================"
+echo "P23 (PROJECT_CONTEXT.md): auth-adjacent side-effects require"
+echo "explicit escalation in audit, not just disclosure."
+echo "Matched files:"
+for m in "${MATCHED[@]}"; do
+    echo "  - $m"
+done
+echo "============================================"
+
+# --- Open /dev/tty on FD 3 for interactive confirmation ---
+if ! { exec 3</dev/tty; } 2>/dev/null; then
+    echo "" >&2
+    echo "ERROR: No controlling terminal available." >&2
+    echo "Auth-adjacent commits MUST be confirmed interactively." >&2
+    echo "" >&2
+    echo "If you are running in a non-interactive context (CC, CI, scripted commit):" >&2
+    echo "  - escalate the change in the commit audit table FIRST (P23)" >&2
+    echo "  - then bypass with: git commit --no-verify" >&2
+    echo "  - --no-verify leaves an audit signal (no 'pre-commit verified' trace)" >&2
+    exit 1
+fi
+
+printf "Continue commit? [y/N] " >/dev/tty
+read -r REPLY <&3
+exec 3<&-
+
+case "${REPLY:-}" in
+    y|Y|yes|YES) exit 0 ;;
+    *)
+        echo "Commit aborted by pre-commit hook." >&2
+        exit 1
+        ;;
+esac
