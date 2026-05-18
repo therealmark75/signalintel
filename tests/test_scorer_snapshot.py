@@ -111,7 +111,7 @@ _SYNTHETIC_ROWS = [
     # so reversion_score stays low (~15) and does not trip the reversion >= 75 HOLD branch.
     # insider_score = 0 (CEO+CFO+Chairman all selling).
     # Phase 2b-ii: enrichment maps drive earnings/piotroski/analyst_mom to worst tier;
-    # Altman Z < 0 (market_cap "240M" + distressed balance sheet) → altman_penalty = -60.
+    # Altman Z'' < 0 (market_cap "240M" + distressed balance sheet) → altman_penalty = -60.
     # Combined: composite ~19 before Altman, clamped to 0 after -60 penalty → STRONG_SELL.
     {"ticker": "SS07", "company": "StrongSell Corp", "sector": "Financials",
      "price": 20.0, "change_pct": -2.5, "sma_50_pct": -7.0, "sma_200_pct": -20.0,
@@ -202,7 +202,7 @@ _SYNTHETIC_SECTOR_MAP = {
 # ── Phase 2b-ii enrichment maps ───────────────────────────────────────────────
 # Only SS07 has enrichment data — all other tickers remain P5 neutral (50.0/0).
 # SS07: 4 quarters of extreme misses (earnings → 0), Piotroski F=2 (→ 20),
-#        analyst net=-4 (→ 20), Altman Z≈-0.25 (market_cap "240M") → penalty -60.
+#        analyst net=-4 (→ 20), Altman Z'' ≈ -6.20 (market_cap "240M") → penalty -60.
 # Combined effect: raw composite ~19 before Altman, clamped to 0 after -60 → STRONG_SELL.
 
 _SYNTHETIC_EARNINGS_MAP = {
@@ -218,7 +218,7 @@ _SYNTHETIC_FINANCIALS_MAP = {
     "SS07": {
         # 2 fiscal years required so Piotroski Lock 1 (< 2 years) does not trigger.
         # Y0=2024: F=2 (only F4 OCF>NI and F9 asset-turnover pass); → piotroski_score=20.
-        # Altman (Y0=2024): Z≈-0.25 (distress zone) → altman_penalty=-60.
+        # Altman (Y0=2024): Z'' ≈ -6.20 (deep distress, Z'' < 0) → altman_penalty=-60.
         "INCOME": {
             "2024": {"NetIncome": -50_000_000, "TotalRevenue": 200_000_000, "GrossProfit": 20_000_000, "EBIT": -45_000_000},
             "2023": {"NetIncome": -10_000_000, "TotalRevenue": 220_000_000, "GrossProfit": 35_000_000, "EBIT":  -5_000_000},
@@ -276,6 +276,8 @@ _SYNTHETIC_ANALYST_MOM_MAP = {
 # Composite weights rebalanced 1.10 → 1.60-sum; Altman applied as additive penalty.
 # SS07 now exercises all 4 enrichment paths: earnings=0, piotroski=20, altman_pen=-60,
 #       analyst_mom=20 → composite clamped to 0.0 → STRONG_SELL ✓
+# v0.14.0: methodology switched from classic Z (1968) to Altman Z'' (1995). SS07's
+#       Z'' = -6.20 (was Z = -0.25); penalty unchanged at -60, snapshot row unchanged.
 # SN12/SL11 dropped from BUY → STRONG_HOLD (neutral pull from new 50.0 components;
 #             they remain sector-modifier coverage tickers, not tier-specific).
 # Re-generate with: python -c "from tests.test_scorer_snapshot import _SYNTHETIC_ROWS, ..."

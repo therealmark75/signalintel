@@ -223,22 +223,24 @@ def _altman_fin(wc, ta, re, ebit, tl, rev, year="2025"):
 
 
 def test_altman_populated_positive_safe():
-    """Z >> 3.0 (safe zone) → 0 penalty.
+    """Z'' >> 2.6 (safe zone) → 0 penalty.
 
-    Catches: safe-zone check missing (returns -10 when Z is clearly safe).
-    Ignores: boundary at exactly 3.0 (edge test below).
+    Catches: safe-zone check missing (returns -10 when Z'' is clearly safe).
+    Ignores: boundary at exactly 2.6 (edge test below).
     """
-    # X4 = 3000e9/80e9 = 37.5 → Z >> 3
+    # X4 = 3000e9/80e9 = 37.5 → Z'' >> 2.6 (Z'' ≈ 43.6)
     fin = _altman_fin(wc=90e9, ta=350e9, re=120e9, ebit=75e9, tl=80e9, rev=400e9)
     assert score_altman_penalty("AAPL", fin, "3000B") == 0
 
 
 def test_altman_populated_negative_distressed():
-    """Z < 0 → maximum penalty -60.
+    """Z'' < 0.0 → maximum penalty -60 (deep distress tier).
 
-    Catches: distress zone not returning -60.
-    Ignores: intermediate zones (tested in edge test).
+    Catches: deep-distress tier not returning -60. Four-tier penalty model
+    preserves Z'' < 0 as the most-severe tier (Z'' [0.0, 1.1) yields only -30).
+    Ignores: intermediate zones (covered by grey-zone and distress tests).
     """
+    # Z'' ≈ -4.24 → Z'' < 0.0 → -60
     fin = _altman_fin(wc=-50e9, ta=200e9, re=-100e9, ebit=-30e9, tl=300e9, rev=150e9)
     assert score_altman_penalty("AAPL", fin, "10B") == -60
 
@@ -265,14 +267,20 @@ def test_altman_partial_missing_one_key():
 
 
 def test_altman_grey_zone_minus10():
-    """1.8 <= Z < 3.0 → -10 penalty (grey zone).
+    """1.1 <= Z'' < 2.6 → -10 penalty (grey zone).
 
     Catches: grey-zone tier missing or returning wrong penalty.
     Ignores: safe and distress zones.
+
+    Note: under classic Z these inputs yielded Z=2.66 (grey); under Z'' the
+    same inputs yield Z''=3.917 (safe). Inputs updated for SCORING_ENGINE_VERSION
+    0.14.0 to keep grey-zone coverage: tl=200e9 + mc="50B" reduces X4 to 0.25
+    and lands Z''=2.0795 squarely inside [1.1, 2.6). rev=160e9 retained as a
+    no-op (Z'' does not consume revenue) for fixture-shape stability.
     """
-    # X1=0.10, X2=0.15, X3=0.10, X4=2.0, X5=0.80 → Z≈2.66
-    fin = _altman_fin(wc=20e9, ta=200e9, re=30e9, ebit=20e9, tl=100e9, rev=160e9)
-    result = score_altman_penalty("AAPL", fin, "200B")
+    # X1=0.10, X2=0.15, X3=0.10, X4=0.25 → Z'' ≈ 2.0795
+    fin = _altman_fin(wc=20e9, ta=200e9, re=30e9, ebit=20e9, tl=200e9, rev=160e9)
+    result = score_altman_penalty("AAPL", fin, "50B")
     assert result == -10
 
 

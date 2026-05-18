@@ -519,14 +519,27 @@ def compute_z_double_prime_raw(
 
 
 def score_altman_penalty(ticker: str, financials: dict, market_cap_text) -> int:
-    """Altman Z-Score additive penalty (0, -10, -30, -60).
+    """Altman Z'' (1995 non-manufacturing) additive penalty (0, -10, -30, -60).
 
     All-or-nothing: any required value missing → return 0 (no penalty).
-    X4 uses TotalLiabilitiesNetMinorityInterest (classic Altman formula).
+    X4 uses TotalLiabilitiesNetMinorityInterest (classic Altman formula
+    convention preserved).
 
-    Catches: financial distress (Z < 1.8 = distress zone).
-    Ignores: companies with incomplete financial data — no penalty, never punish missing data.
+    Catches: financial distress (Z'' < 1.1 = distress zone).
+    Ignores: companies with incomplete financial data — no penalty, never
+    punish missing data.
     P5: empty financials → returns 0.
+
+    Methodology: Altman Z'' (1995). Switched from classic Z (1968 manufacturing)
+    in SCORING_ENGINE_VERSION 0.14.0 because the 1968 formula penalised 62.9%
+    of the SignalIntel universe; Z'' reduces this to 47.8% with a more
+    appropriate calibration for non-manufacturing companies.
+
+    Tier mapping (4 tiers preserved for backward-compatible penalty magnitudes):
+        Z'' >= 2.6        : safe,           penalty 0
+        1.1 <= Z'' < 2.6  : grey,           penalty -10
+        0.0 <= Z'' < 1.1  : distress,       penalty -30
+        Z'' < 0.0         : deep distress,  penalty -60
     """
     all_years: set = set()
     for stmt_data in financials.values():
@@ -541,20 +554,19 @@ def score_altman_penalty(ticker: str, financials: dict, market_cap_text) -> int:
         stmt_type, raw_key = ALTMAN_LOOKUPS[canonical_key]
         return financials.get(stmt_type, {}).get(y0, {}).get(raw_key)
 
-    z = compute_z_raw(
+    z = compute_z_double_prime_raw(
         working_capital   = _get("working_capital"),
         total_assets      = _get("total_assets"),
         retained_earnings = _get("retained_earnings"),
         ebit              = _get("ebit"),
         total_liabilities = _get("total_liabilities"),
-        total_revenue     = _get("total_revenue"),
         market_cap        = _parse_market_cap_text(market_cap_text),
     )
     if z is None:
         return 0
 
-    if z >= 3.0:  return 0
-    if z >= 1.8:  return -10
+    if z >= 2.6:  return 0
+    if z >= 1.1:  return -10
     if z >= 0.0:  return -30
     return -60
 
