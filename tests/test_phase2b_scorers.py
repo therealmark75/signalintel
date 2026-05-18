@@ -18,6 +18,7 @@ from signals.scorer import (
     score_piotroski,
     score_altman_penalty,
     compute_z_raw,
+    compute_z_double_prime_raw,
     score_inst_ownership,
     score_analyst_momentum,
     _parse_market_cap_text,
@@ -422,6 +423,126 @@ def test_compute_z_raw_kwargs_only_enforced():
     """
     with pytest.raises(TypeError):
         compute_z_raw(20e9, 200e9, 30e9, 20e9, 100e9, 160e9, 200e9)
+
+
+# ── compute_z_double_prime_raw helper ─────────────────────────────────────────
+
+def test_compute_z_double_prime_grey_zone_known_value():
+    """Same inputs as classic-Z grey-zone test → Z'' = 3.917 (safe under Z'').
+
+    Hand-computed: x1=0.10 x2=0.15 x3=0.10 x4=2.00 →
+    Z'' = 6.56*0.10 + 3.26*0.15 + 6.72*0.10 + 1.05*2.00
+        = 0.656 + 0.489 + 0.672 + 2.10
+        = 3.917.
+
+    Note: the SAME numerical input set that yields classic Z = 2.66 (grey)
+    yields Z'' = 3.917 (safe). This illustrates that Z'' is more forgiving
+    than classic Z for the same firm — the empirical justification for the
+    Phase 2c calibration switch.
+
+    Catches: coefficient typo, ratio inversion, X5 accidentally included.
+    Ignores: bin mapping (no penalty logic in this helper).
+    """
+    z = compute_z_double_prime_raw(
+        working_capital   = 20e9,
+        total_assets      = 200e9,
+        retained_earnings = 30e9,
+        ebit              = 20e9,
+        total_liabilities = 100e9,
+        market_cap        = 200e9,
+    )
+    assert z == pytest.approx(3.917, abs=1e-4)
+
+
+def test_compute_z_double_prime_safe_zone():
+    """Healthy inputs produce Z'' = 34.154 (deep safe zone).
+
+    Hand-computed: x1=0.5 x2=0.8 x3=0.3 x4=25.0 →
+    Z'' = 6.56*0.5 + 3.26*0.8 + 6.72*0.3 + 1.05*25.0
+        = 3.28 + 2.608 + 2.016 + 26.25
+        = 34.154.
+
+    Catches: helper returning None or clipped value for healthy inputs.
+    Ignores: where in the safe zone — only that Z'' >= 2.6.
+    """
+    z = compute_z_double_prime_raw(
+        working_capital   = 50e9,
+        total_assets      = 100e9,
+        retained_earnings = 80e9,
+        ebit              = 30e9,
+        total_liabilities = 20e9,
+        market_cap        = 500e9,
+    )
+    assert z == pytest.approx(34.154, abs=1e-4)
+    assert z >= 2.6
+
+
+def test_compute_z_double_prime_distress_zone():
+    """Distress inputs produce Z'' < 1.1 (Z'' distress zone).
+
+    Hand-computed: x1=0.025 x2=0.010 x3=0.015 x4=50/180≈0.2778 →
+    Z'' = 6.56*0.025 + 3.26*0.010 + 6.72*0.015 + 1.05*0.27777...
+        = 0.164 + 0.0326 + 0.1008 + 0.291666...
+        ≈ 0.589066.
+
+    Catches: negative-x4 reflection bug; coefficient swap with classic Z.
+    Ignores: penalty magnitude (Phase 2d scope).
+    """
+    z = compute_z_double_prime_raw(
+        working_capital   = 5e9,
+        total_assets      = 200e9,
+        retained_earnings = 2e9,
+        ebit              = 3e9,
+        total_liabilities = 180e9,
+        market_cap        = 50e9,
+    )
+    assert z == pytest.approx(0.58907, abs=1e-4)
+    assert z < 1.1
+
+
+_ALTMAN_DOUBLE_PRIME_VALID_INPUTS = {
+    "working_capital":   20e9,
+    "total_assets":      200e9,
+    "retained_earnings": 30e9,
+    "ebit":              20e9,
+    "total_liabilities": 100e9,
+    "market_cap":        200e9,
+}
+
+
+@pytest.mark.parametrize("missing_key", list(_ALTMAN_DOUBLE_PRIME_VALID_INPUTS.keys()))
+def test_compute_z_double_prime_none_when_input_missing(missing_key):
+    """Any single None input → return None (all-or-nothing semantic).
+
+    Catches: helper silently substituting 0 for None on any of the 6 inputs.
+    Ignores: which input is missing — the contract is binary.
+    """
+    inputs = dict(_ALTMAN_DOUBLE_PRIME_VALID_INPUTS)
+    inputs[missing_key] = None
+    assert compute_z_double_prime_raw(**inputs) is None
+
+
+@pytest.mark.parametrize("zero_key", ["total_assets", "total_liabilities"])
+def test_compute_z_double_prime_none_when_zero_denominator(zero_key):
+    """total_assets=0 or total_liabilities=0 → return None (would divide by zero).
+
+    Catches: ZeroDivisionError raised instead of None returned.
+    Ignores: other inputs (covered by missing-input parametrization).
+    """
+    inputs = dict(_ALTMAN_DOUBLE_PRIME_VALID_INPUTS)
+    inputs[zero_key] = 0
+    assert compute_z_double_prime_raw(**inputs) is None
+
+
+def test_compute_z_double_prime_kwargs_only_enforced():
+    """compute_z_double_prime_raw() rejects positional args via `*,` separator.
+
+    Catches: drift to positional signature, which would silently accept
+    argument-swap (e.g. wc↔ta) and produce plausible-but-wrong Z'' values.
+    Ignores: keyword-arg behaviour (covered by every other test in this set).
+    """
+    with pytest.raises(TypeError):
+        compute_z_double_prime_raw(20e9, 200e9, 30e9, 20e9, 100e9, 200e9)
 
 
 # ── score_inst_ownership ──────────────────────────────────────────────────────

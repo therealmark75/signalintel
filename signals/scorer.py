@@ -474,6 +474,50 @@ def compute_z_raw(
     return 1.2 * x1 + 1.4 * x2 + 3.3 * x3 + 0.6 * x4 + 1.0 * x5
 
 
+def compute_z_double_prime_raw(
+    *,
+    working_capital: "float | None",
+    total_assets: "float | None",
+    retained_earnings: "float | None",
+    ebit: "float | None",
+    total_liabilities: "float | None",
+    market_cap: "float | None",
+) -> "float | None":
+    """Compute Altman Z'' (1995 non-manufacturing variant) from hydrated inputs.
+
+    Drops X5 (sales/total_assets) which is the most manufacturing-specific
+    ratio in the classic 1968 formula. Reweights the remaining four ratios
+    for non-manufacturing companies.
+
+    Returns None if any input is None or if total_assets / total_liabilities
+    are zero. Otherwise returns the unrounded Z'' value.
+
+    Altman Z'' formula:
+        Z'' = 6.56*x1 + 3.26*x2 + 6.72*x3 + 1.05*x4
+    where
+        x1 = working_capital   / total_assets
+        x2 = retained_earnings / total_assets
+        x3 = ebit              / total_assets
+        x4 = market_cap        / total_liabilities
+
+    Bins (different from classic Z):
+        Z'' < 1.1       : distress
+        1.1 <= Z'' < 2.6 : grey zone
+        Z'' >= 2.6      : safe
+    """
+    inputs = (working_capital, total_assets, retained_earnings, ebit,
+              total_liabilities, market_cap)
+    if any(v is None for v in inputs):
+        return None
+    if total_assets == 0 or total_liabilities == 0:
+        return None
+    x1 = working_capital   / total_assets
+    x2 = retained_earnings / total_assets
+    x3 = ebit              / total_assets
+    x4 = market_cap        / total_liabilities
+    return 6.56 * x1 + 3.26 * x2 + 6.72 * x3 + 1.05 * x4
+
+
 def score_altman_penalty(ticker: str, financials: dict, market_cap_text) -> int:
     """Altman Z-Score additive penalty (0, -10, -30, -60).
 
