@@ -17,6 +17,7 @@ from signals.scorer import (
     score_earnings_surprise,
     score_piotroski,
     score_altman_penalty,
+    compute_z_raw,
     score_inst_ownership,
     score_analyst_momentum,
     _parse_market_cap_text,
@@ -272,6 +273,155 @@ def test_altman_grey_zone_minus10():
     fin = _altman_fin(wc=20e9, ta=200e9, re=30e9, ebit=20e9, tl=100e9, rev=160e9)
     result = score_altman_penalty("AAPL", fin, "200B")
     assert result == -10
+
+
+# ── compute_z_raw helper ──────────────────────────────────────────────────────
+
+def test_compute_z_raw_grey_zone_known_value():
+    """Synthetic grey-zone inputs produce Z = 2.6600 exactly.
+
+    Same numerical set used by test_altman_grey_zone_minus10 — verifies the
+    pure-math helper produces the value the penalty tier relies on. 4-decimal
+    tolerance because IEEE 754 sum-of-products may drift in the LSB.
+
+    Catches: formula drift (coefficient typo, ratio inversion).
+    Ignores: penalty-tier mapping (tested by score_altman_penalty tests).
+    """
+    z = compute_z_raw(
+        working_capital   = 20e9,
+        total_assets      = 200e9,
+        retained_earnings = 30e9,
+        ebit              = 20e9,
+        total_liabilities = 100e9,
+        total_revenue     = 160e9,
+        market_cap        = 200e9,
+    )
+    assert z == pytest.approx(2.6600, abs=1e-4)
+
+
+def test_compute_z_raw_safe_zone_healthy():
+    """Healthy inputs produce Z = 18.91 (deep safe zone, well above 3.0).
+
+    Computed by hand: x1=0.5 x2=0.8 x3=0.3 x4=25.0 x5=1.2 →
+    Z = 1.2*0.5 + 1.4*0.8 + 3.3*0.3 + 0.6*25.0 + 1.0*1.2 = 18.91.
+
+    Catches: helper returning None or a clipped value for healthy inputs.
+    Ignores: where in the safe zone — only that Z >= 3.0.
+    """
+    z = compute_z_raw(
+        working_capital   = 50e9,
+        total_assets      = 100e9,
+        retained_earnings = 80e9,
+        ebit              = 30e9,
+        total_liabilities = 20e9,
+        total_revenue     = 120e9,
+        market_cap        = 500e9,
+    )
+    assert z == pytest.approx(18.91, abs=1e-4)
+
+
+def test_compute_z_raw_distress_zone():
+    """Distress inputs (0 < Z < 1.8). Expected Z = 0.51017 to 5 d.p.
+
+    Computed: x1=0.025 x2=0.010 x3=0.015 x4=50/180 x5=0.25 →
+    Z = 0.03 + 0.014 + 0.0495 + 0.166666... + 0.25 = 0.510166...
+
+    Catches: negative-x4 reflection bug (some Altman impls treat MC/TL with
+    abs()); a sign-flipped x4 here would push Z out of [0, 1.8).
+    Ignores: penalty magnitude (-30); only the raw Z is asserted.
+    """
+    z = compute_z_raw(
+        working_capital   = 5e9,
+        total_assets      = 200e9,
+        retained_earnings = 2e9,
+        ebit              = 3e9,
+        total_liabilities = 180e9,
+        total_revenue     = 50e9,
+        market_cap        = 50e9,
+    )
+    assert z == pytest.approx(0.51017, abs=1e-4)
+    assert 0.0 <= z < 1.8
+
+
+def test_compute_z_raw_deep_distress_negative():
+    """Deep-distress inputs produce Z = -0.903 (Z < 0 zone).
+
+    Computed: x1=-0.10 x2=-0.25 x3=-0.15 x4=0.02 x5=0.05 →
+    Z = -0.12 + -0.35 + -0.495 + 0.012 + 0.05 = -0.903.
+
+    Catches: helper clamping to 0 (it must not — pure math, no clamp).
+    Ignores: penalty magnitude (-60).
+    """
+    z = compute_z_raw(
+        working_capital   = -20e9,
+        total_assets      = 200e9,
+        retained_earnings = -50e9,
+        ebit              = -30e9,
+        total_liabilities = 250e9,
+        total_revenue     = 10e9,
+        market_cap        = 5e9,
+    )
+    assert z == pytest.approx(-0.903, abs=1e-4)
+    assert z < 0.0
+
+
+_ALTMAN_VALID_INPUTS = {
+    "working_capital":   20e9,
+    "total_assets":      200e9,
+    "retained_earnings": 30e9,
+    "ebit":              20e9,
+    "total_liabilities": 100e9,
+    "total_revenue":     160e9,
+    "market_cap":        200e9,
+}
+
+
+@pytest.mark.parametrize("missing_key", list(_ALTMAN_VALID_INPUTS.keys()))
+def test_compute_z_raw_none_when_input_missing(missing_key):
+    """Any single None input → return None (all-or-nothing semantic).
+
+    Catches: helper silently substituting 0 for None on any input. Substituted
+    zero would yield a wrong Z (e.g. None for market_cap → x4=0 → Z low and
+    wrongly distress-coded).
+    Ignores: which input is missing — the contract is binary, not per-input.
+    """
+    inputs = dict(_ALTMAN_VALID_INPUTS)
+    inputs[missing_key] = None
+    assert compute_z_raw(**inputs) is None
+
+
+def test_compute_z_raw_none_when_total_assets_zero():
+    """total_assets = 0 → return None (zero denominator would explode).
+
+    Catches: division-by-zero raised instead of None returned.
+    Ignores: other inputs being None (covered by parametrized test above).
+    """
+    inputs = dict(_ALTMAN_VALID_INPUTS)
+    inputs["total_assets"] = 0
+    assert compute_z_raw(**inputs) is None
+
+
+def test_compute_z_raw_none_when_total_liabilities_zero():
+    """total_liabilities = 0 → return None (x4 denominator is zero).
+
+    Catches: division-by-zero raised instead of None returned.
+    Ignores: other inputs being None (covered by parametrized test above).
+    """
+    inputs = dict(_ALTMAN_VALID_INPUTS)
+    inputs["total_liabilities"] = 0
+    assert compute_z_raw(**inputs) is None
+
+
+def test_compute_z_raw_kwargs_only_enforced():
+    """compute_z_raw() rejects positional args via the `*,` separator.
+
+    Catches: drift to positional signature, which would silently accept
+    argument-swap (e.g. swap working_capital and total_assets) and produce
+    plausible-but-wrong Z values at scale.
+    Ignores: keyword-arg behaviour (covered by every other test in this set).
+    """
+    with pytest.raises(TypeError):
+        compute_z_raw(20e9, 200e9, 30e9, 20e9, 100e9, 160e9, 200e9)
 
 
 # ── score_inst_ownership ──────────────────────────────────────────────────────

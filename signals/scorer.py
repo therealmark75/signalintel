@@ -432,6 +432,48 @@ def score_piotroski(ticker: str, financials: dict) -> float:
     return 20.0
 
 
+def compute_z_raw(
+    *,
+    working_capital: "float | None",
+    total_assets: "float | None",
+    retained_earnings: "float | None",
+    ebit: "float | None",
+    total_liabilities: "float | None",
+    total_revenue: "float | None",
+    market_cap: "float | None",
+) -> "float | None":
+    """Compute raw Altman Z-Score from already-hydrated inputs.
+
+    Returns None if any input is None or if total_assets / total_liabilities
+    are zero (division would explode). Otherwise returns the unrounded Z value.
+
+    Pure-math separation of the formula from the database hydration and the
+    penalty-tier mapping. Reused by score_altman_penalty() and by the
+    Phase 2b distribution analysis script.
+
+    Classic 1968 Altman manufacturing formula:
+        Z = 1.2*x1 + 1.4*x2 + 3.3*x3 + 0.6*x4 + 1.0*x5
+    where
+        x1 = working_capital   / total_assets
+        x2 = retained_earnings / total_assets
+        x3 = ebit              / total_assets
+        x4 = market_cap        / total_liabilities
+        x5 = total_revenue     / total_assets
+    """
+    inputs = (working_capital, total_assets, retained_earnings, ebit,
+              total_liabilities, total_revenue, market_cap)
+    if any(v is None for v in inputs):
+        return None
+    if total_assets == 0 or total_liabilities == 0:
+        return None
+    x1 = working_capital   / total_assets
+    x2 = retained_earnings / total_assets
+    x3 = ebit              / total_assets
+    x4 = market_cap        / total_liabilities
+    x5 = total_revenue     / total_assets
+    return 1.2 * x1 + 1.4 * x2 + 3.3 * x3 + 0.6 * x4 + 1.0 * x5
+
+
 def score_altman_penalty(ticker: str, financials: dict, market_cap_text) -> int:
     """Altman Z-Score additive penalty (0, -10, -30, -60).
 
@@ -455,26 +497,17 @@ def score_altman_penalty(ticker: str, financials: dict, market_cap_text) -> int:
         stmt_type, raw_key = ALTMAN_LOOKUPS[canonical_key]
         return financials.get(stmt_type, {}).get(y0, {}).get(raw_key)
 
-    wc  = _get("working_capital")
-    ta  = _get("total_assets")
-    re  = _get("retained_earnings")
-    eb  = _get("ebit")
-    tl  = _get("total_liabilities")
-    rev = _get("total_revenue")
-    mc  = _parse_market_cap_text(market_cap_text)
-
-    if any(v is None for v in (wc, ta, re, eb, tl, rev, mc)):
+    z = compute_z_raw(
+        working_capital   = _get("working_capital"),
+        total_assets      = _get("total_assets"),
+        retained_earnings = _get("retained_earnings"),
+        ebit              = _get("ebit"),
+        total_liabilities = _get("total_liabilities"),
+        total_revenue     = _get("total_revenue"),
+        market_cap        = _parse_market_cap_text(market_cap_text),
+    )
+    if z is None:
         return 0
-    if ta == 0 or tl == 0:
-        return 0
-
-    x1 = wc  / ta
-    x2 = re  / ta
-    x3 = eb  / ta
-    x4 = mc  / tl
-    x5 = rev / ta
-
-    z = 1.2 * x1 + 1.4 * x2 + 3.3 * x3 + 0.6 * x4 + 1.0 * x5
 
     if z >= 3.0:  return 0
     if z >= 1.8:  return -10
