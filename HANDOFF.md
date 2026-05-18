@@ -3,8 +3,9 @@
 **Tactical session state.** Updated end of each session. For stable
 project context (who/what/how), see `PROJECT_CONTEXT.md`.
 
-Last updated: 18 May 2026, end of session. Nine commits to origin/main today across three workstreams: morning FMP entitlement observability (three commits), afternoon design pass (one design-banking commit + earlier doc-banking + brand assets), and end-of-day banking. Mark away Tuesday 19 May + Wednesday 20 May, returning Thursday 21 May.
-Next session: Monday 18 May overnight bulk-job verification (financial_statements landing makes Altman Z distribution check actionable Thursday) + Tuesday 06:30 BST economic_calendar cron observation under new run_log + Telegram escalation. FRESH CHAT recommended Thursday return.
+Last updated: 18 May 2026, end of session. Substantial day: fourteen commits to origin/main across five workstreams. Morning FMP entitlement observability (3 commits), afternoon design pass (1 design + brand commit), end-of-day banking (1 commit), parallel-session auth-adjacent pre-commit hook with P23 mechanical enforcement (5 commits), housekeeping cleanup (2 commits), and the Altman methodology switch from classic Z (1968 manufacturing) to Altman Z'' (1995 non-manufacturing) — three Phase 2 sub-phases (3 commits) bumping SCORING_ENGINE_VERSION 0.13.0 → 0.14.0. Mark drove the session through to end-of-day without break.
+
+Next session: Tuesday 19 May. First action is Tuesday's 06:05 + 06:30 BST cron outcomes under the new FMP run_log observability that fires for the first time tomorrow morning. Second action is monitoring the first 0.14.0 scoring run (tonight's 20:00 BST scheduled job) for clean completion. Third action is Dashboard restructure mockup OR engineering pivot per Mark's call.
 
 ---
 
@@ -14,122 +15,143 @@ Next session: Monday 18 May overnight bulk-job verification (financial_statement
 
 - **7e8ce60** — feat(fmp): add FMPEntitlementError + Telegram alert dedup helper. New exception class mirrors FMPRateLimitError pattern. Rate-limited Telegram alert helper prevents repeat-notification floods.
 - **d5dea2a** — feat(scheduler): wire FMPEntitlementError + run_log into FMP handlers. All three FMP jobs (economic_calendar, fmp_earnings, fmp_dividends) now write SUCCESS or FAILED to run_log on every run + fire rate-limited Telegram alert on HTTP 402.
-- **9558e6a** — test(fmp): cover entitlement error escalation + Telegram dedup. Six new tests; total 247 passing (+6), 1 failed (test_fmp_economic_calendar_freshness, real production staleness, by-design red per P26), 1 skipped.
+- **9558e6a** — test(fmp): cover entitlement error escalation + Telegram dedup. Six new tests; total 247 passing, 1 failed (P26 by-design red), 1 skipped.
 
-Diagnostic origin: 18 May 06:30 BST economic_calendar cron returned HTTP 402 (FMP plan entitlement issue), swallowed silently for 11 days. Three-layer swallow: _get() returns None → fetch coerces to [] → job logs "0 events saved" → no run_log entry. Fix is observability, not entitlement repair. Scheduler restart via launchctl kickstart to pick up new code: PID 32257 → 86234. Banner verified v0.13.0 + HEAD 9558e6a + 11:33 BST start.
+Diagnostic origin: 18 May 06:30 BST economic_calendar cron returned HTTP 402, swallowed silently for 11 days. Three-layer swallow pattern. Fix is observability. Scheduler restart via launchctl kickstart: PID 32257 → 86234. Banner v0.13.0 + HEAD 9558e6a + 11:33 BST.
 
-Process notes from the morning block:
-- Gate 4 paste of new Python code surfaced what looked like broken syntax (orphan log_run calls). Diagnostic prompt re-elicited via sed/cat + py_compile — chat client had truncated continuation lines, source on disk intact. Symmetric with 14 May "diagnose before alarming" lesson.
-- CC condensed Gate 5 (test file paste) into a summary instead of pasting verbatim. Caught and corrected before commit — gate-report-condensation drift pattern from 14 May, mitigation held.
+### Block 2: Afternoon — Design pass (one strategy + brand + two mockups commit, pushed)
 
-### Block 2: Afternoon — Design pass (one strategy commit + brand + two mockups, all pushed)
+**Strategy session: Phase 2c + Phase 3 added to roadmap.** Beta tester Guy feedback reframed positioning (P27 logged). Phase 3 (LSE + HK markets, Lite ticker/dashboard, /learn hub, YouTube series) and Phase 2c (multi-user notifications: per-user Telegram + SendGrid) inserted before paywall. Pricing question deferred to pre-paywall. Completeness audit: ~40% complete, time-to-paid-launch 4-6 months.
 
-**Strategy session: Phase 2c + Phase 3 added to roadmap.** Beta tester Guy's feedback (5 points: bewildering terminology, markets page chart timespans unlabelled, no LSE, search clipped, /backtest purpose unclear) reframed positioning. Athena's first reflex was to dismiss Guy as outside the target user; Mark pushed back — tagline "institutional-grade tools for non-institutional traders" explicitly promises to serve him. Dismissal was positioning failure. Logged as P27 in PROJECT_CONTEXT (commit 09b6ab0). Phase 3 (LSE + HK markets, Lite ticker/dashboard, /learn hub, YouTube series) and Phase 2c (Multi-user notifications substrate: per-user Telegram + SendGrid) inserted before paywall.
+**Design brief locked across four sections.** Site Map, Dashboard panel specs (13 panels), Marketing Homepage spec (8 sections), Brand System (Option C green-gold palette). Full content in PROJECT_CONTEXT.
 
-Pricing question deferred. Don't ask Guy what he'd pay yet — answer worthless without seeing completed product, shifts beta→sales tone, methodology fit. Park as Phase 3 / pre-paywall problem.
+**Hero mockup v3 banked** earlier (commit 3d4ca9a).
 
-Completeness audit: ~40% complete. Time-to-paid-launch 4-6 months. Phase 1 ~85%, Phase 2 paywall 0%, Phase 2c notifications 0% (~2-3 weeks), Phase 3 LSE/HK/Lite/Learn 0% (6-10 weeks core + 30-50 hrs video).
+**Section 2 (Transparency) v1 + Section 3 (Methodology) v2 + brand asset refresh** banked in commit **7f8014d**: 1 rename + 3 additions, 1,471 lines across two HTMLs and one PNG.
 
-**Design brief locked across four sections.** Full content in PROJECT_CONTEXT under DESIGN BRIEF (LOCKED 17 MAY 2026, extended 18 May): Site Map (7 top-nav items + footer reference), Dashboard panel specs (13 panels), Marketing Homepage spec (8 sections, Public/Robinhood aesthetic), Brand System (Option C palette: green-gold gradient replacing teal-gold).
+### Block 3: End-of-day banking (commit c27ba4e)
 
-**Hero mockup v3 banked** (commit 3d4ca9a, earlier in session before banking discipline triggered). 27.8 KB. Locked aesthetic: Hybrid C palette (navy hero, off-white below-fold), two-tier nav (Signal Vault parent utility bar + SignalIntel primary), asymmetric composition (headline left, live 9-component radar scorecard right), Fraunces serif + Inter Tight + JetBrains Mono.
+HANDOFF rewrite + PROJECT_CONTEXT targeted edits (new PROCESS LESSON for artefact-bytes verification + DESIGN BRIEF implementation sequence update).
 
-**Section 2 (Transparency) v1 + Section 3 (Methodology) v2 banked together** in commit 7f8014d as the consolidated design-pass commit.
+### Block 4: End-of-day cleanup — repo rename + stale folder deletion (commit 1f49ef9)
 
-- `section2_transparency_v1.html` (23.0 KB) — Light Public.com aesthetic. "We show our work" headline left + supporting prose right. Recent Rating Changes events panel as anchor visual (6 rows: 3 wins NVDA / MSFT / TSM + 3 losses PLTR / AAPL / RIVN, "since launch" scope, "11,807 changes logged" stat). Three numbered proof columns (Verified record / Open methodology / Wins and losses). Pull-quote attributed to "Mark Nicholson · Founder, The Signal Vault". Final stat in column 3 is "7 Signal tiers, all independently tracked" — real-today metric, replaces the placeholder "58.3% Strong-tier win rate" until BULLISH ACCURACY DECISION GATE fires post-Phase 3 + 30 days.
-- `section3_methodology_v2.html` (22.8 KB) — "Nine components. One score. No shortcuts." headline at 64px (shrunk from 80px in v1 for better visual balance against the radar below). Full-width radar centrepiece showing AAPL scoring breakdown (composite 61.2, Stable tier badge) with deliberately asymmetric polygon shape: strong on Quality (82), Inst. Own (88), Analyst Mom (74); soft on Momentum (38), Reversion (32), Earnings (45); middling on Insider (52), Volume (58), Piotroski (71). Story-shape demonstrates engine honesty — even AAPL isn't automatically Very Strong. Live v0.13.0 components in green, v0.14 future components (Earnings, Piotroski, InstOwn, Analyst Mom) marked in Signal Vault gold with v0.14 suffix on score labels. Caption: "AAPL · Apple Inc · A 'Stable' call — strong on quality and institutional backing, soft on momentum and mean reversion. The engine doesn't care about brand recognition." Nine-cell what-we-measure grid below radar. Modifiers row covers Legal risk (additive, -5 to -60), Bankruptcy risk (additive, 0 to -60), Sector strength (multiplicative, ±7.5%). Closing strip with version-stamped methodology framing.
+GitHub repo renamed `trading-system` → `signalintel`. Stale `~/trading-system` folder (10.4 MB, last modified 24 April 2026) deleted. Local remote updated explicitly. PROJECT_CONTEXT required no edits — Phase 2c migration already documented.
 
-**Brand assets refreshed.** The earlier morning's interim PNG (`The_Signal_Vault_Brand_Map.png`, committed 91ca685) was renamed on disk to `Signal_Vault_Brand_System.png` for a more accurate filename — content unchanged from 91ca685, verified by MD5 (ac994315e52251040cc409250660b6c0). Additionally `SignalIntel_Infographic_v3.png` (1.75 MB) added: full Signal Vault platform vision infographic. Vertical layout, 12 sections covering master brand, positioning, product family grid, SignalIntel deep-dive, 7-tier signal system, four-feature highlights, performance record placeholder (Q3 2026 launch), virtual portfolio + leverage tiers, monthly tournament leaderboard, subscription pricing tiers, 9-milestone roadmap, footer. Infographic status: ready for internal use (pitch decks, investor conversations, recruiting, partner pitches); external/public use pending lawyer sign-off on bottom disclaimer line.
+### Block 5: WAL sidecars to .gitignore (commit 2d23c28)
 
-Banked together in commit 7f8014d as: 1 rename + 3 additions, 1,471 lines added across the two HTMLs and one PNG.
+`data/trading_system.db-shm` and `data/trading_system.db-wal` added to .gitignore + untracked from index. Sidecars stay on disk; git status no longer flutters on every DB read. Behaviour-preserving verification: WAL flutter touched mtime but git status stayed clean.
 
-### Block 3: End-of-day banking
+### Block 6: Parallel session — Auth-adjacent pre-commit hook (five commits, pushed)
 
-Current commit covers HANDOFF rewrite (this file) + PROJECT_CONTEXT targeted edits (new PROCESS LESSON for artefact-bytes verification + DESIGN BRIEF implementation sequence update reflecting Section 2/3 banked and Dashboard as next).
+Parallel CC session shipped the auth-adjacent pre-commit hook that was queued in structural debt since 17 May. P23 mechanical enforcement now live. Five commits to origin/main: **f72d8b4, 0851963, 8fe91a0, 851221a, 0d0ff43**. New section added to CLAUDE.md telling CC how to handle auth-adjacent commits. P28 documented in PROJECT_CONTEXT (the auth-related P28; Altman invariant added separately as P29).
 
-### Block 4: End-of-day cleanup — repo rename + stale folder deletion
+### Block 7: Altman methodology switch — Z (1968) → Z'' (1995), v0.14.0 (three commits, pushed)
 
-Two cleanup actions taken after the banking commit:
+Phase 1 (read-only inventory, no commit) confirmed 3,655 of 4,703 tickers have complete six Altman financial inputs. Phase 2a, 2b, 2d landed across three commits:
 
-- **GitHub repo renamed `trading-system` → `signalintel`.** Brand alignment; local repo lives at `~/signalintel` since the 15 May 2026 Phase 2c migration, GitHub was still under the old name. GitHub auto-redirects old URLs but local remote updated explicitly: `git remote set-url origin https://github.com/therealmark75/signalintel.git`. Both fetch + push lines now point at signalintel.git.
-- **Stale `~/trading-system` folder deleted.** 10.4 MB vestigial directory predating the Phase 2c migration, last modified 24 April 2026. Confirmed safe to remove (not a git repo, no active processes referencing). Distinct from `~/Documents/trading-system.OLD` (the 24-hour-safety-window copy, eligible for deletion separately).
+- **8df05c8** — refactor(scorer): extract compute_z_raw helper for Altman Z math. Kwargs-only signature prevents silent argument-swap. 8 new tests (14 cases via parametrize). Behaviour-preserving refactor — existing 5 Altman tests + SS07 snapshot pass unchanged. No SCORING_ENGINE_VERSION bump.
+- **74a0228** — feat(scorer): add compute_z_double_prime_raw + analysis script Z'' extension. Adds Altman Z'' (1995 non-manufacturing) helper alongside classic. New scripts/altman_distribution_analysis.py runs distribution analysis across the production universe. 6 new tests (12 cases via parametrize), 273 total passing. CSV output: data/altman_distribution_2026-05-18.csv (gitignored).
+- **5125ac4** — feat(scorer): switch Altman penalty to Z'' (1995 non-manufacturing) [v0.14.0]. score_altman_penalty now calls compute_z_double_prime_raw. SCORING_ENGINE_VERSION 0.13.0 → 0.14.0 MINOR per P18. Test updates: grey-zone test inputs changed to land in Z''=2.0795 (preserves -10 coverage); other Altman tests pass under Z'' unchanged. SS07 snapshot row unchanged (Z''=-6.20, still -60). P27 added to docs/scoring_invariants.md. Scheduler restarted: PID 97826 → 10325 under v0.14.0 + HEAD 5125ac4.
 
-No code changes. PROJECT_CONTEXT.md required no edits — Phase 2c migration was already documented at line 643, GitHub URL was not referenced anywhere in either doc.
+**Empirical justification for the methodology switch (Phase 2b analysis):**
+
+| Tier | Classic Z (1968) | Altman Z'' (1995) |
+|---|---|---|
+| Distress (most penalised) | 1,691 (46.6%) | 1,292 (35.6%) |
+| Grey | 594 (16.4%) | 443 (12.2%) |
+| Safe | 1,346 (37.1%) | 1,896 (52.2%) |
+| **Any penalty** | **2,285 (62.9%)** | **1,735 (47.8%)** |
+
+Classic Z penalised 62.9% of the SignalIntel ticker universe — a calibration failure for a tech-heavy non-manufacturing universe. Z'' reduces this to 47.8% with thresholds appropriate for non-manufacturing companies. Healthcare sector concentration in distress dropped from 47% to 34.4%. Penalty magnitudes (-10/-30/-60) preserved.
+
+Process notes from the Altman thread:
+- Phase 1 + Phase 2 pattern with intermediate mini-gate (Phase 1.5) for test-input decisions worked cleanly. CC stopped at every gate, escalated decisions correctly, no scope drift.
+- CC self-flagged hedge words per P16 throughout.
+- One false-alarm CC catastrophising on a "1.29 GB tracked binary" turned out to be untracked (already in .gitignore since commit 73ab9c0). Lesson banked: when CC describes a state as anomalous, check the prediction not the alarm.
+- Verbose CC output containing summary tables in place of verbatim diff/stdout was caught twice and re-elicited. Same gate-condensation pattern as 14 May.
+- Query inventory before commit caught two Phase 2e candidates (partial-run watchlist mixed-version risk; history chart silent cutover annotation) — neither blocks 2d shipping.
 
 ### Test count at session close
 
-247 passing, 1 failed (test_fmp_economic_calendar_freshness — real production staleness by design per P26), 1 skipped (4 prior + Yahoo gains − adjustments from this morning's commits). Test count drift from earlier sessions tracked in STILL OPEN.
+273 passing, 1 failed (test_fmp_economic_calendar_freshness — real production staleness by design per P26), 1 skipped. Net +26 from morning's 247 baseline: 6 FMP tests + 14 compute_z_raw cases + 12 compute_z_double_prime cases − 6 (existing Altman tests with updated inputs/docstrings rather than additions).
 
 ---
 
 ## CURRENT STATE (end of 18 May 2026)
 
 - gunicorn: PID 55935 (unchanged from 17 May)
-- scheduler: PID 86234 (restarted 18 May 11:33 BST to pick up FMP entitlement code; banner verified v0.13.0 + HEAD 9558e6a + 11:33 BST start)
-- HEAD: 7f8014d (or this commit's hash after end-of-day banking)
-- 9 commits pushed to origin/main today (3 FMP + 2 doc-banking from yesterday's pattern + 4 design-pass and brand)
-- pytest: 247 passing, 1 failed (by-design red), 1 skipped
-- SCORING_ENGINE_VERSION: 0.13.0 (unchanged)
-- economic_calendar: 11 days stale at session start; new observability shipped this morning. Tuesday 06:30 BST cron will write SUCCESS or FAILED to run_log + fire Telegram alert if 402 persists.
-- Yahoo enrichment tables: continuing daily feed. financial_statements bulk job lands overnight Sunday→Monday and continues; earnings_history bulk lands Tuesday. Altman Z distribution check now data-ready as of Monday morning.
-- Site live: HTTP/2 via Cloudflare → /login; P13 ticker events fix verified empirically on 17 May still holding.
-- venv.OLD: still untracked, 72h timer elapsed Sunday 17 May, eligible for deletion any time.
-- Local-only commits: zero. All 9 of today's commits pushed to origin/main.
+- scheduler: PID 10325 (restarted 18 May ~17:30 BST after Phase 2d; banner verified v0.14.0 + HEAD 5125ac4)
+- HEAD: 5125ac4 + whichever commit lands from this end-of-day doc-banking turn
+- 14 commits pushed to origin/main today (3 FMP + 1 strategy/design + 1 banking + 1 cleanup + 1 WAL + 5 parallel auth-hook + 3 Altman)
+- pytest: 273 passing, 1 failed (by-design red), 1 skipped
+- SCORING_ENGINE_VERSION: 0.14.0 (bumped from 0.13.0 in commit 5125ac4)
+- economic_calendar: 11 days stale at session start; new observability shipped this morning. Tuesday 06:30 BST cron tomorrow fires under the new logging for the first time.
+- Yahoo enrichment tables: continuing daily feed. financial_statements bulk job populated overnight Sunday→Monday (3.5M rows across 4,703 tickers, 5-year coverage). Altman Z distribution check completed today using this data.
+- Site live: HTTP/2 via Cloudflare → /login; auth-adjacent pre-commit hook now mechanically enforces P23.
+- venv.OLD: DELETED today (135 MB reclaimed); replaced trading-system folder also DELETED (10.4 MB).
+- Local-only commits: zero. All 14 of today's commits pushed.
 
 ---
 
 ## PROCESS TELLS — 18 May 2026
 
-- **Artefact-bytes verification.** Athena described the new brand PNG to CC as a richer asset than what landed on disk. CC's git rename detection saw byte-identity with the morning's Brand_Map PNG (MD5 match) and STOPPED the commit before the misleading description landed in git history. Pattern banked as new PROCESS LESSON in PROJECT_CONTEXT. Lesson: verify file bytes against description before firing banking prompt, not after CC catches the gap. Same family as 14 May "diagnose before alarming" but applied to Athena's artefact authorship rather than CC's gate output.
-
-- **Positioning audit on beta feedback.** Athena's first reflex on Guy's confusion was to dismiss him as outside target user. Mark pushed back; "institutional-grade tools for non-institutional traders" explicitly promises to serve users like Guy. Reflex was a positioning failure. Codified as P27. Pattern: when a beta tester struggles with terminology or onboarding, the question is never "is this user wrong?" — it's "where in our positioning are we writing a cheque the product can't cash?"
-
-- **Pricing question timing.** Don't ask beta testers what they'd pay before the product is complete. Answer is worthless; shifts beta→sales tone; methodology fit is wrong. Park as Phase 3 / pre-paywall problem when full feature set exists to anchor the price test. Banked.
-
-- **Single-prompt vs Phase 1+2 calibration on housekeeping.** End-of-session work-completion housekeeping (committing both mockups + brand work + HANDOFF + PROJECT_CONTEXT) ran as Phase 1 audit + Phase 2 banking. Right ceremony for the scope — 4 file changes across three categories with one byte-identity surprise that proved out the gate. Single-prompt would have committed the wrong description against the right file.
-
-- **Design queue prioritisation.** Athena recommended Dashboard restructure as next mockup over completing remaining marketing homepage sections (4-8). Rationale: Dashboard is the most-visited logged-in page once paywall lands, tests whether Option C palette refinement works in dense dark monospace environment (only light Public.com proven so far), and is the hardest remaining design problem so better solved while brief is fresh. "Finish the marketing homepage for completeness" rejected as tidying instinct rather than value-driven prioritisation.
-
-- **CC discipline held cleanly throughout the day.** Banking gate STOPs on staging-anomaly worked at 7f8014d (rename detection); diagnostic re-elicitations (Gate 4 syntax / Gate 5 paste) handled cleanly without scope drift. No negative-instruction failures. No unauthorised doc edits.
+- **Artefact-bytes verification (morning).** Athena described the new brand PNG to CC as a richer asset than what landed. CC's git rename detection caught byte-identity with the morning's PNG (MD5 match) and STOPPED the commit. Logged as PROCESS LESSON in PROJECT_CONTEXT.
+- **Positioning audit on beta feedback.** Athena's first reflex on Guy's confusion was dismissal; Mark pushed back; logged as P27 in PROJECT_CONTEXT. Pattern: beta-tester confusion is a positioning failure, not a user failure.
+- **Pricing question timing.** Don't ask beta testers what they'd pay before product is complete. Phase 3 / pre-paywall problem.
+- **False-alarm catastrophising (Athena and CC both).** Athena flagged the 1.29 GB DB as a tracked-binary problem; CC compounded the alarm. Five minutes of empirical inventory showed it was already gitignored and untracked since commit 73ab9c0. Lesson: check the actual `git ls-files` output before catastrophising on size alone. Same family as 14 May "diagnose before alarming."
+- **Gate-report condensation persists.** CC condensed pytest output to summary tables instead of pasting verbatim during Phase 2b verification and Phase 2d verification. Caught both times and re-elicited. Mitigation works but the pattern is recurring — worth a CLAUDE.md note for CC next session.
+- **Multi-phase Phase 1 + 2 pattern scales.** Altman work used Phase 1 (inventory) → Phase 1.5 (mini-gate for test-input decisions) → Phase 2a (refactor) → Phase 2b (analysis) → Phase 2c (decision lock) → Phase 2d (implementation). Six staged gates, zero rework. Worth banking as the template for any future methodology change.
+- **Empirical-evidence-over-prediction discipline held.** Every decision point in the Altman thread had numbers behind it: 62.9% / 47.8% / 399-ticker delta / Z''=2.0795 for grey-zone fixture / Z''=-6.20 for SS07. No "should work" handwaving accepted.
+- **Parallel CC sessions work.** Auth-adjacent pre-commit hook ran in a separate CC session while Altman occupied the main session. Five commits cleanly interleaved with three Altman commits on origin/main. No merge conflicts. Pattern viable for future independent workstreams.
 
 ---
 
 ## STILL OPEN
 
-### Tuesday 19 May verification (Mark away)
+### Tuesday 19 May verification
 
-- **economic_calendar 06:30 BST cron** under new observability. Will write SUCCESS or FAILED to run_log + fire Telegram alert if HTTP 402 persists. First fire under the new logging.
-- **fmp_earnings 06:05 BST cron** same observability. First fire under new logging.
+- **economic_calendar 06:30 BST cron** under new observability. Will write SUCCESS or FAILED to run_log + fire rate-limited Telegram alert if HTTP 402 persists.
+- **fmp_earnings 06:05 BST cron** same observability.
+- **First 0.14.0 scoring run tonight** (20:00 BST scheduled scoring job). Watch tomorrow morning's run_log for clean completion. The first production-universe Z''-based composite scores will land in signal_scores tagged scoring_version='0.14.0'.
 
-### Wednesday 20 May verification (Mark away)
+### Tuesday 19 May actionable
 
-- **earnings_history bulk job** lands overnight. Verify rows populated Wednesday morning when Mark checks in.
+- **FMP plan tier decision.** Based on Tuesday morning observation: if 402 persists, decision on whether to upgrade FMP plan (cost vs entitlement value) or drop economic_calendar from feature set. Phase 1 inventory queued (cost-vs-value framing already shaped).
+- **Dashboard restructure mockup** is next in the design queue. Most-visited logged-in page, tests Option C palette in dense dark monospace, hardest remaining design problem.
+- **Engineering pivot option** if design momentum shifts. Candidates: schema-coupling tripwire broader sweep (7 more insert helpers per FOLLOWUPS), shadowed tier map convergence (9 templates), scheduler LaunchAgent symmetric treatment, mobile responsiveness retrofit, SB01 snapshot mismatch diagnostic.
 
-### Thursday 21 May return
+### Phase 2e candidates (Altman cutover follow-ups)
 
-- **FMP plan tier decision.** Based on Tuesday observation: if 402 persists, decision needed on whether to upgrade FMP plan (cost vs entitlement value) or drop economic_calendar from feature set. Current Phase 1 inventory queued.
-- **Altman Z distribution check NOW DATA-READY.** financial_statements bulk job lands Sunday→Monday overnight; Thursday return has full data to run distribution analysis. Verify -10 / -60 penalty tiers calibrated for the production universe before v0.13.0 backtest data accumulates. compute_z_raw() helper extraction queued from 17 May Phase 1 audit.
-- **Marketing homepage Section 4+ design or Dashboard mockup.** Per the new design queue prioritisation in PROJECT_CONTEXT: Dashboard restructure is the next design session. Marketing Sections 4-8 deferred as a later batch.
-- **venv.OLD deletion** eligible (72h+ elapsed).
+- **Partial-run mixed-version watchlist risk.** Watchlist + ticker-detail "latest per ticker" patterns can show some tickers at 0.13.0 and others at 0.14.0 if a scoring run crashes partway through. Mixed-version composite_scores are mathematically incomparable (Z and Z'' produce different penalty distributions). Mitigation: monitor first 0.14.0 run to completion before users browse, OR add transactional "wipe-and-write" pattern for the scoring run.
+- **History chart silent methodology shift.** Ticker-detail timeline at web/app.py:1357-1363 will render Z- and Z''-derived composites as a continuous line. Users won't see the cutover. Phase 2e: vertical dashed line + annotation at cutover date, OR colour-code points by scoring_version.
+
+### Live 0.14.0 distribution monitoring
+
+The Phase 2b analysis projected 47.8% penalised footprint under Z''. The first week of live 0.14.0 scoring data will confirm whether the projection holds against real production composites. If the live distribution diverges materially, Phase 2e or 2f investigation needed.
 
 ### LAUNCH PREP (carried forward from 17 May)
 
-- Google Search Console indexing setup at site launch (sitemap.xml, robots.txt, domain verification).
+- Google Search Console indexing setup (sitemap.xml, robots.txt, domain verification).
 - Open Graph / social preview meta tags on marketing homepage.
-- Analytics decision: Plausible / Fathom / GA4. Privacy-friendly fit for transparency-first brand positioning vs GA4 conventional default. Decision needed before public launch.
+- Analytics decision: Plausible / Fathom / GA4. Privacy-friendly fit for transparency-first brand vs GA4 conventional default.
 
 ---
 
-## NOTES FOR FRESH-CHAT ATHENA THURSDAY
+## NOTES FOR FRESH-CHAT ATHENA TUESDAY
 
 - Read PROJECT_CONTEXT.md first (stable), then this HANDOFF.
-- Today's three substantive blocks: morning FMP entitlement observability (3 commits, all pushed), afternoon design pass (Phase 3 strategy add, Hero v3 mockup carried over from 17 May, Section 2 v1 + Section 3 v2 + brand asset refresh in one commit), end-of-day banking (this commit).
-- Both gunicorn and scheduler under LaunchAgents survive reboot. Scheduler PID changed today (32257 → 86234) due to restart for new FMP code.
-- First action Thursday: check Tuesday + Wednesday cron outcomes via run_log queries. If economic_calendar still 402-ing, FMP plan decision needs to happen. If fresh rows landed, transient self-resolved.
-- Second priority Thursday: Altman Z distribution check. Now actionable (financial_statements data ready).
-- Third priority Thursday: Dashboard restructure mockup if design session resumes, or one of the engineering items above.
-- venv.OLD still on disk; eligible for deletion at any point Thursday onwards.
-- The Superpowers plugin is installed in CC but not enabled. Athena flagged it as a candidate for Phase 2c implementation work or the Altman Z distribution analysis. Re-evaluate when one of those sessions opens.
+- 14 commits to origin/main today, five workstreams: FMP observability, design pass, banking, auth-adjacent pre-commit hook, Altman Z → Z'' methodology switch with version bump to 0.14.0.
+- Both gunicorn (PID 55935) and scheduler (PID 10325) under LaunchAgents survive reboot. Scheduler restarted twice today: once for FMP code (86234), once for Altman Phase 2a refactor (97826), once for Phase 2d methodology switch (10325).
+- First action Tuesday: empirical read of run_log for Tuesday morning's FMP crons (06:05, 06:30 BST) AND tonight's 20:00 BST first-0.14.0 scoring run. Three SQL queries:
+```
+  sqlite3 data/trading_system.db "SELECT job_name, run_at, status, substr(error_message,1,80) AS err FROM run_log WHERE job_name IN ('economic_calendar','fmp_earnings','fmp_dividends','score_all_tickers') AND run_at >= '2026-05-18 19:00' ORDER BY run_at DESC LIMIT 20;"
+```
+- Second priority Tuesday: based on FMP outcomes, either FMP plan tier decision (if persistent 402) OR move to Dashboard restructure mockup (next in design queue) OR engineering pivot.
+- Phase 2e candidates from the Altman cutover: partial-run watchlist mixed-version risk; history chart cutover annotation. Both presentation-layer, neither blocking.
+- v0.14.0 is the new scoring substrate. All composite_score values in signal_scores tagged scoring_version='0.14.0' use Z'' methodology. Pre-cutover 0.13.0 rows preserved for historical reference; backtest endpoint at web/app.py:1800-1881 lets users compare both versions.
+- Parallel-session housekeeping landed five commits for the P23 auth-adjacent pre-commit hook. CC now has a CLAUDE.md section on handling auth-adjacent commits. P28 in PROJECT_CONTEXT covers this. Altman invariant separately covered by P29 in PROJECT_CONTEXT (and P27 in scoring_invariants.md, independent numbering).
+- Both `~/trading-system` (stale) and `venv.OLD` deleted today. Local-only `~/Documents/trading-system.OLD` from 15 May Phase 2c migration may still exist; not verified today.
+- The Superpowers plugin in CC remains installed but not enabled. Re-evaluate when a session opens that genuinely needs it.
 
 ---
 
