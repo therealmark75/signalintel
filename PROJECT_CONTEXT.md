@@ -355,9 +355,13 @@ quality (0.30), insider (0.25), reversion (0.10), volume (0.10),
 earnings_surprise (0.125), piotroski (0.125), inst_own (0.125),
 analyst_mom (0.125). Legal applies additively as penalty (NONE=0,
 MINOR=-5, CLASS_ACTION=-15, SEC_INVESTIGATION=-30, SEC_ENFORCEMENT=-45,
-CRIMINAL=-60). Altman Z-score also applies additively (Z≥3→0,
-Z≥1.8→-10, Z≥0→-30, Z<0→-60); all-or-nothing (any missing input → 0).
-Both penalties applied before `_clamp`. Sector strength applies
+CRIMINAL=-60). Altman Z'' (1995 non-manufacturing) penalty applies
+additively as of v0.14.0 (18 May 2026): Z''≥2.6→0, Z''≥1.1→-10,
+Z''≥0→-30, Z''<0→-60; all-or-nothing (any missing input → 0). Switched
+from classic 1968 Altman Z because the original manufacturing formula
+penalised 62.9% of the SignalIntel universe (calibration failure for
+tech-heavy non-manufacturing universe); Z'' reduces to 47.8%. Both
+penalties applied before `_clamp`. Sector strength applies
 multiplicatively. Value's integration into composite is currently
 unclear; scoped for review during Yahoo pipeline session.
 
@@ -366,7 +370,7 @@ Ticker page rendering is now array-driven via the COMPONENTS registry
 in ticker.html (11 May 2026 refactor), so new components will be
 registry additions, not template surgery.
 
-### SCORING_ENGINE_VERSION: 0.13.0
+### SCORING_ENGINE_VERSION: 0.14.0
 
 Bump policy: PATCH = bug fix without scoring change; MINOR = new
 component, weight change, OR substantive scoring substrate change
@@ -437,6 +441,7 @@ ID when relevant.
 | P26 | XML content in shell heredocs is corrupted by chat renderers — angle-bracket tags (`<string>`, `<key>`) are interpreted as HTML and stripped during copy-paste from the chat interface to terminal. Use Python plistlib (or equivalent) to write plist files programmatically, then verify the contents via `/usr/libexec/PlistBuddy -c "Print :ProgramArguments" <path>` before installing. The 15 May 2026 LaunchAgent diagnosis cycle confirmed this: three identical-looking heredoc rewrites all lost the `-w` flag because `<string>-w</string>` rendered as an HTML attribute and disappeared. PlistBuddy verification on disk is empirical and unambiguous. |
 | P27 | Beta tester confusion is a positioning audit, not a user-fit observation. When a beta tester struggles with a product whose tagline explicitly promises to serve them (here: "institutional-grade tools for non-institutional traders"), Athena's first move must be to audit whether the tagline still matches the surface, not to dismiss the tester as "outside the target user." Dismissing the tester is a positioning failure dressed up as taste. Logged 18 May 2026 from Guy's feedback session. Future Athena: when reflex is to frame a tester as wrong-user, check the tagline first. |
 | P28 | Locked design patterns require at least a smoke-test invocation before being treated as ground truth. The Phase 1 + Phase 2 pattern produces design decisions that lock specific values, helper patterns, and snippets of code (regexes, shell idioms, FD redirections, SQL fragments). On-paper review can miss bugs that only surface on first execution. The 18 May 2026 auth-adjacent pre-commit hook ship surfaced this: the locked `exec 3</dev/tty 2>/dev/null` pattern from Phase 1 passed design review but silently redirected stderr for the rest of the shell on the success path, killing the user-facing "Commit aborted" message. Fix was one line (`{ exec 3</dev/tty; } 2>/dev/null` to scope the redirect) but the bug only emerged in the empirical verification walk. Discipline: when Phase 1 locks a non-trivial code pattern, Phase 2 prompts must include an explicit smoke-test step that exercises the pattern in isolation before it's integrated into the full implementation. Generalisation of P3 (verify in browser, not just tests) to design-phase decisions. |
+| P29 | Scoring-substrate methodology changes are gated by empirical distribution evidence on the production universe, not theoretical reasoning. The 18 May 2026 Altman Z → Altman Z'' switch (v0.13.0 → v0.14.0) was authorised only after a read-only distribution analysis (scripts/altman_distribution_analysis.py) computed Z and Z'' for 3,631 tickers and showed classic Z penalised 62.9% of the universe vs Z'' at 47.8%. Decision shape was locked before script ran: three outcomes (calibration holds / grey-zone cluster / bimodal) with sub-decisions for each, all framed in version-bump-policy (P18) terms. The empirical step is non-negotiable for any future scoring substrate change (Piotroski tier recalibration, Sector strength magnitude tuning, new component weight integration). Pattern: Phase 1 inventory → Phase 2a helper extraction (behaviour-preserving) → Phase 2b analysis script → Phase 2c decision lock with empirical evidence → Phase 2d implementation with version bump. Six gates, zero rework. |
 
 ---
 
@@ -1289,23 +1294,40 @@ The "change only when you mean to" artefact only earns that name if its
 input fixtures actually exercise the new code. An empty-map snapshot
 test that passes is a false positive.
 
-### Altman Z-score empirical calibration queued (14 May 2026)
+### Altman Z'' methodology switch shipped (18 May 2026, v0.14.0)
 
-The Altman Z-score thresholds (Z≥3 safe, Z≥1.8 grey zone, Z≥0
-distress, Z<0 severe) were calibrated on 1968-era US manufacturing
-companies. SignalIntel's ticker universe is tech-heavy, asset-light, and
-growth-oriented. These stocks routinely carry negative retained earnings,
-high liabilities relative to equity, and low working capital — all of
-which push the Z-score into the distress zone without reflecting actual
-bankruptcy risk.
+The Altman Z-score thresholds in classic 1968 Z form were calibrated
+on US manufacturing companies. SignalIntel's ticker universe is
+tech-heavy, asset-light, and growth-oriented. Pre-Phase-2b analysis
+hypothesised that these stocks would routinely push into the distress
+zone without reflecting actual bankruptcy risk.
 
-Before v0.13.0 data accumulates, queue a distribution check: compute
-Z-scores for production tickers that have at least 2 fiscal years of
-`financial_statements` data, plot the distribution, and verify the
-penalty tiers (0/-10/-30/-60) are calibrated appropriately for this
-universe. If the majority of the ticker universe scores Z<1.8 under the
-all-or-nothing model, the penalty is suppressing composite scores
-systematically rather than selectively. See FOLLOWUPS: URGENT.
+The Phase 2b read-only distribution analysis confirmed the hypothesis
+empirically: classic Z penalised 62.9% of the 3,631 computable
+tickers (1,691 distress, 594 grey, 2,285 total any-penalty).
+Healthcare alone constituted 47% of the Z<0 deep-distress bucket,
+mostly biotech and clinical-stage pharma with negative retained
+earnings — accurate Altman distress signal mathematically, wrong
+signal for the business model.
+
+Methodology switched to Altman Z'' (1995 non-manufacturing) in
+commit 5125ac4. Z'' drops X5 (sales/total_assets, the most
+manufacturing-specific ratio) and reweights X1-X4 with thresholds
+calibrated for non-manufacturing firms. Empirical comparison on
+the same 3,631-ticker universe:
+
+  Classic Z: 2,285 penalised (62.9%) → Z'' projects 1,735 (47.8%)
+  Delta: 399 tickers moved out of the most-penalised tier
+  Healthcare cluster: 47% → 34.4% of distress bin
+
+Penalty magnitudes (-10/-30/-60) preserved for backward-compatible
+composite-score scale. New four-tier mapping splits Z'' < 1.1 into
+distress (-30) and deep distress (-60) at the Z'' = 0 cliff.
+
+Analysis script: scripts/altman_distribution_analysis.py. Helpers
+in signals/scorer.py: compute_z_raw (classic, for analytical
+comparison) and compute_z_double_prime_raw (production penalty).
+Phase 2e candidates flagged in FOLLOWUPS.
 
 ### Baseline-and-comparison verification (13 May lesson)
 
@@ -1793,12 +1815,35 @@ STRUCTURAL DEBT:
   revival, or delete the module entirely. Decision shape, not
   engineering work — pick a side and execute in <15 minutes.
 
-- COMPUTE_Z_RAW() HELPER EXTRACTION (17 May 2026, Altman analysis
-  prep): Phase 1 Altman audit flagged this. Extract the Altman Z
-  formula from score_altman_penalty() into a pure compute_z_raw()
-  helper so analysis scripts can reuse the math without copying the
-  formula. Enables the Altman Z distribution check (URGENT bucket)
-  to run cleanly without duplicating logic.
+- ALTMAN PHASE 2E — PARTIAL-RUN MIXED-VERSION WATCHLIST RISK (18 May
+  2026, post-v0.14.0 cutover): Watchlist + ticker-detail pages use
+  per-ticker `MAX(scored_at)` patterns (database/db.py:981-985,
+  web/app.py:1343-1344). If a 0.14.0 scoring run crashes partway
+  through, some tickers display 0.14.0 composites and others 0.13.0
+  composites side-by-side, which are mathematically incomparable
+  (Z and Z'' produce different penalty distributions). Mitigation
+  options: (a) monitor first 0.14.0 runs to completion before users
+  browse, OR (b) add transactional wipe-and-write pattern to the
+  scoring run. Risk window is tonight's 20:00 BST first 0.14.0 run
+  and any subsequent partial-completion event.
+
+- ALTMAN PHASE 2E — HISTORY CHART SILENT METHODOLOGY SHIFT (18 May
+  2026): Ticker-detail timeline chart at web/app.py:1357-1363 renders
+  Z- and Z''-derived composite scores as a continuous line. Users
+  won't see the methodology cutover. Fix options: vertical dashed
+  line + annotation at the cutover date, OR colour-code points by
+  scoring_version. Presentation-layer only, no data integrity issue.
+
+- ALTMAN PHASE 2E — LIVE 0.14.0 DISTRIBUTION MONITORING (18 May 2026): Phase 2b analysis
+  projected 47.8% penalised footprint under Z'' on the read-only
+  analytical universe. The first week of live 0.14.0 scoring data
+  will confirm whether the projection holds against real production
+  composites computed by the live scoring pipeline (which uses live
+  market_cap from screener_snapshots, not the analysis snapshot).
+  Material divergence triggers Phase 2f investigation. Suggested
+  re-run of scripts/altman_distribution_analysis.py against signal_scores
+  rows tagged scoring_version='0.14.0' after one week of production
+  data accumulates.
 
 DESIGN WORK (new bucket, 17 May 2026):
 
