@@ -237,6 +237,82 @@ If a prompt's stated scope is "X" and you believe a change to one of these areas
 
 Origin: BUG-001-REOPENED (7 May 2026). A "watchlist picker UI" commit included an unprompted modification to `current_user()` that hardcoded `tier='elite'` for a specific username, with a comment acknowledging it was wrong ("one-time fixup that also writes to DB"). The change was disclosed in the diff but not raised to the user before commit. Out-of-scope modifications, even when disclosed, violate this principle.
 
+## Pre-commit hook for auth-adjacent changes (P23 mechanical enforcement)
+
+A pre-commit hook (`scripts/git-hooks/pre-commit`, symlinked into
+`.git/hooks/pre-commit` via `scripts/install-hooks.sh`) inspects every
+staged commit for auth-adjacent changes. If matched, it prints the
+staged diff and demands interactive `y/N` confirmation from the
+developer's terminal. `N`, empty input, EOF, or any non-interactive
+context (CC's shell, CI, scripted commits) blocks the commit with
+exit 1.
+
+**What triggers the hook**
+
+File paths (any staged file matching):
+- `web/app.py` (sole production auth surface today)
+- `config/tiers.py` (tier-key source of truth)
+- `tests/conftest.py` (auth-injection fixture)
+- Glob fallbacks for future extractions: `web/auth*.py`,
+  `web/login*.py`, `web/session*.py`
+
+Diff content (any added/modified line in the staged diff for files
+under `web/`, `config/`, `tests/`, `signals/`, `scrapers/`,
+`database/`, or `main.py`):
+- `current_user`, `@login_required`, `session[`
+- `.session_transaction`, `sess[` (test-side session injection)
+- `def login(`, `def logout(`, `def register(`, `def authenticate(`,
+  `def login_required(`, `def current_user(`
+- `def _set_user_tier(`, `def _get_user_tier(`
+- `app.route(...)` lines containing `/login`, `/logout`, or `/register`
+
+Files under `scripts/` are excluded from content matching so the
+hook does not fire on its own development.
+
+**What CC must do**
+
+Auth-adjacent commits will **always block CC** because CC has no
+controlling terminal. This is intentional. The flow is:
+
+1. BEFORE staging an auth-adjacent change, add a row to the commit's
+   audit table flagged `AUTH SIDE-EFFECT — REQUIRES REVIEW`. State
+   what the side-effect is, why it is necessary, and what
+   alternative was considered. (P23.)
+2. Surface the audit to Mark in-turn: paste the actual `git diff
+   --cached` of the auth-adjacent files into the chat, name the
+   side-effect explicitly in plain English, and wait for Mark's
+   explicit "approved" or equivalent confirmation. Do not commit
+   pending acknowledgement. Surfacing means showing the diff, not
+   summarising it.
+3. After explicit approval, commit with `git commit --no-verify`.
+   The `--no-verify` flag is the audit signal — its presence in
+   shell history marks the commit as having bypassed the gate by
+   design, not by accident.
+4. Never default to `--no-verify` for auth-adjacent commits. The
+   decision to bypass comes from Mark, not from CC.
+
+**What the hook does NOT do**
+
+It catches *un-escalated changes to auth code*, not logic errors
+inside auth code. P23 is a process gate, not a correctness gate.
+P17 and the BUG-001 regression tests in `tests/test_smoke.py` are
+the correctness layer.
+
+**Installation**
+
+Run `scripts/install-hooks.sh` once after clone. Idempotent. The
+hook is symlinked, not copied — updates to
+`scripts/git-hooks/pre-commit` take effect immediately without
+reinstallation.
+
+**Bypass discipline**
+
+`--no-verify` is the *only* bypass. It is loud (visible in shell
+history; visible in the absence of any hook-trace in commit
+metadata). Adding a path-exception list to the hook itself is
+**not** an acceptable evolution — exceptions belong in audit-table
+review, not in the gate's source code.
+
 ## Notes for Claude Code Sessions
 - Always activate the venv before running Python scripts
 - SQLite DB path is relative: `data/trading_system.db` from project root
