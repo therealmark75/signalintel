@@ -37,6 +37,21 @@ class FMPRateLimitError(Exception):
     """Raised when _get() hits consecutive 429s past the circuit-breaker threshold."""
 
 
+class FMPEntitlementError(Exception):
+    """Raised when _get() hits an FMP auth/entitlement HTTP status (401/402/403),
+    indicating the API key lacks access to the requested endpoint. Not
+    recoverable by retry — callers should fail the job and surface the
+    failure via run_log + Telegram alert."""
+
+    def __init__(self, status_code: int, path: str):
+        self.status_code = status_code
+        self.path = path
+        super().__init__(
+            f"FMP HTTP {status_code} on {path} — endpoint not included "
+            f"in current plan or API key lacks access"
+        )
+
+
 def _get(path: str, params: dict = None, timeout: int = 20):
     global _fmp_429_streak
     key = _api_key()
@@ -64,10 +79,15 @@ def _get(path: str, params: dict = None, timeout: int = 20):
                     raise FMPRateLimitError(f"FMP rate limit: {streak} consecutive 429s")
                 logger.warning(f"[FMP] Rate limited ({streak}/{FMP_CIRCUIT_BREAKER_THRESHOLD}) – sleeping 10s")
                 time.sleep(10)
+            elif r.status_code in (401, 402, 403):
+                logger.error(f"[FMP] Entitlement failure HTTP {r.status_code}: {path}")
+                raise FMPEntitlementError(r.status_code, path)
             else:
                 logger.warning(f"[FMP] HTTP {r.status_code}: {path}")
                 return None
         except FMPRateLimitError:
+            raise
+        except FMPEntitlementError:
             raise
         except Exception as e:
             logger.warning(f"[FMP] Request attempt {attempt+1} failed: {e}")
