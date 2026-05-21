@@ -1,5 +1,5 @@
 # main.py - Phase 1 + Phase 2
-import sys, time, logging, argparse, signal, subprocess
+import sys, time, logging, argparse, signal, subprocess, sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 from apscheduler.schedulers.blocking import BlockingScheduler
@@ -639,6 +639,40 @@ def job_yahoo_earnings_bulk():
         log_run(DATABASE_PATH, "yahoo_earnings_bulk", "FAILED", error_msg=str(e), duration_s=time.time()-start)
 
 
+def _write_with_retry(fn, *args, attempts: int = 5, base_delay: float = 1.0, **kwargs):
+    """Retry-with-backoff backstop for transient SQLite lock errors (P31).
+
+    Calls fn(*args, **kwargs). On sqlite3.OperationalError whose message contains
+    "database is locked" or "database is busy", retries with exponential backoff
+    (base_delay * 2**i): 1s, 2s, 4s, 8s, ... up to attempts-1 sleeps. Any OTHER
+    exception re-raises immediately so real bugs are NOT masked.
+
+    Designed as a belt to the get_connection busy_timeout (30s) braces: SQLite
+    already waits in-kernel for the lock; this layer handles the residual case
+    where it waits past the timeout and still errors. Callers decide whether to
+    log-and-skip or propagate after final exhaustion.
+
+    Originating incident: 21 May 2026 analyst bulk crash on ticker FLEU — a
+    single unhandled OperationalError inside the per-ticker except block (the
+    failure-recording upsert_external_scrape_log) propagated to the job-level
+    except and killed a ~90-min run at 1,545/~6,000 tickers.
+    """
+    last_err = None
+    for i in range(attempts):
+        try:
+            return fn(*args, **kwargs)
+        except sqlite3.OperationalError as e:
+            msg = str(e).lower()
+            if "database is locked" not in msg and "database is busy" not in msg:
+                raise
+            last_err = e
+            if i < attempts - 1:
+                delay = base_delay * (2 ** i)
+                logger.warning(f"  [DB lock retry] attempt {i+1}/{attempts} failed ({e}); sleeping {delay:.1f}s before retry")
+                time.sleep(delay)
+    raise last_err
+
+
 def job_yahoo_analyst_bulk():
     """Weekly Wed 04:00 BST: bulk gap-fill analyst upgrades/downgrades for full active universe.
 
@@ -647,6 +681,10 @@ def job_yahoo_analyst_bulk():
     constraint — re-scrapes add new events and skip already-known ones.
     Resumable: skips tickers whose external_scrape_log shows a recent
     (within 6 days) successful ANALYST scrape.
+
+    Lock-contention hardening (P31, 21 May 2026): every per-ticker write is
+    wrapped in _write_with_retry; the failure-recording write is additionally
+    wrapped in a swallow-on-exhaustion try/except so it can NEVER abort the run.
     """
     start = time.time()
     logger.info("=" * 60)
@@ -672,14 +710,19 @@ def job_yahoo_analyst_bulk():
                 t = yf.Ticker(ticker)
                 rows = fetch_analyst_changes(t, ticker)
                 if rows:
-                    n = insert_analyst_changes(DATABASE_PATH, rows)
+                    n = _write_with_retry(insert_analyst_changes, DATABASE_PATH, rows)
                     total_rows += n
-                upsert_external_scrape_log(DATABASE_PATH, ticker, "ANALYST", success=True)
+                _write_with_retry(upsert_external_scrape_log, DATABASE_PATH, ticker, "ANALYST", success=True)
             except YahooRateLimitedError:
                 raise
             except Exception as e:
                 logger.warning(f"  [Yahoo Analyst Bulk] {ticker}: {e}")
-                upsert_external_scrape_log(DATABASE_PATH, ticker, "ANALYST", success=False, error=str(e))
+                # Failure-recording write is wrapped + swallows final exhaustion so it can NEVER
+                # abort the run (this exact path killed the 21 May 2026 bulk run on FLEU).
+                try:
+                    _write_with_retry(upsert_external_scrape_log, DATABASE_PATH, ticker, "ANALYST", success=False, error=str(e))
+                except Exception as log_err:
+                    logger.error(f"  [Yahoo Analyst Bulk] {ticker}: failed to record failure to external_scrape_log after retries ({log_err}); continuing")
             time.sleep(YAHOO_REQUEST_DELAY_SECONDS)
         duration = time.time() - start
         log_run(DATABASE_PATH, "yahoo_analyst_bulk", "SUCCESS", total_rows, duration_s=duration)
