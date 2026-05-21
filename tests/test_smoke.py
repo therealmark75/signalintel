@@ -7,7 +7,7 @@ import pytest
 
 
 PAGE_ROUTES = [
-    "/",
+    "/dashboard",
     "/ratings",
     "/screener",
     "/penny/screener",
