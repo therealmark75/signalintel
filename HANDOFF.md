@@ -9,38 +9,43 @@ Next session: Yahoo Finance pipeline + next scoring component(s), fresh chat. Da
 
 ---
 
-## JUST SHIPPED — 21 May 2026
+## 21 MAY 2026 — END OF SESSION
 
-- /dashboard greenfield build (Phase 2A+2B), commit **db38c56**, pushed. Net-new route + template (no prior /dashboard existed; old / did dashboard-ish work into index.html). 13-panel grid, Option C dark palette (navy-950/green-400; gold reserved for Elite). Above-fold 6 panels; Elite-gated Penny Stock spotlight (server-side gated — free clients receive NO pick data, verified via page-source check on free account mark2); below-fold 6 panels. Logged-in `/` now redirects to /dashboard (legacy index() body preserved as commented dead code). Bearish panel excludes composite=0 (penalty-floored). Design contract: `docs/mockups/dashboard_restructure_v1.html`. Helper extractions in web/app.py: `_get_sector_performance`, `_get_penny_pick_full`, `_compute_theme_counts` (behaviour-preserving; original routes unchanged).
-- Nightly DB backup, commit **0933f13**, pushed (script only; plist + backup dir machine-local, out of repo). `scripts/backup_database.sh`: WAL-aware `sqlite3 .backup`, integrity-gated, atomic promotion, 7-daily + 4-weekly rotation. LaunchAgent `io.thesignalvault.backup`, daily 03:30 BST. Restore-verified (row parity 227,721). First auto-run tonight.
-- Auth-adjacent pre-commit hook (P23) fired on the dashboard commit and was HONOURED — committed interactively via TTY, not bypassed with `--no-verify`. The hook caught us at speed on a deadline day; correct path taken.
+Yahoo pipeline session followed the morning's dashboard + backup ship. Three workstreams pursued; inst_own pushed, analyst_mom built and partially complete (resumable), econ_calendar reroute Phase-1-only. Plus test suite restored to honest and a dashboard cosmetic fix surfaced by the tier-leak guard. Six commits LOCAL-ONLY; push held until Saturday's analyst-resume gate passes.
 
-## CURRENT STATE (end of 21 May 2026)
+### WORKSTREAM 1 — inst_own: DONE & PUSHED
 
-- HEAD: `0933f13`, pushed to origin/main. Local-only commits: zero.
-- gunicorn restarted twice today (dashboard route deploys): final PIDs 53900/53903. scheduler PID 10325. cloudflared running.
-- SCORING_ENGINE_VERSION: **0.14.0** (unchanged today).
-- DB: **~1.2 GB** (21 May 2026; ~227,721 signal_scores rows; was ~328MB post-VACUUM 13 May 2026).
-- Site live: /dashboard reachable logged-in; / redirects logged-in users to /dashboard; logged-out / still serves legacy home flow.
-- Backup: first automated 03:30 BST run pending tonight — verify via `~/signalintel/logs/backup.out.log` tomorrow.
+- Parser fix (pctHeld key + ×100 scaling, commit **383b3aa**), full-universe re-scrape (0.35% → 97.3% pct_out fill), scorer recalibrated to quartile-anchored cuts (>=48 → 75 / >=34 → 60 / >=12 → 45 / <12 → 30), >100 implausibility guard → neutral 50, SCORING_ENGINE_VERSION 0.14.0 → 0.15.0 (commit **175bbf7**). Both pushed. Full re-score (10,846 tickers), scheduler + gunicorn restarted, banner v0.15.0 confirmed live.
+- Contribution: 0% → 50.8% (5,506/10,846). Wiring verified by clean isolation (held all inputs fixed, toggled only inst_own; composite delta matched predicted ×0.125/1.60 to 4 dp). Tier spread populated 1,100-1,500 per tier.
 
-## STILL OPEN — 21 May 2026
+### WORKSTREAM 2 — analyst_mom: BULK JOB BUILT, RUN CRASHED PARTWAY, RESUMABLE
 
-CARRY FORWARD (flagged for today in the 18 May handoff, NOT addressed — today went to dashboard + backup; these remain open):
+- Diagnosed CAUSE 1 (scoping): old job hit ~4 priority tickers/day; yfinance has data for 11/11 probed tickers universe-wide. NOT a retire candidate.
+- New `job_yahoo_analyst_bulk` built + slice-verified (commit **2e44a37**, LOCAL ONLY, gate pending). Append-only INSERT OR IGNORE; resumable via `external_scrape_log`; scheduled Wed 04:00.
+- FULL RUN CRASHED 21 May 17:24 on "database is locked" (ticker FLEU). Cause: detached bulk writer collided with the 16:30 Screener scrape (a ~54-min DB writer) + signal_generation — SQLite serialises writers, the lock error was unhandled and killed the run. Partial coverage banked: 1,545 distinct tickers / 156,705 rows (up from 30 post-slice). NO corruption; append-only + `external_scrape_log` mean a re-run skips the 1,545 done and resumes.
+- RESUME: SCHEDULED for Sat 23 May 04:00 BST, unattended. Launched via a backgrounded sleep-timer (resume command: `python -c "from main import job_yahoo_analyst_bulk; job_yahoo_analyst_bulk()"` — auto-skips the 1,545 done tickers via the `external_scrape_log` -6-day filter). Logs to `logs/analyst_resume_YYYYMMDD_HHMM.log`. Saturday cron is clear (all scrapers mon-fri; only weekend writers are Sun 03:00 / 04:00 + the daily 03:30 LaunchAgent backup). Write path now hardened (busy_timeout + retry, see below) so contention can't kill it. ON WAKING SATURDAY: check the resume log for `JOB DONE: Yahoo Analyst Bulk`, then run gate queries 5a/5b/5c.
+- LOCK-RETRY HARDENING: DONE. `busy_timeout=30000` added to `get_connection` app-wide (commit **2525183**); per-ticker write retry-with-backoff backstop in `job_yahoo_analyst_bulk`, with the failure-recording write wrapped to swallow final exhaustion so it can never abort the run (commit **48d7cb7**). Retry empirically verified (retries-then-succeeds, exhausts-then-raises, non-lock errors re-raise immediately). Suite 273-green. This also hardens the Wed 04:00 scheduled cron.
 
-- FMP economic_calendar 402 — DECIDED 21 May: do not upgrade FMP plan. Reroute economic-calendar data via Yahoo (try first) or other free source; FMP paid upgrade only if all free options fail. Execution folded into the Yahoo pipeline scope. `economic_calendar` job still 402-failing daily until rerouted — acceptable known-red until then.
+### WORKSTREAM 3 — econ_calendar reroute: PHASE 1 COMPLETE, BUILD DEFERRED
 
-NEW today:
+- `economic_calendar` is consumed (NOT orphaned): `/api/economic-calendar` + `/api/economic-calendar/high-impact-banner` (banner filters impact='High' AND country='US'). `yfinance.get_economic_events_calendar` accepts start/end/limit (≤100) / offset, NO region kwarg. Probe confirmed US rows present (PPI seen) when window widened; default narrow window is an artifact.
+- Design shape (NOT built): paginate via offset until <100 rows, filter Region=='US' client-side, DERIVE impact via keyword match (CPI/FOMC/NFP/GDP/PPI/etc) since Yahoo has no impact field, preserve both endpoints. Reroute is derivation-class, not a drop-in. Future session.
 
-- (see FOLLOWUPS in PROJECT_CONTEXT — appended this session)
+### OTHER THIS SESSION
 
-## NOTES FOR FRESH-CHAT ATHENA (Yahoo session)
+- `alerts/alerter.py` deleted (dead, zero prod consumers; commit **2bd01ba**).
+- Test suite restored to honest: 6 stale tests aligned to shipped behaviour — inst_own unit + snapshot tests to v0.15.0 ladder (commit **01245cc**), smoke tests to `/dashboard` redirect (commit **9de1261**), plus `dashboard.html` literal 'ELITE' token removed after the tier-leak guard correctly caught it on /dashboard (commit **f1495f7**). Suite now 273 passed / 1 known-red (P26) / 1 skipped.
+- CLAUDE.md bell rule + methodology-doc FOLLOWUP committed (**4614841**).
 
-- **IGNORE the archived 18 May notes below — superseded.** Read THIS section + PROJECT_CONTEXT first.
-- Next session: **Yahoo Finance pipeline + next scoring component(s)** toward the 16-component vision (8 built). Large session, fresh chat by design.
-- Dashboard + backup banked and pushed; site on a known-good restore point.
-- Live state: engine 0.14.0, DB ~1.2GB, /dashboard live, nightly backup armed.
-- Two carry-forward decisions waiting (FMP plan, Altman Z) — surface them but don't let them derail the Yahoo session unless Mark picks them up.
+### GIT STATE
+
+8 commits LOCAL-ONLY, NOT pushed (**2e44a37, 4614841, 2bd01ba, 01245cc, 9de1261, f1495f7, 2525183, 48d7cb7**) on top of pushed **175bbf7 / 383b3aa**. HOLD push until the analyst bulk RESUMES and its gate passes Saturday — 2e44a37 sits under the others, so pushing anything pushes the ungated/crashed-run job. Push the whole stack together once Saturday's gate is green.
+
+### PARKED FOR SATURDAY+
+
+- After resume + gate: decide analyst_mom scorer-widening (action='main' blind spot drops ~67% of events) off the REAL universe 5c distribution — NOT the 906-row pre-bulk sample (the earlier wind-down note quoting all-time 67% / 90d 89% was that stale sample, not universe data).
+- inst_own 60.0-tier coverage gap flagged by the 1c test audit: triage whether it's a test-coverage gap (trivial) or a ladder-logic gap (real) before filing.
+- Lock-retry hardening for `job_yahoo_analyst_bulk` (see Workstream 2).
 
 ---
 
