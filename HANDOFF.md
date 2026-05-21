@@ -29,7 +29,6 @@ Next session: Yahoo Finance pipeline + next scoring component(s), fresh chat. Da
 CARRY FORWARD (flagged for today in the 18 May handoff, NOT addressed — today went to dashboard + backup; these remain open):
 
 - FMP plan tier decision — if `economic_calendar` 402 persists, decide upgrade-vs-drop. (Today's `run_log` still showed the 402 on `economic_calendar`.)
-- Altman Z distribution check — marked data-ready 18 May; still not run. `compute_z_raw()` helper extraction still queued.
 
 NEW today:
 
