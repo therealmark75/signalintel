@@ -572,25 +572,39 @@ def score_altman_penalty(ticker: str, financials: dict, market_cap_text) -> int:
 
 
 def score_inst_ownership(ticker: str, inst_data: "dict | None") -> float:
-    """Score 0-100 from institutional ownership percentage (most recent filing).
+    """Score 0-100 from per-(ticker, latest-filing) SUM of pctHeld across the
+    top-10 institutional holders yfinance returns.
 
-    Lock 3: pct > 60 → 75.0 (flattened top tier, not 80→65).
-    Caps pct at 100 to handle data outliers.
+    Phase 2c recalibration (21 May 2026, v0.15.0): tier cuts moved from the
+    original 60/40/20 ladder (which assumed total institutional ownership)
+    to quartile-anchored cuts on the real top-10-SUM distribution
+    (universe re-scrape post-Phase-2b parser fix: p25=12.4, p50=34.4,
+    p75=48.3). Old ladder tiered most of the universe into the low tiers
+    because top-10 sums rarely exceed 60 even for heavily institutional
+    names; new ladder rewards the upper quartile and floors the bottom.
 
-    Catches: low institutional conviction (< 20% held → score 35).
+    Catches: low institutional conviction (bottom-quartile SUM → 30.0).
     Ignores: tickers with no institutional holder data — treated as neutral 50.0.
-    P5: inst_data is None → returns neutral 50.0.
+    P5: inst_data is None or total_pct_held is None → returns neutral 50.0.
     """
     if inst_data is None:
         return 50.0
     pct = inst_data.get("total_pct_held")
     if pct is None:
         return 50.0
-    pct = min(float(pct), 100.0)
-    if pct > 60: return 75.0
-    if pct > 40: return 55.0
-    if pct > 20: return 45.0
-    return 35.0
+    pct = float(pct)
+    # Data-quality guard (Phase 2c): yfinance's pctHeld is not consistently
+    # normalised to total-shares-outstanding for ~0.85% of the universe
+    # (~51 tickers as of 21 May 2026 universe re-scrape, max observed
+    # SUM=522.51 for DUOT). Per-ticker SUM exceeding 100% is source-data
+    # noise, not a real signal — route to neutral rather than tier-scoring
+    # a phantom top tier. This is a data-quality guard, NOT a scoring rule.
+    if pct > 100:
+        return 50.0
+    if pct >= 48: return 75.0
+    if pct >= 34: return 60.0
+    if pct >= 12: return 45.0
+    return 30.0
 
 
 def score_analyst_momentum(ticker: str, mom_data: "dict | None") -> float:
