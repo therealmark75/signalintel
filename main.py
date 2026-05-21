@@ -639,6 +639,58 @@ def job_yahoo_earnings_bulk():
         log_run(DATABASE_PATH, "yahoo_earnings_bulk", "FAILED", error_msg=str(e), duration_s=time.time()-start)
 
 
+def job_yahoo_analyst_bulk():
+    """Weekly Wed 04:00 BST: bulk gap-fill analyst upgrades/downgrades for full active universe.
+
+    Modelled exactly on job_yahoo_earnings_bulk. Append-only INSERT OR IGNORE
+    semantics on the (ticker, event_date, firm, action, source) UNIQUE
+    constraint — re-scrapes add new events and skip already-known ones.
+    Resumable: skips tickers whose external_scrape_log shows a recent
+    (within 6 days) successful ANALYST scrape.
+    """
+    start = time.time()
+    logger.info("=" * 60)
+    logger.info("JOB START: Yahoo Analyst (bulk)")
+    try:
+        import yfinance as yf
+        from database.db import get_connection
+        all_tickers = get_active_tickers(DATABASE_PATH, days=7)
+        conn = get_connection(DATABASE_PATH)
+        cur  = conn.cursor()
+        cur.execute("""
+            SELECT ticker FROM external_scrape_log
+            WHERE data_type = 'ANALYST'
+              AND last_success_at >= datetime('now', '-6 days')
+        """)
+        already_done = {r[0] for r in cur.fetchall()}
+        conn.close()
+        tickers = [t for t in all_tickers if t not in already_done]
+        logger.info(f"  Active tickers: {len(all_tickers)} | skipping {len(already_done)} recent | scraping {len(tickers)}")
+        total_rows = 0
+        for ticker in tickers:
+            try:
+                t = yf.Ticker(ticker)
+                rows = fetch_analyst_changes(t, ticker)
+                if rows:
+                    n = insert_analyst_changes(DATABASE_PATH, rows)
+                    total_rows += n
+                upsert_external_scrape_log(DATABASE_PATH, ticker, "ANALYST", success=True)
+            except YahooRateLimitedError:
+                raise
+            except Exception as e:
+                logger.warning(f"  [Yahoo Analyst Bulk] {ticker}: {e}")
+                upsert_external_scrape_log(DATABASE_PATH, ticker, "ANALYST", success=False, error=str(e))
+            time.sleep(YAHOO_REQUEST_DELAY_SECONDS)
+        duration = time.time() - start
+        log_run(DATABASE_PATH, "yahoo_analyst_bulk", "SUCCESS", total_rows, duration_s=duration)
+        logger.info(f"JOB DONE: Yahoo Analyst Bulk | {total_rows} rows | {duration:.1f}s")
+    except YahooRateLimitedError:
+        raise
+    except Exception as e:
+        logger.error(f"Yahoo Analyst Bulk FAILED: {e}", exc_info=True)
+        log_run(DATABASE_PATH, "yahoo_analyst_bulk", "FAILED", error_msg=str(e), duration_s=time.time()-start)
+
+
 def _log_startup_banner():
     try:
         result = subprocess.run(
@@ -877,6 +929,11 @@ def main():
             job_yahoo_earnings_bulk,
             CronTrigger(hour=4, minute=0, day_of_week="tue"),
             id="yahoo_earnings_tue_04:00", name="Yahoo Earnings (bulk)",
+        )
+        scheduler.add_job(
+            job_yahoo_analyst_bulk,
+            CronTrigger(hour=4, minute=0, day_of_week="wed"),
+            id="yahoo_analyst_wed_04:00", name="Yahoo Analyst (bulk)",
         )
 
         logger.info("Scheduled jobs:")
