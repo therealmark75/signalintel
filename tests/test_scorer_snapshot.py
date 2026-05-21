@@ -252,13 +252,19 @@ _SYNTHETIC_FINANCIALS_MAP = {
     },
 }
 
-# SS07 exercises the weak-institutional-ownership path (pct_held <= 20 → 35.0).
-# Closes the P21 coverage gap: without this entry no fixture ticker drives
-# score_inst_ownership off the P5 neutral 50.0 default. The 35.0 delta from
-# neutral depresses SS07's pre-clamp raw composite further, but the existing
-# -60 Altman penalty already clamps composite_score_raw to 0.0, so SS07's
-# composite/rating fields are unchanged — only sig.inst_own_score moves
-# (50.0 → 35.0), which the per-ticker snapshot below asserts directly.
+# SS07 exercises the weak-institutional-ownership path. Closes the P21
+# coverage gap: without this entry no fixture ticker drives
+# score_inst_ownership off the P5 neutral 50.0 default.
+#
+# v0.15.0 (175bbf7, 21 May 2026): ladder recalibrated from the original
+# 60/40/20 cuts to quartile-anchored 48/34/12 cuts on the real top-10-SUM
+# distribution (p25=12.4, p50=34.4, p75=48.3). SS07's pct_held=15.0 now
+# lands in the 12 ≤ pct < 34 tier (45.0) rather than the pre-recalibration
+# pct ≤ 20 tier (35.0). The delta from neutral is therefore smaller, but
+# the existing -60 Altman penalty still clamps composite_score_raw to 0.0
+# — so SS07's composite/rating fields remain unchanged. Only
+# sig.inst_own_score moves (35.0 → 45.0), which the per-ticker snapshot
+# below asserts directly.
 _SYNTHETIC_INST_OWN_MAP = {
     "SS07": {"total_pct_held": 15.0, "holder_count": 8, "filing_date": "2026-02-15"},
 }
@@ -280,6 +286,12 @@ _SYNTHETIC_ANALYST_MOM_MAP = {
 #       Z'' = -6.20 (was Z = -0.25); penalty unchanged at -60, snapshot row unchanged.
 # SN12/SL11 dropped from BUY → STRONG_HOLD (neutral pull from new 50.0 components;
 #             they remain sector-modifier coverage tickers, not tier-specific).
+# v0.15.0: score_inst_ownership ladder recalibrated 60/40/20 → 48/34/12 (quartile-
+#       anchored on real top-10-SUM distribution), plus >100 → 50.0 data-quality
+#       guard. SS07 (pct=15) tier moved: 35.0 → 45.0. SS07's composite_score_raw
+#       remains 0.0 because Altman -60 still clamps. No other snapshot rows change
+#       — the other 13 tickers have no inst_own_map entry and stay on the P5
+#       neutral 50.0 default.
 # Re-generate with: python -c "from tests.test_scorer_snapshot import _SYNTHETIC_ROWS, ..."
 # Do NOT modify this to match broken output — fix the refactor instead.
 EXPECTED_SNAPSHOT = {
@@ -296,7 +308,7 @@ EXPECTED_SNAPSHOT = {
     "WH05": {"composite_score_raw": 38.6, "composite_score": 38.6, "rating": "SELL",        "legal_penalty": 0,  "sector_modifier_applied":  0.0},
     "WH14": {"composite_score_raw": 37.6, "composite_score": 37.6, "rating": "WEAK_HOLD",   "legal_penalty": 0,  "sector_modifier_applied":  0.0},
     "SE06": {"composite_score_raw": 32.5, "composite_score": 32.5, "rating": "SELL",        "legal_penalty": 0,  "sector_modifier_applied":  0.0},
-    "SS07": {"composite_score_raw":  0.0, "composite_score":  0.0, "rating": "STRONG_SELL", "legal_penalty": 0,  "sector_modifier_applied":  0.0, "inst_own_score": 35.0},
+    "SS07": {"composite_score_raw":  0.0, "composite_score":  0.0, "rating": "STRONG_SELL", "legal_penalty": 0,  "sector_modifier_applied":  0.0, "inst_own_score": 45.0},
 }
 
 

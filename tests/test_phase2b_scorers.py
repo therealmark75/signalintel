@@ -556,21 +556,31 @@ def test_compute_z_double_prime_kwargs_only_enforced():
 # ── score_inst_ownership ──────────────────────────────────────────────────────
 
 def test_inst_own_populated_positive():
-    """pct > 60 → Lock 3 top tier → 75.0.
+    """pct >= 48 → v0.15.0 top quartile → 75.0.
 
-    Catches: Lock 3 not applied (returns 65.0 from old >80 tier instead of 75.0).
+    v0.15.0 (175bbf7): quartile-anchored cuts on the real top-10-SUM
+    distribution (p25=12.4, p50=34.4, p75=48.3) replace the original
+    60/40/20 ladder. pct=65 lands in the top tier (>= 48).
+
+    Catches: top-tier threshold drifting off the 48 cut (e.g. reverting
+    to >= 60 or >= 80).
     Ignores: lower pct tiers.
     """
     assert score_inst_ownership("AAPL", {"total_pct_held": 65.0}) == pytest.approx(75.0)
 
 
 def test_inst_own_populated_negative():
-    """pct <= 20 → lowest tier → 35.0.
+    """pct < 12 → v0.15.0 bottom quartile → 30.0.
 
-    Catches: lowest tier not implemented.
+    v0.15.0 (175bbf7): bottom-quartile floor lowered from the previous
+    35.0 to 30.0 to widen separation between bottom (< p25=12.4) and
+    the next-up tier. pct=10 lands in the bottom bucket.
+
+    Catches: bottom tier reverting to the old 35.0 floor, or the
+    p25=12 threshold drifting.
     Ignores: mid-range tiers.
     """
-    assert score_inst_ownership("AAPL", {"total_pct_held": 10.0}) == pytest.approx(35.0)
+    assert score_inst_ownership("AAPL", {"total_pct_held": 10.0}) == pytest.approx(30.0)
 
 
 def test_inst_own_p5_none():
@@ -591,13 +601,23 @@ def test_inst_own_partial_pct_null():
     assert score_inst_ownership("AAPL", {"holder_count": 5}) == pytest.approx(50.0)
 
 
-def test_inst_own_pct_capped_at_100():
-    """pct > 100 gets capped to 100 before tier check → still 75.0.
+def test_inst_own_implausible_sum_neutral():
+    """pct > 100 → v0.15.0 data-quality guard → neutral 50.0.
 
-    Catches: cap logic missing, causing unexpected tier routing for outlier data.
-    Ignores: normal pct values.
+    Renamed from test_inst_own_pct_capped_at_100. v0.15.0 (175bbf7)
+    replaced the pre-recalibration cap-at-100 behaviour with an explicit
+    data-quality guard: yfinance's pctHeld is not consistently normalised
+    to total-shares-outstanding for ~0.85% of the universe (~51 tickers
+    as of the 21 May 2026 re-scrape, max observed SUM=522.51 for DUOT).
+    Per-ticker SUM exceeding 100% is source-data noise, not a real signal
+    — route to neutral 50.0 rather than tier-scoring a phantom top tier.
+
+    Catches: the >100 → 50.0 guard being removed, which would re-introduce
+    phantom top-tier scoring for tickers with broken yfinance pctHeld
+    normalisation.
+    Ignores: normal pct values (covered by other tier tests).
     """
-    assert score_inst_ownership("AAPL", {"total_pct_held": 115.0}) == pytest.approx(75.0)
+    assert score_inst_ownership("AAPL", {"total_pct_held": 115.0}) == pytest.approx(50.0)
 
 
 # ── score_analyst_momentum ────────────────────────────────────────────────────
