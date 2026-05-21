@@ -28,7 +28,7 @@ Next session: Yahoo Finance pipeline + next scoring component(s), fresh chat. Da
 
 CARRY FORWARD (flagged for today in the 18 May handoff, NOT addressed — today went to dashboard + backup; these remain open):
 
-- FMP plan tier decision — if `economic_calendar` 402 persists, decide upgrade-vs-drop. (Today's `run_log` still showed the 402 on `economic_calendar`.)
+- FMP economic_calendar 402 — DECIDED 21 May: do not upgrade FMP plan. Reroute economic-calendar data via Yahoo (try first) or other free source; FMP paid upgrade only if all free options fail. Execution folded into the Yahoo pipeline scope. `economic_calendar` job still 402-failing daily until rerouted — acceptable known-red until then.
 
 NEW today:
 
