@@ -1994,6 +1994,42 @@ NEW (21 May 2026, post-dashboard ship):
   or rewrite the existing / route logic" was the locked decision at
   ship time; clean-up is the post-confirmation follow-up).
 
+- [DOCS/LAUNCH-CRITICAL] **Methodology documentation workstream**
+  (21 May 2026): a user-facing methodology record (proposed location:
+  `docs/methodology/`, one file per component) explaining the theory,
+  formula, empirical justification, and validation behind every scoring
+  component and penalty. Rationale: "verified public performance
+  record" (named differentiator) only holds if a sceptical user can
+  interrogate HOW a rating forms. Transparency of method is the moat
+  for a solo founder vs incumbents. Plain-language, non-technical-
+  subscriber readable, with the empirical evidence (distributions,
+  calibration findings, backtest results) attached per component.
+
+  **Process implication (the real point):** the "why" behind each
+  decision must be captured AT LOCK TIME, not reconstructed at launch.
+  By launch, "inst_own cuts at 48/34/12" with no record of the
+  p75=48.3 distribution that drove it is archaeology. Going forward,
+  every scoring-substrate decision should bank its justification (the
+  driving distribution / data-quality finding / calibration failure)
+  as it's locked.
+
+  **Pilot entry: inst_own.** Ideal first write-up — full evidentiary
+  trail generated this session: dead-component contribution audit
+  (0% live) → root cause (pctHeld parser-key mismatch, CASE B) →
+  universe distribution (p25=12.4 / p50=34.4 / p75=48.3 / p95=64.1) →
+  quartile-anchored thresholds → >100 implausibility guard routing
+  yfinance noise tail to P5 neutral → 0%→50.8% contribution post-fix.
+  Write this one cleanly; it becomes the template for the other
+  components.
+
+  **Pre-launch positioning call** (deliberate, not default):
+  publishing exact formulas + tuned constants makes the product
+  credible AND copyable. Likely resolution — publish theory +
+  validation evidence (what we measure, why, backtested proof it
+  works) while keeping exact tuned constants and inter-component
+  weighting as the proprietary layer. Decide consciously pre-launch;
+  flagged now so it's a choice.
+
 ---
 
 ## OPENING MOVE FOR ANY NEW SESSION

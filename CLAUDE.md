@@ -313,6 +313,15 @@ metadata). Adding a path-exception list to the hook itself is
 **not** an acceptable evolution — exceptions belong in audit-table
 review, not in the gate's source code.
 
+## Session ergonomics
+
+- **Terminal bell on turn completion.** At the very end of every turn,
+  as the final action before returning control, emit a terminal bell
+  so Mark hears completion from across the room: run `printf '\a'` (or
+  `tput bel`). This applies to every turn in every session, including
+  diagnostics, implementations, and short replies. If a turn ends in a
+  STOP gate, ring the bell after printing the STOP.
+
 ## Notes for Claude Code Sessions
 - Always activate the venv before running Python scripts
 - SQLite DB path is relative: `data/trading_system.db` from project root
