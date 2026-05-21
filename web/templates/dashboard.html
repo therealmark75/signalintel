@@ -229,7 +229,7 @@
   .theme-name { font-size: 12px; color: var(--ink-100); font-weight: 500; line-height: 1.2; }
   .theme-count { font-family: var(--font-mono); font-size: 11px; color: var(--green-400); }
 
-  /* ─── PANEL 7: ELITE SPOTLIGHT (full-width, gold-accented) ─── */
+  /* ─── PANEL 7: TIER SPOTLIGHT (full-width, gold-accented) ─── */
   .spotlight {
     background:
       radial-gradient(ellipse at 0% 0%, rgba(201,160,74,0.07) 0%, transparent 45%),
@@ -562,7 +562,7 @@
 
     {# ─── PANEL 7 — PENNY STOCK SPOTLIGHT (Elite-gated, full-width) ───── #}
     {% if is_elite and spotlight %}
-      {# ELITE branch — real pick data flows to the client #}
+      {# Elite-tier branch — real pick data flows to the client #}
       <section class="spotlight" id="spotlight">
         <div class="spot-inner">
           <div class="spot-col">
@@ -598,7 +598,7 @@
         </div>
       </section>
     {% else %}
-      {# NON-ELITE branch — locked teaser only. NO real pick data in the source. #}
+      {# Non-elite branch — locked teaser only. NO real pick data in the source. #}
       <section class="spotlight locked" id="spotlight">
         <div class="spot-lock-overlay">
           <span class="ico">🔒</span>
