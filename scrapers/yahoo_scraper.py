@@ -160,7 +160,7 @@ def fetch_financial_statements(t: yf.Ticker, ticker: str) -> list:
 def fetch_institutional_holders(t: yf.Ticker, ticker: str) -> list:
     """
     Fetch institutional holders DataFrame.
-    Columns (yfinance 1.2.0): Date Reported, Holder, Shares, % Out, Value.
+    Columns (yfinance 1.2.0): Date Reported, Holder, pctHeld, Shares, Value, pctChange.
     Returns list of row dicts ready for insert_institutional_holders.
     """
     df = _safe_fetch(lambda: t.get_institutional_holders(), ticker, "HOLDERS")
@@ -176,12 +176,19 @@ def fetch_institutional_holders(t: yf.Ticker, ticker: str) -> list:
         holder_name = str(row.get("Holder") or row.get("holder") or "")
         if not holder_name:
             continue
+        # yfinance 1.2.0 exposes the field as `pctHeld` (fraction 0.0-1.0).
+        # Prior column names `% Out` / `pctOut` kept as defensive fallbacks
+        # in case a future yfinance rename swings back. Stored as a percentage
+        # (×100) to match the column semantics and the scorer's tier thresholds
+        # (pct > 60 / > 40 / > 20). None stays None — never coerce to 0.
+        pct_raw = _to_float(row.get("pctHeld") or row.get("% Out") or row.get("pctOut"))
+        pct_out = pct_raw * 100 if pct_raw is not None else None
         rows.append({
             "ticker":       ticker,
             "filing_date":  filing_date or "",
             "holder_name":  holder_name,
             "shares":       _to_int(row.get("Shares") or row.get("shares")),
-            "pct_out":      _to_float(row.get("% Out") or row.get("pctOut")),
+            "pct_out":      pct_out,
             "value":        _to_float(row.get("Value") or row.get("value")),
             "source":       "yahoo",
         })
