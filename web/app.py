@@ -146,6 +146,12 @@ def db_query(sql, params=()):
 @app.route("/")
 @login_required
 def index():
+    # Phase 2A: logged-in users go straight to the new /dashboard. The historical
+    # index() body below is preserved per the Phase 2A spec ("add the redirect
+    # branch only — do not remove or rewrite the existing / route logic") and is
+    # unreachable while this redirect is in place.
+    return redirect(url_for("dashboard"))
+
     user = current_user()
     # Generate today's top signals if not done yet
     today = datetime.now().strftime("%Y-%m-%d")
@@ -220,6 +226,334 @@ def register():
 def logout():
     session.clear()
     return redirect(url_for("login"))
+
+
+# ── /dashboard ───────────────────────────────────────────────────────────────
+# Phase 2A (greenfield): 13-panel grid per docs/mockups/dashboard_restructure_v1.html.
+# 2A delivers the 6 above-the-fold panels (Daily Summary, Top 5 Strong,
+# Top 5 Bearish, Market State, Watchlist Preview, Discovery Themes) + the
+# Elite tier-gating plumbing. 2B adds the Penny-Stock spotlight + 6 below-fold
+# panels (Earnings, Dividends, Sector Performance, Rating Changes, Insider, News).
+@app.route("/dashboard")
+@login_required
+def dashboard():
+    user        = current_user()
+    tier_key    = user.get("tier", "free") if user else "free"
+    is_elite    = (tier_key == "elite")
+
+    # ── Live header context (dash-head subline) ──────────────────────────────
+    meta_row = db_query("""
+        SELECT MAX(scored_at)         AS last_scored,
+               COUNT(DISTINCT ticker) AS ticker_count
+        FROM signal_scores
+        WHERE DATE(scored_at) = DATE((SELECT MAX(scored_at) FROM signal_scores))
+    """)
+    last_scored  = meta_row[0]["last_scored"]  if meta_row else None
+    ticker_count = meta_row[0]["ticker_count"] if meta_row else 0
+
+    # ── Panel 1 — Daily Summary ──────────────────────────────────────────────
+    UP_SET   = {"STRONG_BUY", "BUY", "STRONG_HOLD"}
+    DOWN_SET = {"SELL", "STRONG_SELL", "WEAK_HOLD"}
+    rc_rows = db_query("""
+        SELECT old_rating, new_rating
+        FROM rating_changes
+        WHERE change_date >= datetime('now','-1 day')
+    """)
+    upgrades   = sum(1 for r in rc_rows
+                     if r["new_rating"] in UP_SET and r["old_rating"] not in UP_SET)
+    downgrades = sum(1 for r in rc_rows
+                     if r["new_rating"] in DOWN_SET and r["old_rating"] not in DOWN_SET)
+
+    mover = db_query("""
+        SELECT ticker, change_pct FROM screener_snapshots
+        WHERE scraped_at = (SELECT MAX(scraped_at) FROM screener_snapshots)
+          AND change_pct IS NOT NULL
+        ORDER BY ABS(change_pct) DESC LIMIT 1
+    """)
+    top_mover = mover[0] if mover else None
+
+    earnings_today_row = db_query(
+        "SELECT COUNT(*) AS n FROM earnings_calendar WHERE earnings_date = DATE('now')"
+    )
+    earnings_today = earnings_today_row[0]["n"] if earnings_today_row else 0
+
+    vix_row = db_query(
+        "SELECT close FROM market_history WHERE symbol = '^VIX' ORDER BY date DESC LIMIT 1"
+    )
+    vix_val = vix_row[0]["close"] if vix_row else None
+    if vix_val is None:
+        vix_label = None
+    elif vix_val < 15:
+        vix_label = "calm"
+    elif vix_val <= 22:
+        vix_label = "choppy"
+    else:
+        vix_label = "elevated"
+
+    summary = {
+        "upgrades":       upgrades,
+        "downgrades":     downgrades,
+        "top_mover":      top_mover,
+        "earnings_today": earnings_today,
+        "vix_val":        vix_val,
+        "vix_label":      vix_label,
+    }
+
+    # ── Panels 2 / 3 — Top 5 Strong + Top 5 Bearish ──────────────────────────
+    TIER_CLASS = {
+        "STRONG_BUY":  "tb-vs",
+        "BUY":         "tb-s",
+        "SELL":        "tb-b",
+        "STRONG_SELL": "tb-vb",
+    }
+
+    def _thesis(row, direction):
+        comps = {
+            "momentum":  row.get("momentum_score"),
+            "quality":   row.get("quality_score"),
+            "insider":   row.get("insider_score"),
+            "reversion": row.get("reversion_score"),
+        }
+        # Phase 2B: for bearish, treat 0-valued components as missing (same
+        # rationale as the composite>0 guard on the panel query — a 0 here is
+        # typically a penalty-floored / unscored value, not a real bearish
+        # driver; surfacing it produced "weak X 0" artefacts in 2A).
+        if direction == "strong":
+            comps = {k: v for k, v in comps.items() if v is not None}
+        else:
+            comps = {k: v for k, v in comps.items() if v is not None and v > 0}
+        if not comps:
+            return "—"
+        if direction == "strong":
+            k = max(comps, key=lambda x: comps[x])
+            return f"{k} {comps[k]:.0f}"
+        k = min(comps, key=lambda x: comps[x])
+        return f"weak {k} {comps[k]:.0f}"
+
+    def _annotate(rows, direction):
+        out = []
+        for r in rows:
+            d = dict(r)
+            d["tier_short"] = tier_short(d.get("rating", ""))
+            d["tier_class"] = TIER_CLASS.get(d.get("rating", ""), "")
+            d["thesis"]     = _thesis(d, direction)
+            out.append(d)
+        return out
+
+    top_strong = _annotate(db_query("""
+        SELECT ticker, rating, composite_score, momentum_score,
+               quality_score, insider_score, reversion_score
+        FROM signal_scores
+        WHERE DATE(scored_at) = DATE((SELECT MAX(scored_at) FROM signal_scores))
+          AND rating IN ('STRONG_BUY','BUY')
+        ORDER BY composite_score DESC LIMIT 5
+    """), "strong")
+
+    # Panel 3 fix (Phase 2B): exclude composite_score = 0 — those rows are the
+    # penalty-floored set (761 SELL/STRONG_SELL rows pinned at 0 by _clamp on
+    # the latest run); they're not genuine bearish conviction, they're tickers
+    # whose composite went negative and got floored. Real bearish names start
+    # at composite ~0.1 (LVO) under the current methodology.
+    top_bearish = _annotate(db_query("""
+        SELECT ticker, rating, composite_score, momentum_score,
+               quality_score, insider_score, reversion_score
+        FROM signal_scores
+        WHERE DATE(scored_at) = DATE((SELECT MAX(scored_at) FROM signal_scores))
+          AND rating IN ('SELL','STRONG_SELL')
+          AND composite_score > 0
+        ORDER BY composite_score ASC LIMIT 5
+    """), "bearish")
+
+    # ── Panel 4 — Market State (Hang Seng dropped — Phase 1 flagged ^HSI empty) ─
+    INDICES = [
+        ("^GSPC", "S&P 500"),
+        ("^IXIC", "NASDAQ"),
+        ("^DJI",  "DOW"),
+        ("^VIX",  "VIX"),
+        ("^FTSE", "FTSE 100"),
+    ]
+    market_tiles = []
+    for sym, name in INDICES:
+        rows = db_query(
+            "SELECT close FROM market_history WHERE symbol = ? ORDER BY date DESC LIMIT 2",
+            (sym,),
+        )
+        latest = rows[0]["close"] if rows else None
+        prev   = rows[1]["close"] if len(rows) > 1 else None
+        chg_pct = ((latest - prev) / prev * 100.0) if (latest and prev) else None
+        market_tiles.append({
+            "symbol":  sym,
+            "name":    name,
+            "level":   latest,
+            "chg_pct": chg_pct,
+        })
+
+    # ── Panel 5 — Watchlist Preview ──────────────────────────────────────────
+    default_wl_id = get_or_create_default_watchlist(DATABASE_PATH, user["id"])
+    wl_full   = get_watchlist(DATABASE_PATH, user["id"], default_wl_id)
+    wl_preview = []
+    for w in wl_full[:5]:
+        d = dict(w)
+        d["tier_short"] = tier_short(d.get("rating", "") or "")
+        d["tier_class"] = TIER_CLASS.get(d.get("rating", ""), "")
+        wl_preview.append(d)
+    metas = get_watchlists_meta(DATABASE_PATH, user["id"])
+    wl_meta = next((m for m in metas if m.get("id") == default_wl_id), None)
+    wl_name = (wl_meta or {}).get("name", "Watchlist")
+
+    # ── Panel 6 — Discovery Themes (live counts via shared helper) ───────────
+    counts = _compute_theme_counts(DATABASE_PATH)
+    from config.themes import THEMES
+    themes_panel = []
+    for th in THEMES[:6]:
+        themes_panel.append({
+            "id":    th["id"],
+            "label": th.get("label", th["id"]),
+            "emoji": th.get("emoji", ""),
+            "count": counts.get(th["id"], 0),
+        })
+
+    # ── Panel 7 — Penny Stock Spotlight (ELITE-GATED, server-side only) ──────
+    # Phase 1 lesson: free clients must never receive real pick data. Non-Elite
+    # users get spotlight=None — the template renders the locked teaser with
+    # placeholder copy only, no ticker/price/breakdown leaks into the HTML.
+    spotlight = _get_penny_pick_full(DATABASE_PATH) if is_elite else None
+
+    # ── Relative-time helper (used by panels 11/12/13) ───────────────────────
+    from datetime import datetime as _dt, timezone as _tz
+    _now = _dt.utcnow()
+    def _ago(ts):
+        if not ts:
+            return "—"
+        try:
+            s = ts.replace("Z", "").replace("T", " ")
+            t = _dt.fromisoformat(s.split(".")[0])
+        except Exception:
+            return ts
+        delta = _now - t
+        secs = int(delta.total_seconds())
+        if secs < 60:
+            return f"{secs}s ago"
+        if secs < 3600:
+            return f"{secs // 60}m ago"
+        if secs < 86400:
+            return f"{secs // 3600}h ago"
+        return f"{secs // 86400}d ago"
+
+    # ── Panel 8 — Earnings Next 7 Days ───────────────────────────────────────
+    # Sparse-state: 4 rows live in 7-day window per Phase 1.
+    earnings_upcoming = db_query("""
+        SELECT ec.ticker, ec.earnings_date, ec.eps_estimate,
+               sig.rating, sig.composite_score
+        FROM earnings_calendar ec
+        LEFT JOIN signal_scores sig
+          ON sig.ticker = ec.ticker
+         AND DATE(sig.scored_at) = DATE((SELECT MAX(scored_at) FROM signal_scores))
+        WHERE ec.earnings_date BETWEEN DATE('now') AND DATE('now','+7 days')
+        ORDER BY ec.earnings_date ASC,
+                 COALESCE(sig.composite_score, 0) DESC
+        LIMIT 7
+    """)
+    earnings_upcoming = [
+        {**dict(r),
+         "tier_short": tier_short(r.get("rating") or ""),
+         "tier_class": TIER_CLASS.get(r.get("rating") or "", "")}
+        for r in earnings_upcoming
+    ]
+
+    # ── Panel 9 — Dividends This Week ────────────────────────────────────────
+    # Sparse-state: 2 rows live this week per Phase 1.
+    divs_week = db_query("""
+        SELECT dv.ticker, dv.ex_dividend_date, dv.dividend_yield,
+               dv.annual_dividend,
+               sig.rating
+        FROM dividends dv
+        LEFT JOIN signal_scores sig
+          ON sig.ticker = dv.ticker
+         AND DATE(sig.scored_at) = DATE((SELECT MAX(scored_at) FROM signal_scores))
+        WHERE dv.ex_dividend_date BETWEEN DATE('now') AND DATE('now','+7 days')
+        ORDER BY dv.ex_dividend_date ASC, dv.dividend_yield DESC
+        LIMIT 7
+    """)
+    divs_week = [
+        {**dict(r),
+         "tier_short": tier_short(r.get("rating") or ""),
+         "tier_class": TIER_CLASS.get(r.get("rating") or "", "")}
+        for r in divs_week
+    ]
+
+    # ── Panel 10 — Sector Performance (7d ranking via shared helper) ─────────
+    sectors_panel = _get_sector_performance(DATABASE_PATH)
+
+    # ── Panel 11 — Recent Rating Changes ─────────────────────────────────────
+    rating_change_rows = db_query("""
+        SELECT ticker, old_rating, new_rating, composite_score, change_date
+        FROM rating_changes
+        WHERE change_date >= datetime('now','-1 day')
+        ORDER BY change_date DESC
+        LIMIT 8
+    """)
+    rating_changes_panel = []
+    for r in rating_change_rows:
+        d = dict(r)
+        d["old_short"] = tier_short(d.get("old_rating") or "") or "—"
+        d["new_short"] = tier_short(d.get("new_rating") or "") or "—"
+        d["new_class"] = TIER_CLASS.get(d.get("new_rating") or "", "")
+        d["ago"]       = _ago(d.get("change_date"))
+        rating_changes_panel.append(d)
+
+    # ── Panel 12 — Insider Activity (cluster signals, 14d) ───────────────────
+    insider_panel = db_query("""
+        SELECT ticker, signal_type,
+               MAX(insider_count) AS insider_count,
+               MAX(total_value)   AS total_value,
+               MAX(detected_at)   AS detected_at
+        FROM insider_signals
+        WHERE detected_at >= datetime('now','-14 days')
+        GROUP BY ticker, signal_type
+        ORDER BY total_value DESC
+        LIMIT 7
+    """)
+    insider_panel = [
+        {**dict(r), "ago": _ago(r.get("detected_at"))} for r in insider_panel
+    ]
+
+    # ── Panel 13 — News Headlines (latest 24h) ───────────────────────────────
+    news_panel = db_query("""
+        SELECT ticker, headline, source, published, scraped_at, url
+        FROM news_sentiment
+        WHERE scraped_at >= datetime('now','-1 day')
+        ORDER BY COALESCE(published, scraped_at) DESC
+        LIMIT 7
+    """)
+    news_panel = [
+        {**dict(r), "ago": _ago(r.get("published") or r.get("scraped_at"))}
+        for r in news_panel
+    ]
+
+    return render_template(
+        "dashboard.html",
+        user=user,
+        tier_key=tier_key,
+        is_elite=is_elite,
+        last_scored=last_scored,
+        ticker_count=ticker_count,
+        engine_version=SCORING_ENGINE_VERSION,
+        summary=summary,
+        top_strong=top_strong,
+        top_bearish=top_bearish,
+        market_tiles=market_tiles,
+        wl_preview=wl_preview,
+        wl_name=wl_name,
+        themes_panel=themes_panel,
+        spotlight=spotlight,                # Phase 2B: None for non-Elite (gated)
+        earnings_upcoming=earnings_upcoming,
+        divs_week=divs_week,
+        sectors_panel=sectors_panel,
+        rating_changes_panel=rating_changes_panel,
+        insider_panel=insider_panel,
+        news_panel=news_panel,
+    )
 
 
 @app.route("/ticker/<ticker>")
@@ -611,18 +945,31 @@ def api_sectors():
     return jsonify(rows)
 
 
-@app.route("/api/sector-performance")
-@login_required
-def api_sector_performance():
-    """Latest sector relative strength ranking (all 11 sectors)."""
-    rows = db_query("""
+def _get_sector_performance(db_path: str) -> list:
+    """Latest sector relative strength ranking (all 11 sectors).
+
+    Canonical query — extracted from api_sector_performance so the dashboard
+    route can reuse the same data without duplicating SQL.
+    """
+    conn = get_connection(db_path)
+    cur  = conn.cursor()
+    cur.execute("""
         SELECT sector, etf_symbol, return_7d, return_30d,
                rank_7d, sector_strength_score, date
         FROM sector_performance
         WHERE date = (SELECT MAX(date) FROM sector_performance)
         ORDER BY rank_7d ASC
     """)
-    return jsonify([dict(r) for r in rows] if rows else [])
+    rows = [dict(r) for r in cur.fetchall()]
+    conn.close()
+    return rows
+
+
+@app.route("/api/sector-performance")
+@login_required
+def api_sector_performance():
+    """Latest sector relative strength ranking (all 11 sectors)."""
+    return jsonify(_get_sector_performance(DATABASE_PATH))
 
 
 @app.route("/api/insider_signals")
@@ -899,11 +1246,12 @@ def api_high_impact_banner():
     return jsonify(rows)
 
 
-@app.route("/api/theme-counts")
-@login_required
-def api_theme_counts():
+def _compute_theme_counts(db_path: str) -> dict:
     """Return stock counts for all 7 discovery theme cards.
-    Queries here are canonical — identical logic to /api/screener?theme=<id>.
+
+    Canonical query logic — identical to /api/screener?theme=<id>.
+    Extracted from api_theme_counts so the dashboard route can call the same
+    underlying computation without duplicating SQL.
     """
     from datetime import date as _date, timedelta as _td
     latest_ss_cte = """
@@ -922,7 +1270,7 @@ def api_theme_counts():
         WHERE DATE(scored_at) = DATE((SELECT MAX(scored_at) FROM signal_scores))
     """
 
-    conn = get_connection(DATABASE_PATH)
+    conn = get_connection(db_path)
     cur  = conn.cursor()
 
     def q(sql, params=()):
@@ -992,7 +1340,7 @@ def api_theme_counts():
     """)
 
     conn.close()
-    return jsonify({
+    return {
         "strong_buy_momentum":  strong_buy_momentum,
         "dividend_powerhouses": dividend_powerhouses,
         "buy_the_dip":          buy_the_dip,
@@ -1000,7 +1348,14 @@ def api_theme_counts():
         "legally_clean":        legally_clean,
         "insider_buying_surge": insider_buying_surge,
         "undervalued":          undervalued,
-    })
+    }
+
+
+@app.route("/api/theme-counts")
+@login_required
+def api_theme_counts():
+    """Return stock counts for all 7 discovery theme cards as JSON."""
+    return jsonify(_compute_theme_counts(DATABASE_PATH))
 
 
 @app.route("/api/economic-calendar/refresh", methods=["POST"])
@@ -2066,12 +2421,16 @@ def penny_screener():
     return render_template("penny_screener.html", user=user)
 
 
-@app.route("/api/penny/stock-of-day")
-@login_required
-def api_penny_stock_of_day():
+def _get_penny_pick_full(db_path: str) -> "dict | None":
+    """Resolve today's penny pick and return the full enriched record.
+
+    Returns None if no pick exists yet. Used by /api/penny/stock-of-day
+    (JSON endpoint) and by the Elite branch of the /dashboard route.
+    Real penny-pick data must NEVER reach a non-Elite client — callers gate.
+    """
     ticker = _select_penny_stock_of_day()
     if not ticker:
-        return jsonify({"stock": None})
+        return None
 
     rows = db_query("""
         SELECT ss.ticker, ss.company, ss.sector, ss.industry,
@@ -2093,10 +2452,19 @@ def api_penny_stock_of_day():
     """, (ticker,))
 
     if not rows:
-        return jsonify({"stock": None})
+        return None
 
     stock = rows[0]
     stock["why"] = _penny_why(stock)
+    return stock
+
+
+@app.route("/api/penny/stock-of-day")
+@login_required
+def api_penny_stock_of_day():
+    stock = _get_penny_pick_full(DATABASE_PATH)
+    if not stock:
+        return jsonify({"stock": None})
     return jsonify({"stock": stock, "date": datetime.utcnow().date().isoformat()})
 
 

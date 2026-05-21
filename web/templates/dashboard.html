@@ -1,0 +1,781 @@
+{# Phase 2A — 6 above-fold panels (1-6). Phase 2B adds Elite Spotlight + panels 7-13. #}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard — SignalIntel</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT@9..144,300..900,0..100&family=Inter+Tight:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --navy-950: #060f1c;
+    --navy-900: #0a1729;
+    --navy-850: #0c1d35;
+    --navy-800: #0f2540;
+    --navy-700: #163356;
+    --navy-600: #1f4570;
+
+    --green-500: #2ea850;
+    --green-400: #3ec762;
+    --green-300: #5dd97e;
+    --green-200: #8fe9a6;
+    --green-glow: rgba(62, 199, 98, 0.14);
+    --green-soft: rgba(62, 199, 98, 0.07);
+    --green-border: rgba(62, 199, 98, 0.22);
+
+    --gold-500: #c9a04a;
+    --gold-400: #d4b06a;
+    --gold-300: #e0c489;
+    --gold-glow: rgba(201, 160, 74, 0.16);
+
+    --tier-very-strong: #3ec762;
+    --tier-strong: #5dd97e;
+    --tier-stable: #93d5a4;
+    --tier-neutral: #8a93a6;
+    --tier-soft: #d4a155;
+    --tier-bearish: #d97757;
+    --tier-very-bearish: #c4524a;
+
+    --red-400: #d97757;
+    --red-500: #c4524a;
+
+    --ink-50:  #f6f7f9;
+    --ink-100: #e8ebf0;
+    --ink-200: #cfd5e0;
+    --ink-300: #aab3c2;
+    --ink-400: #8a93a6;
+    --ink-500: #5a6478;
+    --ink-600: #3a4358;
+
+    --line: rgba(255,255,255,0.06);
+    --line-soft: rgba(255,255,255,0.035);
+
+    --font-display: 'Fraunces', Georgia, serif;
+    --font-body: 'Inter Tight', system-ui, sans-serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    background: var(--navy-950);
+    color: var(--ink-200);
+    font-family: var(--font-body);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  body::before {
+    content: ''; position: fixed; inset: 0;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.018) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.018) 1px, transparent 1px);
+    background-size: 64px 64px;
+    pointer-events: none; z-index: 0;
+  }
+  a { text-decoration: none; color: inherit; }
+
+  .parent-bar {
+    background: var(--navy-950); border-bottom: 1px solid var(--line-soft);
+    padding: 8px 0; font-size: 11px; color: var(--ink-400);
+    position: relative; z-index: 3;
+  }
+  .parent-bar-inner {
+    max-width: 1480px; margin: 0 auto; padding: 0 28px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .parent-bar-left { display: flex; align-items: center; gap: 10px; }
+  .vault-wheel { width: 15px; height: 15px; flex-shrink: 0; }
+  .pb-vault { color: var(--ink-200); font-weight: 500; letter-spacing: 0.07em; text-transform: uppercase; font-size: 10px; }
+  .parent-bar-divider { color: var(--navy-600); }
+  .parent-bar-right { display: flex; align-items: center; gap: 20px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; }
+  .parent-bar-right a { color: var(--ink-400); transition: color .18s; }
+  .parent-bar-right a:hover { color: var(--ink-100); }
+
+  .nav {
+    position: sticky; top: 0; z-index: 50;
+    background: rgba(8,17,31,0.82);
+    backdrop-filter: blur(12px) saturate(140%);
+    -webkit-backdrop-filter: blur(12px) saturate(140%);
+    border-bottom: 1px solid var(--line);
+  }
+  .nav-inner { max-width: 1480px; margin: 0 auto; padding: 14px 28px; display: flex; align-items: center; justify-content: space-between; }
+  .nav-logo { display: flex; align-items: center; gap: 11px; }
+  .nav-mark { width: 28px; height: 28px; }
+  .nav-wordmark { font-size: 19px; font-weight: 600; letter-spacing: -0.015em; color: var(--ink-50); }
+  .nav-wordmark .intel { color: var(--green-400); font-weight: 700; }
+  .nav-links { display: flex; align-items: center; gap: 26px; }
+  .nav-links a { color: var(--ink-300); font-size: 13.5px; font-weight: 500; letter-spacing: 0.01em; transition: color .18s; position: relative; padding: 4px 0; }
+  .nav-links a:hover { color: var(--green-400); }
+  .nav-links a.active { color: var(--ink-50); }
+  .nav-links a.active::after { content: ''; position: absolute; bottom: -15px; left: 0; right: 0; height: 2px; background: var(--green-400); }
+  .nav-right { display: flex; align-items: center; gap: 18px; }
+  .tier-pill {
+    font-family: var(--font-mono); font-size: 10px; font-weight: 500;
+    letter-spacing: 0.08em; text-transform: uppercase;
+    padding: 4px 10px; border-radius: 5px;
+    border: 1px solid var(--gold-500); color: var(--gold-400);
+    background: var(--gold-glow);
+  }
+  .tier-pill.tp-free, .tier-pill.tp-starter, .tier-pill.tp-pro {
+    border-color: var(--ink-500); color: var(--ink-300); background: transparent;
+  }
+  .nav-signout { color: var(--ink-400); font-size: 13px; }
+  .nav-signout:hover { color: var(--ink-100); }
+
+  .dash { max-width: 1480px; margin: 0 auto; padding: 32px 28px 80px; position: relative; z-index: 1; }
+  .dash-head { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 26px; flex-wrap: wrap; gap: 16px; }
+  .dash-title {
+    font-family: var(--font-display); font-weight: 360;
+    font-size: 34px; letter-spacing: -0.02em; color: var(--ink-50);
+    font-variation-settings: "opsz" 72, "SOFT" 30;
+  }
+  .dash-title .sub {
+    display: block; font-family: var(--font-mono); font-size: 12px;
+    font-weight: 400; color: var(--ink-400); letter-spacing: 0.04em; margin-top: 8px;
+  }
+  .dash-title .sub .live-dot {
+    display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+    background: var(--green-400); margin-right: 7px; vertical-align: 1px;
+    box-shadow: 0 0 0 0 rgba(62,199,98,0.6); animation: livepulse 2.4s ease-out infinite;
+  }
+  @keyframes livepulse {
+    0% { box-shadow: 0 0 0 0 rgba(62,199,98,0.45);}
+    70% { box-shadow: 0 0 0 7px rgba(62,199,98,0);}
+    100% { box-shadow: 0 0 0 0 rgba(62,199,98,0);}
+  }
+
+  .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 16px; }
+
+  .panel {
+    background: linear-gradient(165deg, var(--navy-850) 0%, var(--navy-900) 100%);
+    border: 1px solid var(--line); border-radius: 12px; padding: 0;
+    display: flex; flex-direction: column; min-height: 244px;
+    overflow: hidden; transition: border-color .2s; position: relative;
+  }
+  .panel:hover { border-color: var(--green-border); }
+  .panel-head { display: flex; align-items: center; justify-content: space-between; padding: 16px 18px 12px; }
+  .panel-title { font-size: 13px; font-weight: 600; color: var(--ink-100); letter-spacing: 0.01em; display: flex; align-items: center; gap: 8px; }
+  .panel-title .idx { font-family: var(--font-mono); font-size: 9px; color: var(--ink-600); border: 1px solid var(--line); border-radius: 4px; padding: 2px 5px; font-weight: 400; }
+  .panel-meta { font-family: var(--font-mono); font-size: 10px; color: var(--ink-500); letter-spacing: 0.03em; }
+  .panel-body { padding: 0 18px; flex: 1; }
+  .panel-foot { padding: 11px 18px; border-top: 1px solid var(--line-soft); margin-top: auto; }
+  .panel-cta { font-family: var(--font-mono); font-size: 11px; color: var(--green-400); letter-spacing: 0.02em; transition: gap .18s; display: inline-flex; gap: 5px; }
+  .panel-cta:hover { color: var(--green-300); gap: 9px; }
+
+  .empty-state { font-size: 12.5px; color: var(--ink-500); padding: 28px 0; text-align: center; }
+  .empty-state a { color: var(--green-400); }
+
+  .srow {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 0; border-bottom: 1px solid var(--line-soft);
+    font-size: 13px; cursor: pointer; transition: background .12s;
+    margin: 0 -8px; padding-left: 8px; padding-right: 8px; border-radius: 5px;
+  }
+  .srow:last-child { border-bottom: none; }
+  .srow:hover { background: var(--green-soft); }
+  .srow .tk { font-family: var(--font-mono); font-weight: 600; color: var(--ink-50); font-size: 12.5px; min-width: 46px; }
+  .srow .thesis { color: var(--ink-400); font-size: 11.5px; flex: 1; }
+  .srow .score { font-family: var(--font-mono); font-weight: 500; font-size: 12.5px; color: var(--ink-200); min-width: 28px; text-align: right; }
+  .tier-badge { font-family: var(--font-mono); font-size: 9px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; padding: 2px 7px; border-radius: 4px; white-space: nowrap; }
+  .tb-vs { background: rgba(62,199,98,0.16); color: var(--tier-very-strong); }
+  .tb-s  { background: rgba(93,217,126,0.13); color: var(--tier-strong); }
+  .tb-b  { background: rgba(217,119,87,0.15); color: var(--tier-bearish); }
+  .tb-vb { background: rgba(196,82,74,0.16); color: var(--tier-very-bearish); }
+
+  .summary-grid { display: flex; flex-direction: column; gap: 0; }
+  .stat-line {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 0; border-bottom: 1px solid var(--line-soft);
+    cursor: pointer; margin: 0 -8px; padding-left: 8px; padding-right: 8px;
+    border-radius: 5px; transition: background .12s;
+  }
+  .stat-line:hover { background: var(--green-soft); }
+  .stat-line:last-child { border-bottom: none; }
+  .stat-label { font-size: 12.5px; color: var(--ink-300); display: flex; align-items: center; gap: 9px; }
+  .stat-icn { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+  .stat-value { font-family: var(--font-mono); font-size: 14px; font-weight: 500; color: var(--ink-50); }
+  .stat-value.up { color: var(--green-400); }
+  .stat-value.down { color: var(--red-400); }
+
+  .mkt-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding-top: 2px; }
+  .mkt-tile { border: 1px solid var(--line); border-radius: 8px; padding: 10px 11px; cursor: pointer; transition: border-color .15s, background .15s; }
+  .mkt-tile:hover { border-color: var(--green-border); background: var(--green-soft); }
+  .mkt-name { font-family: var(--font-mono); font-size: 10px; color: var(--ink-400); letter-spacing: 0.05em; }
+  .mkt-level { font-family: var(--font-mono); font-size: 14px; font-weight: 500; color: var(--ink-50); margin-top: 3px; }
+  .mkt-chg { font-family: var(--font-mono); font-size: 11px; margin-top: 1px; }
+  .mkt-chg.up { color: var(--green-400); }
+  .mkt-chg.down { color: var(--red-400); }
+
+  .wl-row {
+    display: grid; grid-template-columns: 46px 1fr auto auto;
+    gap: 10px; align-items: center; padding: 8px 0;
+    border-bottom: 1px solid var(--line-soft); cursor: pointer;
+    margin: 0 -8px; padding-left: 8px; padding-right: 8px; border-radius: 5px; transition: background .12s;
+  }
+  .wl-row:hover { background: var(--green-soft); }
+  .wl-row:last-child { border-bottom: none; }
+  .wl-chg { font-family: var(--font-mono); font-size: 11.5px; text-align: right; }
+  .wl-chg.up { color: var(--green-400); }
+  .wl-chg.down { color: var(--red-400); }
+  .wl-row .tk { font-family: var(--font-mono); font-weight: 600; color: var(--ink-50); font-size: 12.5px; }
+  .wl-row .score { font-family: var(--font-mono); font-size: 12.5px; color: var(--ink-200); }
+
+  .theme-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .theme-tile { border: 1px solid var(--line); border-radius: 8px; padding: 12px 13px; cursor: pointer; transition: border-color .15s, background .15s; display: flex; flex-direction: column; gap: 4px; }
+  .theme-tile:hover { border-color: var(--green-border); background: var(--green-soft); }
+  .theme-emoji { font-size: 17px; }
+  .theme-name { font-size: 12px; color: var(--ink-100); font-weight: 500; line-height: 1.2; }
+  .theme-count { font-family: var(--font-mono); font-size: 11px; color: var(--green-400); }
+
+  /* ─── PANEL 7: ELITE SPOTLIGHT (full-width, gold-accented) ─── */
+  .spotlight {
+    background:
+      radial-gradient(ellipse at 0% 0%, rgba(201,160,74,0.07) 0%, transparent 45%),
+      linear-gradient(165deg, var(--navy-850) 0%, var(--navy-900) 100%);
+    border: 1px solid var(--gold-glow);
+    border-radius: 12px; overflow: hidden; position: relative;
+    margin-bottom: 16px;
+  }
+  .spotlight::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+    background: linear-gradient(90deg, var(--gold-500), var(--gold-300), transparent 70%);
+  }
+  .spot-inner { display: grid; grid-template-columns: 1.15fr 1fr 1.2fr; gap: 0; }
+  .spot-col { padding: 22px 26px; border-right: 1px solid var(--line); }
+  .spot-col:last-child { border-right: none; }
+  .spot-eyebrow {
+    font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em;
+    text-transform: uppercase; color: var(--gold-400); margin-bottom: 14px;
+    display: flex; align-items: center; gap: 9px;
+  }
+  .spot-eyebrow .lock { font-size: 11px; }
+  .spot-ticker { font-family: var(--font-mono); font-size: 30px; font-weight: 600; color: var(--ink-50); letter-spacing: 0.01em; }
+  .spot-company { font-size: 13px; color: var(--ink-400); margin-top: 2px; }
+  .spot-price { font-family: var(--font-mono); font-size: 22px; color: var(--ink-50); margin-top: 16px; }
+  .spot-price .chg.up { color: var(--green-400); }
+  .spot-price .chg.down { color: var(--red-400); }
+  .spot-price .chg { font-size: 13px; margin-left: 8px; }
+  .spot-breakdown-title, .spot-why-title {
+    font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em;
+    text-transform: uppercase; color: var(--ink-500); margin-bottom: 14px;
+  }
+  .comp-bar-row { margin-bottom: 13px; }
+  .comp-bar-label { display: flex; justify-content: space-between; font-size: 11.5px; color: var(--ink-300); margin-bottom: 5px; }
+  .comp-bar-label .v { font-family: var(--font-mono); color: var(--ink-100); }
+  .comp-track { height: 5px; background: rgba(255,255,255,0.05); border-radius: 3px; overflow: hidden; }
+  .comp-fill { height: 100%; border-radius: 3px; background: linear-gradient(90deg, var(--green-500), var(--green-300)); }
+  .legal-badge {
+    display: inline-flex; align-items: center; gap: 6px; margin-top: 6px;
+    font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.04em;
+    padding: 4px 9px; border-radius: 5px;
+    background: rgba(62,199,98,0.12); color: var(--green-300); border: 1px solid var(--green-border);
+  }
+  .legal-badge.risk-minor { background: rgba(212,177,107,0.12); color: var(--gold-300); border-color: rgba(201,160,74,0.30); }
+  .legal-badge.risk-major { background: rgba(196,82,74,0.15); color: var(--red-400); border-color: rgba(196,82,74,0.35); }
+  .why-list { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  .why-list li { font-size: 12.5px; color: var(--ink-300); line-height: 1.4; display: flex; gap: 9px; }
+  .why-list li::before { content: '▸'; color: var(--gold-400); flex-shrink: 0; }
+  .spot-cta-row { margin-top: 18px; }
+  .spot-cta { font-family: var(--font-mono); font-size: 12px; color: var(--gold-400); display: inline-flex; gap: 6px; transition: gap .18s; }
+  .spot-cta:hover { gap: 10px; color: var(--gold-300); }
+
+  /* Locked teaser (non-Elite) — full overlay, blurred placeholder */
+  .spotlight.locked .spot-inner { filter: blur(3px) saturate(0.5); opacity: 0.4; pointer-events: none; }
+  .spot-lock-overlay {
+    position: absolute; inset: 0; display: flex;
+    flex-direction: column; align-items: center; justify-content: center;
+    gap: 12px; text-align: center; padding: 24px; z-index: 2;
+  }
+  .spot-lock-overlay .ico { font-size: 24px; }
+  .spot-lock-overlay .ttl { font-family: var(--font-display); font-size: 22px; color: var(--ink-50); font-weight: 400; }
+  .spot-lock-overlay .desc { font-size: 13px; color: var(--ink-400); max-width: 360px; line-height: 1.5; }
+  .spot-lock-overlay .upgrade {
+    font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.04em;
+    color: var(--navy-950); background: linear-gradient(135deg, var(--gold-400), var(--gold-500));
+    padding: 10px 20px; border-radius: 7px; font-weight: 600; margin-top: 4px;
+    text-decoration: none;
+  }
+
+  /* Fold divider */
+  .fold-divider {
+    display: flex; align-items: center; gap: 16px;
+    margin: 30px 0 22px; color: var(--ink-500);
+    font-family: var(--font-mono); font-size: 10px;
+    letter-spacing: 0.16em; text-transform: uppercase;
+  }
+  .fold-divider::before, .fold-divider::after {
+    content: ''; height: 1px; background: var(--line); flex: 1;
+  }
+
+  /* Sector row (panel 10) */
+  .sec-row {
+    display: grid; grid-template-columns: 16px 1fr auto;
+    gap: 10px; align-items: center; padding: 6px 0; font-size: 12px; cursor: pointer;
+    margin: 0 -8px; padding-left: 8px; padding-right: 8px; border-radius: 5px; transition: background .12s;
+  }
+  .sec-row:hover { background: var(--green-soft); }
+  .sec-rank { font-family: var(--font-mono); font-size: 10px; color: var(--ink-600); }
+  .sec-name { color: var(--ink-200); display: flex; align-items: center; gap: 8px; }
+  .sec-bar { height: 4px; border-radius: 2px; display: inline-block; }
+  .sec-pct { font-family: var(--font-mono); font-size: 11.5px; min-width: 56px; text-align: right; }
+  .sec-pct.up { color: var(--green-400); }
+  .sec-pct.down { color: var(--red-400); }
+
+  /* News row (panel 13) */
+  .news-row {
+    padding: 9px 0; border-bottom: 1px solid var(--line-soft); cursor: pointer;
+    margin: 0 -8px; padding-left: 8px; padding-right: 8px; border-radius: 5px; transition: background .12s;
+  }
+  .news-row:hover { background: var(--green-soft); }
+  .news-row:last-child { border-bottom: none; }
+  .news-meta { font-family: var(--font-mono); font-size: 9.5px; color: var(--ink-500); letter-spacing: 0.04em; display: flex; gap: 8px; margin-bottom: 3px; }
+  .news-ticker-tag { color: var(--green-400); }
+  .news-head { font-size: 12px; color: var(--ink-200); line-height: 1.35; }
+
+  /* Rating-change arrow row (panel 11) */
+  .rc-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 7px 0; border-bottom: 1px solid var(--line-soft);
+    font-size: 13px; cursor: pointer;
+    margin: 0 -8px; padding-left: 8px; padding-right: 8px; border-radius: 5px; transition: background .12s;
+  }
+  .rc-row:last-child { border-bottom: none; }
+  .rc-row:hover { background: var(--green-soft); }
+  .rc-row .arrow { color: var(--ink-500); font-family: var(--font-mono); font-size: 11px; }
+  .rc-row .ago { color: var(--ink-500); font-family: var(--font-mono); font-size: 10px; margin-left: auto; }
+
+  @media (max-width: 1100px) {
+    .grid-3 { grid-template-columns: 1fr 1fr; }
+    .spot-inner { grid-template-columns: 1fr; }
+    .spot-col { border-right: none; border-bottom: 1px solid var(--line); }
+  }
+  @media (max-width: 680px)  { .grid-3 { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+  <div class="parent-bar">
+    <div class="parent-bar-inner">
+      <div class="parent-bar-left">
+        <svg class="vault-wheel" viewBox="0 0 24 24" fill="none">
+          <circle cx="12" cy="12" r="10" stroke="#c9a04a" stroke-width="1.4"/>
+          <path d="M12 4 L18 15 L6 15 Z" fill="#c9a04a" opacity="0.85"/>
+        </svg>
+        <span class="pb-vault">The Signal Vault</span>
+        <span class="parent-bar-divider">·</span>
+        <span>SignalIntel</span>
+      </div>
+      <div class="parent-bar-right">
+        <a href="#">Commodities</a>
+        <a href="#">Crypto</a>
+        <a href="#">Forex</a>
+        <a href="#">Account</a>
+      </div>
+    </div>
+  </div>
+
+  <nav class="nav">
+    <div class="nav-inner">
+      <a class="nav-logo" href="/dashboard">
+        <svg class="nav-mark" viewBox="0 0 32 32" fill="none">
+          <path d="M16 3 L27 9.5 V22.5 L16 29 L5 22.5 V9.5 Z" stroke="#3ec762" stroke-width="1.6" fill="rgba(62,199,98,0.05)"/>
+          <path d="M11 13 L16 21 L21 11" stroke="#3ec762" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <span class="nav-wordmark">Signal<span class="intel">Intel</span></span>
+      </a>
+      <div class="nav-links">
+        <a href="/dashboard" class="active">Dashboard</a>
+        <a href="/signals">Signals</a>
+        <a href="/screener">Screener</a>
+        <a href="/markets">Markets</a>
+        <a href="/events">Events</a>
+        <a href="/watchlist">Watchlist</a>
+        <a href="/penny">Penny</a>
+      </div>
+      <div class="nav-right">
+        <span class="tier-pill tp-{{ tier_key }}">{{ (tier_key or 'free')|capitalize }}</span>
+        <a href="/logout" class="nav-signout">Sign out</a>
+      </div>
+    </div>
+  </nav>
+
+  <main class="dash">
+    <div class="dash-head">
+      <h1 class="dash-title">
+        Dashboard
+        <span class="sub">
+          <span class="live-dot"></span>{% if last_scored %}Last signal run {{ last_scored }} · {{ ticker_count }} tickers scored · engine v{{ engine_version }}{% else %}No signal run yet · engine v{{ engine_version }}{% endif %}
+        </span>
+      </h1>
+    </div>
+
+    {# ─── ABOVE THE FOLD — 3×2 ────────────────────────────────────── #}
+    <div class="grid-3">
+
+      {# PANEL 1 — DAILY SUMMARY #}
+      <section class="panel">
+        <div class="panel-head">
+          <span class="panel-title"><span class="idx">01</span>Daily Summary</span>
+          <span class="panel-meta">last 24h</span>
+        </div>
+        <div class="panel-body">
+          <div class="summary-grid">
+            <a href="/ratings" class="stat-line">
+              <span class="stat-label"><span class="stat-icn" style="background:var(--green-400)"></span>Upgrades</span>
+              <span class="stat-value up">+{{ summary.upgrades }}</span>
+            </a>
+            <a href="/ratings" class="stat-line">
+              <span class="stat-label"><span class="stat-icn" style="background:var(--red-400)"></span>Downgrades</span>
+              <span class="stat-value down">−{{ summary.downgrades }}</span>
+            </a>
+            <a href="{% if summary.top_mover %}/ticker/{{ summary.top_mover.ticker }}{% else %}/signals{% endif %}" class="stat-line">
+              <span class="stat-label"><span class="stat-icn" style="background:var(--green-300)"></span>Top mover</span>
+              <span class="stat-value">{% if summary.top_mover %}{{ summary.top_mover.ticker }} {{ '%+.1f'|format(summary.top_mover.change_pct) }}%{% else %}—{% endif %}</span>
+            </a>
+            <a href="/earnings" class="stat-line">
+              <span class="stat-label"><span class="stat-icn" style="background:var(--gold-400)"></span>Earnings today</span>
+              <span class="stat-value">{{ summary.earnings_today }}</span>
+            </a>
+            <a href="/markets/^VIX" class="stat-line">
+              <span class="stat-label"><span class="stat-icn" style="background:var(--ink-400)"></span>VIX state</span>
+              <span class="stat-value">{% if summary.vix_val is not none %}{{ '%.1f'|format(summary.vix_val) }} {{ summary.vix_label }}{% else %}—{% endif %}</span>
+            </a>
+          </div>
+        </div>
+        <div class="panel-foot"><span class="panel-meta" style="color:var(--ink-500)">click any stat to drill in</span></div>
+      </section>
+
+      {# PANEL 2 — TOP 5 STRONG #}
+      <section class="panel">
+        <div class="panel-head">
+          <span class="panel-title"><span class="idx">02</span>Top 5 Strong Signals</span>
+        </div>
+        <div class="panel-body">
+          {% if top_strong %}
+            {% for r in top_strong %}
+            <a class="srow" href="/ticker/{{ r.ticker }}">
+              <span class="tk">{{ r.ticker }}</span>
+              <span class="tier-badge {{ r.tier_class }}">{{ r.tier_short }}</span>
+              <span class="thesis">{{ r.thesis }}</span>
+              <span class="score">{{ '%.0f'|format(r.composite_score) }}</span>
+            </a>
+            {% endfor %}
+          {% else %}
+            <div class="empty-state">No strong signals in the latest run.</div>
+          {% endif %}
+        </div>
+        <div class="panel-foot"><a class="panel-cta" href="/signals">View all signals →</a></div>
+      </section>
+
+      {# PANEL 3 — TOP 5 BEARISH #}
+      <section class="panel">
+        <div class="panel-head">
+          <span class="panel-title"><span class="idx">03</span>Top 5 Bearish Signals</span>
+        </div>
+        <div class="panel-body">
+          {% if top_bearish %}
+            {% for r in top_bearish %}
+            <a class="srow" href="/ticker/{{ r.ticker }}">
+              <span class="tk">{{ r.ticker }}</span>
+              <span class="tier-badge {{ r.tier_class }}">{{ r.tier_short }}</span>
+              <span class="thesis">{{ r.thesis }}</span>
+              <span class="score">{{ '%.0f'|format(r.composite_score) }}</span>
+            </a>
+            {% endfor %}
+          {% else %}
+            <div class="empty-state">No bearish signals in the latest run.</div>
+          {% endif %}
+        </div>
+        <div class="panel-foot"><a class="panel-cta" href="/signals?rating=SELL">View all bearish signals →</a></div>
+      </section>
+
+      {# PANEL 4 — MARKET STATE #}
+      <section class="panel">
+        <div class="panel-head">
+          <span class="panel-title"><span class="idx">04</span>Market State</span>
+          <span class="panel-meta">latest close</span>
+        </div>
+        <div class="panel-body">
+          <div class="mkt-grid">
+            {% for t in market_tiles %}
+            <a class="mkt-tile" href="/markets/{{ t.symbol }}">
+              <div class="mkt-name">{{ t.name }}</div>
+              <div class="mkt-level">{% if t.level is not none %}{{ '{:,.0f}'.format(t.level) if t.level >= 100 else '%.2f'|format(t.level) }}{% else %}—{% endif %}</div>
+              <div class="mkt-chg {% if t.chg_pct is not none and t.chg_pct >= 0 %}up{% elif t.chg_pct is not none %}down{% endif %}">
+                {% if t.chg_pct is not none %}{{ '%+.2f'|format(t.chg_pct) }}%{% else %}—{% endif %}
+              </div>
+            </a>
+            {% endfor %}
+          </div>
+        </div>
+        <div class="panel-foot"><a class="panel-cta" href="/markets">Full markets view →</a></div>
+      </section>
+
+      {# PANEL 5 — WATCHLIST PREVIEW #}
+      <section class="panel">
+        <div class="panel-head">
+          <span class="panel-title"><span class="idx">05</span>Watchlist Preview</span>
+          <span class="panel-meta">{{ wl_name }}</span>
+        </div>
+        <div class="panel-body">
+          {% if wl_preview %}
+            {% for w in wl_preview %}
+            <a class="wl-row" href="/ticker/{{ w.ticker }}">
+              <span class="tk">{{ w.ticker }}</span>
+              {% if w.rating %}<span class="tier-badge {{ w.tier_class }}">{{ w.tier_short }}</span>{% else %}<span class="tier-badge" style="color:var(--ink-500);background:transparent">—</span>{% endif %}
+              <span class="score">{% if w.composite_score is not none %}{{ '%.0f'|format(w.composite_score) }}{% else %}—{% endif %}</span>
+              <span class="wl-chg {% if w.change_pct is not none and w.change_pct >= 0 %}up{% elif w.change_pct is not none %}down{% endif %}">
+                {% if w.change_pct is not none %}{{ '%+.1f'|format(w.change_pct) }}%{% else %}—{% endif %}
+              </span>
+            </a>
+            {% endfor %}
+          {% else %}
+            <div class="empty-state">Add tickers to your watchlist to see them here <a href="/watchlist">→</a></div>
+          {% endif %}
+        </div>
+        <div class="panel-foot"><a class="panel-cta" href="/watchlist">Full watchlist →</a></div>
+      </section>
+
+      {# PANEL 6 — DISCOVERY THEMES #}
+      <section class="panel">
+        <div class="panel-head">
+          <span class="panel-title"><span class="idx">06</span>Discovery Themes</span>
+        </div>
+        <div class="panel-body">
+          <div class="theme-grid">
+            {% for th in themes_panel %}
+            <a class="theme-tile" href="/screener?theme={{ th.id }}">
+              <span class="theme-emoji">{{ th.emoji }}</span>
+              <span class="theme-name">{{ th.label }}</span>
+              <span class="theme-count">{{ '{:,}'.format(th.count) }} tickers</span>
+            </a>
+            {% endfor %}
+          </div>
+        </div>
+        <div class="panel-foot"><a class="panel-cta" href="/signals">All discovery themes →</a></div>
+      </section>
+
+    </div>
+    {# ─── END ABOVE THE FOLD ──────────────────────────────────────── #}
+
+    {# ─── PANEL 7 — PENNY STOCK SPOTLIGHT (Elite-gated, full-width) ───── #}
+    {% if is_elite and spotlight %}
+      {# ELITE branch — real pick data flows to the client #}
+      <section class="spotlight" id="spotlight">
+        <div class="spot-inner">
+          <div class="spot-col">
+            <div class="spot-eyebrow"><span class="lock">★</span>Penny Stock of the Day · Elite</div>
+            <div class="spot-ticker">{{ spotlight.ticker }}</div>
+            <div class="spot-company">{{ spotlight.company or '—' }}{% if spotlight.sector %} · {{ spotlight.sector }}{% endif %}</div>
+            <div class="spot-price">
+              {% if spotlight.price is not none %}${{ '%.2f'|format(spotlight.price) }}{% else %}—{% endif %}
+              {% if spotlight.change_pct is not none %}<span class="chg {% if spotlight.change_pct >= 0 %}up{% else %}down{% endif %}">{{ '%+.1f'|format(spotlight.change_pct) }}%</span>{% endif %}
+            </div>
+            {% set _legal_class = 'risk-major' if (spotlight.risk_label in ['SEC_ENFORCEMENT','SEC_INVESTIGATION','CRIMINAL','CLASS_ACTION']) else ('risk-minor' if spotlight.risk_label == 'MINOR' else '') %}
+            <div class="legal-badge {{ _legal_class }}" style="margin-top:18px;">⚖ Legal risk: {{ spotlight.risk_label or 'NONE' }}</div>
+          </div>
+          <div class="spot-col">
+            <div class="spot-breakdown-title">Composite breakdown</div>
+            {% for k, lbl in [('momentum_score','Momentum'), ('quality_score','Quality'), ('insider_score','Insider')] %}
+              {% set v = spotlight[k] %}
+              <div class="comp-bar-row">
+                <div class="comp-bar-label"><span>{{ lbl }}</span><span class="v">{% if v is not none %}{{ '%.0f'|format(v) }}{% else %}—{% endif %}</span></div>
+                <div class="comp-track"><div class="comp-fill" style="width:{% if v is not none %}{{ v|round(0) }}{% else %}0{% endif %}%"></div></div>
+              </div>
+            {% endfor %}
+          </div>
+          <div class="spot-col">
+            <div class="spot-why-title">Why we're watching</div>
+            <ul class="why-list">
+              {% for r in spotlight.why %}<li>{{ r }}</li>{% endfor %}
+            </ul>
+            <div class="spot-cta-row">
+              <a class="spot-cta" href="/ticker/{{ spotlight.ticker }}">Full ticker view →</a>
+            </div>
+          </div>
+        </div>
+      </section>
+    {% else %}
+      {# NON-ELITE branch — locked teaser only. NO real pick data in the source. #}
+      <section class="spotlight locked" id="spotlight">
+        <div class="spot-lock-overlay">
+          <span class="ico">🔒</span>
+          <span class="ttl">Penny Stock of the Day</span>
+          <span class="desc">A daily curated penny pick with full composite breakdown and legal-risk context. Available on the Elite tier.</span>
+          <a href="/account" class="upgrade">Upgrade to Elite →</a>
+        </div>
+        <div class="spot-inner" aria-hidden="true">
+          {# Placeholder filler — visually blurred behind the overlay. NO real ticker data. #}
+          <div class="spot-col">
+            <div class="spot-eyebrow"><span class="lock">★</span>Penny Stock of the Day · Elite</div>
+            <div class="spot-ticker">— — — —</div>
+            <div class="spot-company">Locked preview</div>
+            <div class="spot-price">$—.—— <span class="chg up">+—.—%</span></div>
+          </div>
+          <div class="spot-col">
+            <div class="spot-breakdown-title">Composite breakdown</div>
+            {% for lbl in ['Momentum','Quality','Insider'] %}
+            <div class="comp-bar-row">
+              <div class="comp-bar-label"><span>{{ lbl }}</span><span class="v">—</span></div>
+              <div class="comp-track"><div class="comp-fill" style="width:42%"></div></div>
+            </div>
+            {% endfor %}
+          </div>
+          <div class="spot-col">
+            <div class="spot-why-title">Why we're watching</div>
+            <ul class="why-list">
+              <li>Curated rationale available on Elite.</li>
+              <li>Composite breakdown and legal-risk context unlocked at upgrade.</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+    {% endif %}
+
+    <div class="fold-divider">Below the fold · context &amp; flow</div>
+
+    {# ─── BELOW THE FOLD — 3×2 ──────────────────────────────────────── #}
+    <div class="grid-3">
+
+      {# PANEL 8 — EARNINGS NEXT 7 DAYS #}
+      <section class="panel">
+        <div class="panel-head">
+          <span class="panel-title"><span class="idx">08</span>Earnings · next 7d</span>
+        </div>
+        <div class="panel-body">
+          {% if earnings_upcoming %}
+            {% for r in earnings_upcoming %}
+            <a class="srow" href="/ticker/{{ r.ticker }}">
+              <span class="tk">{{ r.ticker }}</span>
+              {% if r.rating %}<span class="tier-badge {{ r.tier_class }}">{{ r.tier_short }}</span>{% endif %}
+              <span class="thesis">{{ r.earnings_date }}{% if r.eps_estimate is not none %} · EPS est {{ '%.2f'|format(r.eps_estimate) }}{% endif %}</span>
+            </a>
+            {% endfor %}
+          {% else %}
+            <div class="empty-state">Nothing scheduled in the next 7 days.</div>
+          {% endif %}
+        </div>
+        <div class="panel-foot"><a class="panel-cta" href="/earnings">Full earnings calendar →</a></div>
+      </section>
+
+      {# PANEL 9 — DIVIDENDS THIS WEEK #}
+      <section class="panel">
+        <div class="panel-head">
+          <span class="panel-title"><span class="idx">09</span>Dividends · this week</span>
+        </div>
+        <div class="panel-body">
+          {% if divs_week %}
+            {% for r in divs_week %}
+            <a class="srow" href="/ticker/{{ r.ticker }}">
+              <span class="tk">{{ r.ticker }}</span>
+              {% if r.rating %}<span class="tier-badge {{ r.tier_class }}">{{ r.tier_short }}</span>{% endif %}
+              <span class="thesis">ex {{ r.ex_dividend_date }}{% if r.dividend_yield is not none %} · {{ '%.2f'|format(r.dividend_yield) }}% yield{% endif %}{% if r.annual_dividend is not none %} · ${{ '%.2f'|format(r.annual_dividend) }} annual{% endif %}</span>
+            </a>
+            {% endfor %}
+          {% else %}
+            <div class="empty-state">No ex-dividend dates in the next 7 days.</div>
+          {% endif %}
+        </div>
+        <div class="panel-foot"><a class="panel-cta" href="/dividends">Full dividend calendar →</a></div>
+      </section>
+
+      {# PANEL 10 — SECTOR PERFORMANCE #}
+      <section class="panel">
+        <div class="panel-head">
+          <span class="panel-title"><span class="idx">10</span>Sector Performance · 7d</span>
+        </div>
+        <div class="panel-body">
+          {% if sectors_panel %}
+            {% set max_abs = sectors_panel | map(attribute='return_7d') | map('default', 0) | map('abs') | max %}
+            {% for s in sectors_panel %}
+              {% set ret = s.return_7d or 0 %}
+              {% set bar_w = ((ret | abs) / (max_abs if max_abs > 0 else 1)) * 100 %}
+              <a class="sec-row" href="/screener?sector={{ s.sector|urlencode }}">
+                <span class="sec-rank">{{ s.rank_7d or '—' }}</span>
+                <span class="sec-name">{{ s.sector }}<span class="sec-bar" style="width:{{ bar_w|round(0) }}px;background:{% if ret >= 0 %}var(--green-400){% else %}var(--red-400){% endif %};max-width:90px;"></span></span>
+                <span class="sec-pct {% if ret >= 0 %}up{% else %}down{% endif %}">{{ '%+.2f'|format(ret) }}%</span>
+              </a>
+            {% endfor %}
+          {% else %}
+            <div class="empty-state">Sector performance not yet calculated for today.</div>
+          {% endif %}
+        </div>
+        <div class="panel-foot"><a class="panel-cta" href="/markets">Full markets view →</a></div>
+      </section>
+
+      {# PANEL 11 — RECENT RATING CHANGES #}
+      <section class="panel">
+        <div class="panel-head">
+          <span class="panel-title"><span class="idx">11</span>Recent Rating Changes</span>
+          <span class="panel-meta">last 24h</span>
+        </div>
+        <div class="panel-body">
+          {% if rating_changes_panel %}
+            {% for r in rating_changes_panel %}
+            <a class="rc-row" href="/ticker/{{ r.ticker }}">
+              <span class="tk" style="font-family:var(--font-mono);font-weight:600;color:var(--ink-50);font-size:12.5px;min-width:46px;">{{ r.ticker }}</span>
+              <span class="thesis" style="color:var(--ink-300);font-size:12px;">{{ r.old_short }} <span class="arrow">→</span> <span class="tier-badge {{ r.new_class }}">{{ r.new_short }}</span></span>
+              <span class="ago">{{ r.ago }}</span>
+            </a>
+            {% endfor %}
+          {% else %}
+            <div class="empty-state">No rating changes in the last 24 hours.</div>
+          {% endif %}
+        </div>
+        <div class="panel-foot"><a class="panel-cta" href="/ratings">All rating changes →</a></div>
+      </section>
+
+      {# PANEL 12 — INSIDER ACTIVITY #}
+      <section class="panel">
+        <div class="panel-head">
+          <span class="panel-title"><span class="idx">12</span>Insider Activity · 14d</span>
+        </div>
+        <div class="panel-body">
+          {% if insider_panel %}
+            {% for r in insider_panel %}
+            <a class="srow" href="/ticker/{{ r.ticker }}">
+              <span class="tk">{{ r.ticker }}</span>
+              <span class="tier-badge {% if r.signal_type == 'CLUSTER_BUY' %}tb-vs{% else %}tb-vb{% endif %}">{{ 'Cluster Buy' if r.signal_type == 'CLUSTER_BUY' else 'Cluster Sell' }}</span>
+              <span class="thesis">{{ r.insider_count or 0 }} insider{{ '' if (r.insider_count or 0) == 1 else 's' }} · ${{ '{:,.0f}'.format(r.total_value or 0) }}</span>
+              <span class="score">{{ r.ago }}</span>
+            </a>
+            {% endfor %}
+          {% else %}
+            <div class="empty-state">No insider clusters detected in the last 14 days.</div>
+          {% endif %}
+        </div>
+        <div class="panel-foot"><a class="panel-cta" href="/signals">Signals →</a></div>
+      </section>
+
+      {# PANEL 13 — NEWS HEADLINES #}
+      <section class="panel">
+        <div class="panel-head">
+          <span class="panel-title"><span class="idx">13</span>News Headlines · 24h</span>
+        </div>
+        <div class="panel-body">
+          {% if news_panel %}
+            {% for n in news_panel %}
+            <a class="news-row" {% if n.url %}href="{{ n.url }}" target="_blank" rel="noopener"{% else %}href="/ticker/{{ n.ticker }}"{% endif %}>
+              <div class="news-meta">
+                {% if n.ticker %}<span class="news-ticker-tag">{{ n.ticker }}</span>{% endif %}
+                {% if n.source %}<span>{{ n.source }}</span>{% endif %}
+                <span>{{ n.ago }}</span>
+              </div>
+              <div class="news-head">{{ n.headline or '—' }}</div>
+            </a>
+            {% endfor %}
+          {% else %}
+            <div class="empty-state">No news in the last 24 hours.</div>
+          {% endif %}
+        </div>
+        <div class="panel-foot"><span class="panel-meta" style="color:var(--ink-500)">tap a headline to read</span></div>
+      </section>
+
+    </div>
+    {# ─── END BELOW THE FOLD ─────────────────────────────────────────── #}
+  </main>
+
+</body>
+</html>
