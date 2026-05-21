@@ -3,11 +3,49 @@
 **Tactical session state.** Updated end of each session. For stable
 project context (who/what/how), see `PROJECT_CONTEXT.md`.
 
-Last updated: 18 May 2026, end of session. Substantial day: fourteen commits to origin/main across five workstreams. Morning FMP entitlement observability (3 commits), afternoon design pass (1 design + brand commit), end-of-day banking (1 commit), parallel-session auth-adjacent pre-commit hook with P23 mechanical enforcement (5 commits), housekeeping cleanup (2 commits), and the Altman methodology switch from classic Z (1968 manufacturing) to Altman Z'' (1995 non-manufacturing) — three Phase 2 sub-phases (3 commits) bumping SCORING_ENGINE_VERSION 0.13.0 → 0.14.0. Mark drove the session through to end-of-day without break.
+Last updated: 21 May 2026, end of session. Substantial day: fourteen commits to origin/main across five workstreams. Morning FMP entitlement observability (3 commits), afternoon design pass (1 design + brand commit), end-of-day banking (1 commit), parallel-session auth-adjacent pre-commit hook with P23 mechanical enforcement (5 commits), housekeeping cleanup (2 commits), and the Altman methodology switch from classic Z (1968 manufacturing) to Altman Z'' (1995 non-manufacturing) — three Phase 2 sub-phases (3 commits) bumping SCORING_ENGINE_VERSION 0.13.0 → 0.14.0. Mark drove the session through to end-of-day without break.
 
-Next session: Tuesday 19 May. First action is Tuesday's 06:05 + 06:30 BST cron outcomes under the new FMP run_log observability that fires for the first time tomorrow morning. Second action is monitoring the first 0.14.0 scoring run (tonight's 20:00 BST scheduled job) for clean completion. Third action is Dashboard restructure mockup OR engineering pivot per Mark's call.
+Next session: Yahoo Finance pipeline + next scoring component(s), fresh chat. Dashboard + nightly backup shipped and pushed 21 May.
 
 ---
+
+## JUST SHIPPED — 21 May 2026
+
+- /dashboard greenfield build (Phase 2A+2B), commit **db38c56**, pushed. Net-new route + template (no prior /dashboard existed; old / did dashboard-ish work into index.html). 13-panel grid, Option C dark palette (navy-950/green-400; gold reserved for Elite). Above-fold 6 panels; Elite-gated Penny Stock spotlight (server-side gated — free clients receive NO pick data, verified via page-source check on free account mark2); below-fold 6 panels. Logged-in `/` now redirects to /dashboard (legacy index() body preserved as commented dead code). Bearish panel excludes composite=0 (penalty-floored). Design contract: `docs/mockups/dashboard_restructure_v1.html`. Helper extractions in web/app.py: `_get_sector_performance`, `_get_penny_pick_full`, `_compute_theme_counts` (behaviour-preserving; original routes unchanged).
+- Nightly DB backup, commit **0933f13**, pushed (script only; plist + backup dir machine-local, out of repo). `scripts/backup_database.sh`: WAL-aware `sqlite3 .backup`, integrity-gated, atomic promotion, 7-daily + 4-weekly rotation. LaunchAgent `io.thesignalvault.backup`, daily 03:30 BST. Restore-verified (row parity 227,721). First auto-run tonight.
+- Auth-adjacent pre-commit hook (P23) fired on the dashboard commit and was HONOURED — committed interactively via TTY, not bypassed with `--no-verify`. The hook caught us at speed on a deadline day; correct path taken.
+
+## CURRENT STATE (end of 21 May 2026)
+
+- HEAD: `0933f13`, pushed to origin/main. Local-only commits: zero.
+- gunicorn restarted twice today (dashboard route deploys): final PIDs 53900/53903. scheduler PID 10325. cloudflared running.
+- SCORING_ENGINE_VERSION: **0.14.0** (unchanged today).
+- DB: **~1.2 GB** (21 May 2026; ~227,721 signal_scores rows; was ~328MB post-VACUUM 13 May 2026).
+- Site live: /dashboard reachable logged-in; / redirects logged-in users to /dashboard; logged-out / still serves legacy home flow.
+- Backup: first automated 03:30 BST run pending tonight — verify via `~/signalintel/logs/backup.out.log` tomorrow.
+
+## STILL OPEN — 21 May 2026
+
+CARRY FORWARD (flagged for today in the 18 May handoff, NOT addressed — today went to dashboard + backup; these remain open):
+
+- FMP plan tier decision — if `economic_calendar` 402 persists, decide upgrade-vs-drop. (Today's `run_log` still showed the 402 on `economic_calendar`.)
+- Altman Z distribution check — marked data-ready 18 May; still not run. `compute_z_raw()` helper extraction still queued.
+
+NEW today:
+
+- (see FOLLOWUPS in PROJECT_CONTEXT — appended this session)
+
+## NOTES FOR FRESH-CHAT ATHENA (Yahoo session)
+
+- **IGNORE the archived 18 May notes below — superseded.** Read THIS section + PROJECT_CONTEXT first.
+- Next session: **Yahoo Finance pipeline + next scoring component(s)** toward the 16-component vision (8 built). Large session, fresh chat by design.
+- Dashboard + backup banked and pushed; site on a known-good restore point.
+- Live state: engine 0.14.0, DB ~1.2GB, /dashboard live, nightly backup armed.
+- Two carry-forward decisions waiting (FMP plan, Altman Z) — surface them but don't let them derail the Yahoo session unless Mark picks them up.
+
+---
+
+## ARCHIVE — 18 May 2026 handoff (superseded by 21 May)
 
 ## JUST SHIPPED — 18 May 2026
 

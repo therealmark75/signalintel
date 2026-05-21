@@ -124,6 +124,31 @@ screener_snapshots.exchange removed alongside the column drop on 9 May
 2026 (commit 0b4d9a4), preserve runtime-drift discipline by NOT
 re-introducing schema-init code that resurrects dropped state.
 
+**`/dashboard` (added 21 May 2026, commit db38c56):** greenfield 13-panel
+overview route per `docs/mockups/dashboard_restructure_v1.html` design
+contract. Above-fold 3×2 grid (Daily Summary / Top 5 Strong / Top 5
+Bearish / Market State / Watchlist Preview / Discovery Themes),
+full-width Elite-only Penny Stock spotlight (server-side tier gate —
+non-Elite clients receive no pick data), below-fold 3×2 grid (Earnings
+/ Dividends / Sector Performance / Rating Changes / Insider / News).
+Logged-in `/` redirects to /dashboard; logged-out hits the legacy
+index() flow (preserved as dead code under the redirect). Three helper
+extractions accompanied the route — `_get_sector_performance`,
+`_get_penny_pick_full`, `_compute_theme_counts` — each is a
+behaviour-preserving refactor: the original `/api/sector-performance`,
+`/api/penny/stock-of-day`, and `/api/theme-counts` JSON endpoints still
+exist and still return the same payloads; the dashboard route calls
+the extracted helpers directly to avoid duplicating SQL.
+
+**Design-system seam (21 May 2026):** /dashboard is the FIRST page on
+the new navy/green Option C palette (navy-950 ground, green-400 accent,
+gold reserved for Elite spotlight, Fraunces/Inter Tight/JetBrains Mono).
+The rest of the site (`/signals`, `/screener`, `/markets`, `/ticker/...`,
+etc.) still renders the old cyan/_nav.html system. Sitewide migration
+is deferred and queued in FOLLOWUPS — visible seam is expected until
+the new `_nav.html` + `_footer.html` partials roll out across all
+templates.
+
 `database/db.py`: SQLite helpers including `insert_screener_snapshot`.
 Around line 244 is the INSERT statement for screener_snapshots; this
 file was missed in the 9 May column drop inventory (P1.1 violation),
@@ -285,11 +310,13 @@ via `logging.basicConfig` with StreamHandler(stdout) + FileHandler.
 Screener job logs `JOB START: Screener` and `JOB DONE: Screener (N
 rows, Xs)` envelope lines, useful for grep-based runtime verification.
 
-`data/trading_system.db`: SQLite database, ~328MB post-VACUUM (13 May
-2026, reclaimed 35MB from the 9 May column drop, 363MB → 328MB).
-Growing ~33k rows/day across three daily scrape windows. Linear
-projection ~12M screener_snapshot rows/year; data retention strategy
-is a future thought (post-Yahoo).
+`data/trading_system.db`: SQLite database, **~1.2 GB (21 May 2026; ~227,721 signal_scores rows; was ~328MB post-VACUUM 13 May 2026, reclaimed 35MB from the 9 May column drop, 363MB → 328MB)**.
+Growth between 13 May and 21 May driven by accumulated scoring history
+(v0.13.0 → v0.14.0 transition) plus the daily ~33k-rows/day cadence
+across three scrape windows. Linear projection ~12M screener_snapshot
+rows/year; data retention strategy is a future thought (post-Yahoo).
+Nightly backup armed 21 May 2026 (see `scripts/backup_database.sh` +
+LaunchAgent `io.thesignalvault.backup`, daily 03:30 BST, 7-daily + 4-weekly rotation, restore-verified).
 
 ### Key DB Tables
 
@@ -797,7 +824,7 @@ Admin-only (not in nav, direct URL or admin link):
 
 Full page inventory:
 - / (public) — NEW. Marketing homepage. Public-Robinhood aesthetic. Hero + differentiators + sign-up CTA.
-- /dashboard — RESTRUCTURED. Overview panel. Trade-Ideas density aesthetic. 13-panel grid.
+- /dashboard — RESTRUCTURED. Overview panel. Trade-Ideas density aesthetic. 13-panel grid. **[SHIPPED 21 May 2026 — commit db38c56; design contract banked at `docs/mockups/dashboard_restructure_v1.html`; greenfield route + template; Elite-gated Penny spotlight (server-side); legacy index() body preserved as dead code under the / → /dashboard redirect.]**
 - /signals — NEW (extracted). Top Signals (full) + Discovery Themes (full) + tier breakdown.
 - /screener — UNCHANGED. Full 33-column screener with filter sidebar.
 - /markets — UNCHANGED. Global markets overview. Major Indices / S&P Sectors / Currencies / Crypto.
@@ -1919,6 +1946,53 @@ SMALL / COSMETIC:
   reflect the new state. Cosmetic UI bug, not a data issue. Surface
   in the next ticker-page implementation session if it's not already
   fixed as part of the post-restructure ticker page rebuild.
+
+NEW (21 May 2026, post-dashboard ship):
+
+- [DESIGN/STRUCTURAL] **Sitewide design-system migration** — build
+  new-design `_nav.html` + `_footer.html` partials and roll across all
+  templates so the whole site matches /dashboard. Currently
+  dashboard-only; visible seam (Screener etc still show old nav with
+  Earnings/Dividends/Backtest top-level links + no footer on
+  dashboard). Cheaper done AFTER Yahoo (Yahoo touches ticker-page
+  render; migrate chrome once after component count settles).
+
+- [VERIFY] **/signals nav target** — confirm the /dashboard nav link
+  to /signals routes to /signals (not /dashboard), and that any
+  content overlap is by-design (site-map specs /signals as a distinct
+  extracted page). Quick address-bar check.
+
+- [COSMETIC] **Bearish panel display** — `composite>0` filter surfaces
+  real names (LVO/LODE/DAO/COE/BW on 21 May) but they render as a
+  near-wall of 0/1 because they're genuine distribution-floor scores
+  rounded to integers. Decide: show one decimal (0.1 vs 1.0) or accept.
+
+- [PRODUCT] **Penny Stock of the Day selection** — 21 May Elite pick
+  was SNES (STRONG_HOLD / composite ~57, "Stable") — middling for a
+  flagship daily conversion surface. Review what
+  `_select_penny_stock_of_day()` optimises for; consider raising the
+  bar (e.g. minimum composite ≥ 65, prefer STRONG_BUY/BUY).
+
+- [OPS/RESILIENCE] **Off-machine backup** — current nightly backup is
+  same-volume only. Protects against deletion/corruption/app-bug, NOT
+  disk failure or machine loss. Add off-machine destination (Time
+  Machine destination configured / iCloud Drive / rsync to NAS).
+  Residual single-point-of-failure on the live product.
+
+- [OPS/MINOR] **Orphaned WAL-sidecar tidy** in `~/signalintel-backups/`
+  — integrity-check on each daily backup spawns `-shm`/`-wal` sidecars
+  (~352KB worst case across the 11-file retention window). Rotation
+  pattern can't match/clean them (strict `.db` suffix). Optional
+  post-rotation cleanup of orphaned sidecars.
+
+- [OPS/MINOR] **Verify backup auto-fire** tomorrow morning via
+  `~/signalintel/logs/backup.out.log` (first scheduled 03:30 BST run).
+
+- [CLEANUP] **Remove unreachable commented index() body** in
+  `web/app.py` once /dashboard is confirmed stable. Left as dead code
+  by the 2A redirect ("add the redirect branch only — do not remove
+  or rewrite the existing / route logic" was the locked decision at
+  ship time; clean-up is the post-confirmation follow-up).
 
 ---
 
