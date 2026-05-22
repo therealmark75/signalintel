@@ -198,7 +198,11 @@ def fetch_institutional_holders(t: yf.Ticker, ticker: str) -> list:
 def fetch_analyst_changes(t: yf.Ticker, ticker: str) -> list:
     """
     Fetch analyst upgrades/downgrades.
-    DataFrame index: DatetimeIndex (event date). Columns: firm, toGrade, fromGrade, action.
+    DataFrame index: DatetimeIndex (event date). Columns: Firm, ToGrade,
+    FromGrade, Action, priceTargetAction, currentPriceTarget,
+    priorPriceTarget. The price-target trio is present on every row
+    (incl. action='main' reaffirmations) and supplies directional signal
+    when from/to grades are unchanged.
     Returns list of row dicts ready for insert_analyst_changes.
     """
     df = _safe_fetch(lambda: t.get_upgrades_downgrades(), ticker, "ANALYST")
@@ -214,6 +218,7 @@ def fetch_analyst_changes(t: yf.Ticker, ticker: str) -> list:
         firm = str(row.get("Firm") or row.get("firm") or "")
         if not firm:
             continue
+        pta = row.get("priceTargetAction")
         rows.append({
             "ticker":      ticker,
             "event_date":  event_date,
@@ -221,6 +226,9 @@ def fetch_analyst_changes(t: yf.Ticker, ticker: str) -> list:
             "from_grade":  str(row.get("fromGrade") or row.get("FromGrade") or "") or None,
             "to_grade":    str(row.get("toGrade")   or row.get("ToGrade")   or "") or None,
             "action":      str(row.get("action")    or row.get("Action")    or "") or None,
+            "price_target_action":  (str(pta) if pta is not None and str(pta).strip() else None),
+            "current_price_target": _to_float(row.get("currentPriceTarget")),
+            "prior_price_target":   _to_float(row.get("priorPriceTarget")),
             "source":      "yahoo",
         })
     return rows

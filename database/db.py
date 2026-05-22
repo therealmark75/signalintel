@@ -290,18 +290,32 @@ def initialise_schema(db_path: str) -> None:
     # ── Yahoo: analyst_changes (Phase 2a) ────────────────────────
     cur.execute("""
         CREATE TABLE IF NOT EXISTS analyst_changes (
-            id           INTEGER PRIMARY KEY AUTOINCREMENT,
-            ticker       TEXT    NOT NULL,
-            event_date   TEXT    NOT NULL,
-            firm         TEXT    NOT NULL,
-            from_grade   TEXT,
-            to_grade     TEXT,
-            action       TEXT,
-            source       TEXT    NOT NULL DEFAULT 'yahoo',
-            scraped_at   TEXT    NOT NULL,
+            id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+            ticker               TEXT    NOT NULL,
+            event_date           TEXT    NOT NULL,
+            firm                 TEXT    NOT NULL,
+            from_grade           TEXT,
+            to_grade             TEXT,
+            action               TEXT,
+            price_target_action  TEXT,
+            current_price_target REAL,
+            prior_price_target   REAL,
+            source               TEXT    NOT NULL DEFAULT 'yahoo',
+            scraped_at           TEXT    NOT NULL,
             UNIQUE (ticker, event_date, firm, action, source)
         )
     """)
+
+    # Idempotent migration: add price-target columns to pre-existing tables.
+    # PRAGMA table_info gates each ALTER so re-running init is safe.
+    cur.execute("PRAGMA table_info(analyst_changes)")
+    _ac_cols = {r["name"] for r in cur.fetchall()}
+    if "price_target_action" not in _ac_cols:
+        cur.execute("ALTER TABLE analyst_changes ADD COLUMN price_target_action TEXT")
+    if "current_price_target" not in _ac_cols:
+        cur.execute("ALTER TABLE analyst_changes ADD COLUMN current_price_target REAL")
+    if "prior_price_target" not in _ac_cols:
+        cur.execute("ALTER TABLE analyst_changes ADD COLUMN prior_price_target REAL")
 
     cur.execute("""
         CREATE INDEX IF NOT EXISTS idx_analyst_changes_ticker
@@ -1655,11 +1669,18 @@ def insert_analyst_changes(db_path: str, rows: list) -> int:
     for row in rows:
         row.setdefault("scraped_at", now)
         row.setdefault("source", "yahoo")
+        row.setdefault("price_target_action",  None)
+        row.setdefault("current_price_target", None)
+        row.setdefault("prior_price_target",   None)
     cur.executemany("""
         INSERT OR IGNORE INTO analyst_changes (
-            ticker, event_date, firm, from_grade, to_grade, action, source, scraped_at
+            ticker, event_date, firm, from_grade, to_grade, action,
+            price_target_action, current_price_target, prior_price_target,
+            source, scraped_at
         ) VALUES (
-            :ticker, :event_date, :firm, :from_grade, :to_grade, :action, :source, :scraped_at
+            :ticker, :event_date, :firm, :from_grade, :to_grade, :action,
+            :price_target_action, :current_price_target, :prior_price_target,
+            :source, :scraped_at
         )
     """, rows)
     conn.commit()
