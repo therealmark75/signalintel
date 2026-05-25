@@ -449,40 +449,30 @@ def insert_insider_signal(db_path: str, signal: dict) -> None:
 def insert_signal_scores(db_path: str, rows: list[dict]) -> int:
     """Insert signal score rows. Returns count inserted.
 
-    v0.17.0: persists the five component sub-scores (earnings_score,
-    piotroski_score, inst_own_score, analyst_mom_score, altman_penalty)
-    on every row. They default to NULL via row.setdefault() so legacy
-    callers / older test fixtures still work — pre-0.17.0 rows already
-    on disk stay NULL by design (no backfill).
+    Schema migration is owned by `initialise_schema` — the PRAGMA-gated
+    ALTER blocks there are the single source of truth for signal_scores
+    columns. The previous inline try/except ALTER fallback was removed
+    after Step 1 of the v0.17.0 follow-up consolidation proved every
+    `insert_signal_scores` call path is preceded by `initialise_schema`
+    on the same DB (sole production caller: main.py:148, sole runner
+    of that caller: main.py:771 initialise_schema → scheduler/signals
+    subcommand). Bare-except ALTERs on a scoring table are exactly the
+    P19 silent-swallow shape; a single owner removes that risk.
+
+    v0.17.0 persistence: writes the five component sub-scores
+    (earnings_score, piotroski_score, inst_own_score, analyst_mom_score,
+    altman_penalty) on every row. They default to NULL via
+    row.setdefault() so any caller that omits a sub-score key writes
+    NULL rather than KeyError. Pre-0.17 rows on disk stay NULL by
+    design (no backfill).
     """
     if not rows:
         return 0
     conn = get_connection(db_path)
     cur  = conn.cursor()
-    # Ensure new columns exist (idempotent; SQLite ignores duplicate ADD COLUMN).
-    # NOTE: the canonical idempotent migration (PRAGMA-gated) lives in
-    # initialise_schema; this inline fallback is kept for the case where
-    # insert_signal_scores runs against a DB whose schema init lagged.
-    for col, typ in [
-        ("composite_score_raw",     "REAL"),
-        ("sector_strength_score",   "REAL"),
-        ("sector_modifier_applied", "REAL"),
-        ("scoring_version",         "TEXT NOT NULL DEFAULT '0.9.0'"),
-        ("volume_score",            "REAL"),
-        ("earnings_score",          "REAL"),
-        ("piotroski_score",         "REAL"),
-        ("inst_own_score",          "REAL"),
-        ("analyst_mom_score",       "REAL"),
-        ("altman_penalty",          "REAL"),
-    ]:
-        try:
-            cur.execute(f"ALTER TABLE signal_scores ADD COLUMN {col} {typ}")
-        except Exception:
-            pass
-    conn.commit()
     # Default any of the five sub-score keys missing from a row to NULL so
-    # legacy callers (and any future caller that doesn't compute every
-    # component) write NULL, not KeyError, on insert.
+    # any caller that doesn't compute every component writes NULL, not
+    # KeyError, on insert.
     for r in rows:
         r.setdefault("earnings_score",    None)
         r.setdefault("piotroski_score",   None)
