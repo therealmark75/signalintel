@@ -3,9 +3,71 @@
 **Tactical session state.** Updated end of each session. For stable
 project context (who/what/how), see `PROJECT_CONTEXT.md`.
 
-Last updated: 25 May 2026, mid-afternoon. The Yahoo pipeline arc that opened 21 May closed today: **both headline workstreams (inst_own, analyst_mom) COMPLETE and pushed**. SCORING_ENGINE_VERSION 0.14.0 → 0.15.0 (inst_own recalibration, 21 May) → 0.16.0 (analyst_mom widening, 25 May). Coverage uplift across the composite: inst_own 0% → 50.8%, analyst_mom 0.06% → 20.4%. Suite 281-green. Stack pushed to origin/main.
+Last updated: 25 May 2026, late afternoon. Long day across two arcs. The Yahoo pipeline arc closed (analyst_mom + inst_own live, v0.14.0 → 0.16.0). Then the validation arc opened, the OOS gate was rewritten substrate-conscious (commit a56afaa), the analyst_mom external event study was built and run, and **the v0.16.0 soft-action PT branch failed validation — directionally backwards**. Decision locked: neutralise soft-PT next session. The OOS gate, written this morning, caught a live shipped weight pushing the composite the wrong way within one session of being written.
 
-Next session: next net-new component (FINRA short-interest is the leading candidate — see PROJECT_CONTEXT FOLLOWUPS) OR backtest discipline to validate the provisional weights now in flight.
+Next session: scorer fix to neutralise soft-action PT (drop the ±0.25 on main/reit Raises/Lowers, keep hard up/init/down at ±1). Two pre-questions to answer before touching scorer.py, see PARKED / NEXT.
+
+---
+
+## 25 MAY 2026 — VALIDATION ARC: ANALYST_MOM SOFT-PT FAILED, NEUTRALISE NEXT SESSION
+
+Followed the Yahoo pipeline ship with the first exercise of the OOS gate. Single-session arc: gate rewrite (the banked 18-month OOS IC + Sharpe was unattainable on a 35-day, 7-version, sub-score-not-persisted substrate, so commit `a56afaa` replaced it with **two** things — (a) an interim event-study method to validate now, AND (b) an organic graduating bar of forward IC + incremental Sharpe once single-scoring-version history accumulates, first honest checkpoint ~6 months post-v0.16.0). The graduating bar carries a hard prerequisite: **persist component sub-scores (inst_own_score, analyst_mom_score, earnings_score, piotroski_score, altman_penalty) on every signal_scores row going forward** — without that, marginal IC of any single component can't be isolated from stored history. That prerequisite is the easiest forward-looking task to lose, flagged explicitly below as a standing action. Gate exercised against the just-shipped v0.16.0 PT weighting via path (a). Fail.
+
+### HEADLINE — analyst_mom soft-PT branch is directionally backwards
+
+The v0.16.0 weighting (Raises = +0.25, Lowers = -0.25 on main/reit rows) fails its first validation test, decisively.
+
+- **Real-cohort Raises-minus-Lowers 21d CAR spread = -0.79%** (t=-3.64, p=2.7e-4). Wrong sign, separable from zero, growing with horizon: -0.15% / -0.79% / -1.69% at 5d / 21d / 63d.
+- **Monotonicity inverted at 21d**: Raises (-0.115%) < Maintains (+0.194%) < Lowers (+0.677%). The thesis (Raises outperform, Lowers underperform) is the wrong way around in the post-event window.
+- **Robust across slices**: 5 of 7 calendar years, 10 of 11 sectors, 9 of the top 10 analyst firms all show negative spread. Not a one-year or one-sector artefact.
+- **Placebo cohort showed the opposite** (+0.66% spread, ordering correct), proving the inversion is event-driven, not a method bug. Same tickers, random non-event dates, ±21d-clean of real events. Method works; the events themselves invert.
+- **Survivorship works against the signal, not for it.** Missing delisted Lowers would deepen the inversion, not soften it. The measured effect is at least this severe.
+- Classic buy-the-rumour-sell-the-news / event-fade pattern. Analysts catch up after the move; the post-event window mean-reverts.
+
+Harness: `scripts/analyst_pt_event_study.py` (new, untracked, NOT YET committed). Read-only standalone analysis. yfinance prices for 3,920 event tickers plus 11 SPDR sector ETFs cached to `data/analyst_pt_event_study_prices.parquet` (gitignored, 6.5M rows). 34,613 events survive ±21d de-clustering across Raises/Maintains/Lowers in the 2019-2025 window. Per-event CSV at `data/analyst_pt_event_study_events.csv` (gitignored).
+
+### DECISION LOCKED — corrective is OPTION 2: neutralise the soft-action PT branch
+
+Set soft main/reit Raises/Lowers contribution to 0. Keep hard up/init/down at ±1. **NOT a sign-flip** — a provisional weight that fails validation is pulled to neutral, not inverted on the same test that just disproved our priors. Inverting would mean re-using the test as a fit, which is the overfitting trap the OOS gate exists to avoid.
+
+Costs the v0.16.0 13.3% → 20.4% non-neutral coverage lift. That lift was real, but the direction it pushed was wrong, so it was actively harmful in composite terms. Less coverage scoring neutrally beats more coverage scoring backwards.
+
+### NEXT SESSION (not tonight) — scorer fix is its own Phase 1 / Phase 2
+
+The neutralisation is mechanically a one-line CASE-statement change in `get_analyst_momentum_map`, but it's a scoring change so it goes through the same discipline: Phase 1 (the two open questions below) → Phase 2 (the edit + version bump + restart).
+
+Two questions to answer BEFORE touching scorer.py:
+
+1. **5d horizon is only marginally significant** (spread -0.148%, p=0.088). If the composite is intended to inform shorter-horizon behaviour (alerts, daily watchlist re-rank), the case is weaker — possibly the event-fade is a 21d+ phenomenon and 5d is closer to neutral. Resolve before locking. Likely outcome: the neutralisation holds because the 21d/63d evidence is strong, but the answer shapes whether we file the deferred event-fade candidate (see below).
+2. **Deferred beta-adjusted robustness cut.** Phase 1 banked beta-adjusted CAR as a future extension (currently market-adjusted = sector-ETF-relative only). Run it before the neutralisation to confirm the inversion isn't an artefact of crude sector-relative adjustment. Likely outcome: the result holds, but proving it tightens the audit trail.
+
+The neutralisation bumps SCORING_ENGINE_VERSION (MINOR, weight change per P18) and requires scorer + gunicorn restart at commit time (runtime-code drift).
+
+### FUTURE COMPONENT CANDIDATE — event-fade as its own component
+
+The fade pattern is robust enough to be a legitimate signal: -1.69% spread at 63d, growing with horizon, surviving every slice. Whoever picks this up gets its own theory backing (Bernard-Thomas drift, explicit event mean-reversion), its own provisional weight, and the OOS gate before promotion. **NOT a sign smuggled back into analyst_mom** — that would launder the failed test into a passing one on the same data. Logged as a candidate, sits behind FINRA short-interest in the next-component queue.
+
+### inst_own validation remains deferred
+
+Same gate, different verdict. Institutional_holders substrate is empirically too thin for an honest IC test today (~99% of rows in 2026, single-quarter coverage), and the event-study trick doesn't apply to a slow quarterly 13F signal with no point-in-time event date. Wait for ~4 quarterly cycles of clean filing-date history. v0.15.0 inst_own quartile cuts stay PROVISIONAL on theory + universe-snapshot distribution evidence until then.
+
+### PROCESS WIN — the placebo slice was load-bearing
+
+The OOS gate rewrite, banked this morning (commit a56afaa), caught a live shipped weight pushing the composite the wrong way within one session of being written. The placebo / falsification slice, added at the Phase 2 lock, is what made the result conclusive: the real cohort failed, the placebo cohort passed (showed the expected ordering), so the inversion is attributable to the events themselves, not to sector mapping or calendar drift or universe bias. Without the placebo, the negative spread on its own would have been suggestive but not conclusive.
+
+Bank the placebo / falsification slice as a **standard pattern for any future validation study**: real cohort plus a matched-distribution null cohort, judged on the contrast not just the real numbers. Phase 1 design templates should require it.
+
+### GIT STATE — VALIDATION ARC
+
+- One commit pushed today: `a56afaa` (OOS gate rewrite in PROJECT_CONTEXT, doc-only).
+- Untracked, NOT yet committed: `scripts/analyst_pt_event_study.py`. Decision deferred (the script is the harness; whether and when to commit it is a separate call from the scorer fix).
+- No scoring-path file touched in this arc. scorer.py / composite / scheduler / web routes all unmodified.
+
+### STANDING ACTION — sub-score persistence (graduating-bar prerequisite)
+
+The graduating bar in the rewritten gate (forward IC + incremental Sharpe, ~6mo / ~18mo checkpoints) only works if component sub-scores are persisted from now on. **Currently NOT stored on signal_scores rows**: inst_own_score, analyst_mom_score, earnings_score, piotroski_score, altman_penalty. Only the composite they feed is stored. Without persistence, marginal IC of any single component can't be measured from stored history — and the ~6-month checkpoint hits an empty-substrate wall when it arrives.
+
+Engineering shape (not banked as a phase yet, but small): add the five REAL columns to the `signal_scores` schema with an idempotent ALTER + migration guard (mirror the 25 May analyst_changes pattern in commit `68d73f3`), thread the values through `score_all_tickers` into the insert path, and update the test fixture. No version bump (purely persistence, no scoring substrate change per P18). Catch this BEFORE the ~6-month graduating-bar checkpoint — easiest to do alongside any other scorer touch (the upcoming soft-PT neutralisation would be a natural moment).
 
 ---
 
@@ -39,10 +101,13 @@ All pushed. Stack on origin/main: **175bbf7 / 383b3aa** (inst_own, 21 May) → *
 
 ### PARKED / NEXT
 
-- Backtest discipline: w=0.25 analyst PT weight is PROVISIONAL. inst_own quartile cuts also unbacktested. Both need out-of-sample IC validation before locking — ties to the new OOS VALIDATION GATE in PROJECT_CONTEXT FOLLOWUPS.
-- Next net-new component candidate: FINRA short-interest (Boehmer/Jones/Zhang 2008 evidence; powers the named short-squeeze differentiator). See PROJECT_CONTEXT FOLLOWUPS.
+*(See 25 May VALIDATION ARC section above for the post-validation state. Items below are the open thread from before the validation result landed; some are now overtaken.)*
+
+- ~~Backtest discipline: w=0.25 analyst PT weight is PROVISIONAL.~~ **DONE this session — failed.** Neutralisation locked, scheduled for next session.
+- inst_own quartile cuts also unbacktested — substrate too thin per the gate rewrite, deferred to ~4 quarterly 13F cycles of history.
+- Next net-new component candidate: FINRA short-interest (Boehmer/Jones/Zhang 2008 evidence; powers the named short-squeeze differentiator). See PROJECT_CONTEXT FOLLOWUPS. Sits behind the soft-PT neutralisation in the queue.
 - inst_own 60.0-tier coverage gap flagged by the 1c test audit: triage whether it's a test-coverage gap (trivial) or a ladder-logic gap (real) before filing.
-- analyst_mom 'reit' edge cases (1,103 rows / 90d): 84% are Maintains (zero-contribution), 14% directional via PT. Current design folds them identically to 'main' — revisit if backtest evidence diverges.
+- analyst_mom 'reit' edge cases (1,103 rows / 90d): 84% are Maintains (zero-contribution), 14% directional via PT. Current design folds them identically to 'main'. The soft-PT neutralisation drops the directional contribution entirely, so this gets moot for analyst_mom; revisit if a separate event-fade component lands later.
 
 ---
 
