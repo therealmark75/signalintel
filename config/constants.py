@@ -79,15 +79,34 @@ REQUEST_TIMEOUT       = 20
 #   MAJOR  (1.0.0 → 2.0.0)  : post-launch, breaking changes to scoring methodology
 # ⚠  Bump BEFORE shipping any change that affects scoring output.
 #    New data tagged with the old version is permanently mis-stamped.
-SCORING_ENGINE_VERSION = "0.16.0"
-# v0.16.0 (25 May 2026): analyst_momentum widened to fold price-target
-# direction. Hard rating actions (up/init/down) unchanged at ±1. Soft
-# actions (main/reit) with priceTargetAction='Raises' contribute +0.25,
-# 'Lowers' -0.25, all else 0. No double-counting (hard rows ignore PT).
-# Float net_momentum with ±0.5 neutral band. Coverage 13.3% → 25.6% of
-# universe non-neutral; preserves integer thresholds (3 hard up = 80).
-# PT weight 0.25 is PROVISIONAL — chosen to keep PT/hard ratio ~4:1
-# given 90d population (14,041 PT vs 2,658 hard). Revisit with backtest.
+SCORING_ENGINE_VERSION = "0.17.0"
+# v0.17.0 (25 May 2026 PM): analyst_momentum soft-action PT contribution
+# NEUTRALISED to 0 after failing external event-study validation. The
+# v0.16.0 ±0.25 soft weighting (main/reit Raises/Lowers) returned a
+# Raises-Lowers 21d CAR spread of -0.79% (t=-3.64, p=2.7e-04) — wrong
+# sign, monotonicity inverted, robust across 5/7 years, 10/11 sectors,
+# 9/10 firms. Survived beta adjustment. Placebo cohort showed the
+# expected positive ordering, confirming the inversion was event-driven.
+# Per the OOS gate (commit a56afaa), a provisional weight that fails
+# validation is pulled to neutral, NOT sign-flipped on the same test
+# that disproved the priors. Hence: hard up/init/down stay at ±1, soft
+# main/reit contribute 0. net_momentum reverts to integer-valued (hard
+# upgrades - hard downgrades), mathematically equivalent to v0.15.0.
+# The scorer's ±0.5 neutral band stays correct on integer net (it's the
+# neutral-tier rule on integers, not v0.16-specific). Coverage trade-off:
+# v0.16's 13.3% → 20.4% non-neutral lift reverts toward the hard-only
+# baseline. The lift was real but pushed the composite the wrong
+# direction; less coverage scoring neutrally beats more coverage scoring
+# backwards. Event-fade as a separate component (its own theory, its own
+# OOS validation) is logged as a future candidate; not folded back into
+# analyst_mom (that would launder the failed test into a pass on the
+# same data).
+#
+# v0.17.0 also persists the five component sub-scores (earnings_score,
+# piotroski_score, inst_own_score, analyst_mom_score, altman_penalty) on
+# every signal_scores row going forward. Pure persistence change (no
+# scoring math change); prerequisite for the OOS gate's graduating bar
+# of forward IC + incremental Sharpe, ~6mo / ~18mo checkpoints.
 
 # ── Signal universe constraints ───────────────────
 # Floor for NEW signals only. Tickers below this price are not scored
