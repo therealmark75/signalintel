@@ -1492,16 +1492,44 @@ def get_inst_ownership_map(db_path: str) -> dict:
 def get_analyst_momentum_map(db_path: str, window_days: int = 90) -> dict:
     """Return {ticker: {upgrades_90d, downgrades_90d, net_momentum}} from analyst_changes.
 
-    Counts upgrades (action IN ('up', 'init')) and downgrades (action='down') within window_days.
+    v0.16.0 widening: net_momentum is now a float that folds price-target
+    direction on soft rating actions. Per-row contribution rules:
+      - Hard actions:  up=+1, init=+1, down=-1 (PT column IGNORED — no double-count)
+      - Soft actions (main, reit): priceTargetAction='Raises'=+0.25,
+        'Lowers'=-0.25, Maintains/Announces/Adjusts/Removes/NULL=0
+      - Any other action: 0
+
+    The hard/soft split ensures an 'up' row that also carries a 'Lowers'
+    target trim (54 such rows in the 90d population) contributes only the
+    hard +1 — the rating decision wins over the target tweak.
+
+    upgrades_90d / downgrades_90d are reported as INTEGER COUNTS of hard
+    rating changes (unchanged semantics) so existing display code keeps
+    working. net_momentum is a FLOAT (the score input).
+
+    PT weight 0.25 is PROVISIONAL — see SCORING_ENGINE_VERSION comment.
+
     Catches: analyst changes scraper job death.
-    Ignores: tickers with no analyst activity in window (scorer treats absent key as None → neutral 50.0).
+    Ignores: tickers with no analyst activity in window (scorer treats
+    absent key as None → neutral 50.0).
     """
     conn = get_connection(db_path)
     cur  = conn.cursor()
     cur.execute(f"""
         SELECT ticker,
+               -- hard rating counts (display + reporting)
                COUNT(CASE WHEN action IN ('up', 'init') THEN 1 END) AS upgrades,
-               COUNT(CASE WHEN action = 'down'          THEN 1 END) AS downgrades
+               COUNT(CASE WHEN action = 'down'          THEN 1 END) AS downgrades,
+               -- per-row contribution: hard wins, then soft PT, then 0
+               SUM(
+                 CASE
+                   WHEN action IN ('up', 'init')                             THEN  1.0
+                   WHEN action = 'down'                                      THEN -1.0
+                   WHEN action IN ('main','reit') AND price_target_action = 'Raises' THEN  0.25
+                   WHEN action IN ('main','reit') AND price_target_action = 'Lowers' THEN -0.25
+                   ELSE 0.0
+                 END
+               ) AS net
         FROM analyst_changes
         WHERE event_date >= date('now', '-{int(window_days)} days')
         GROUP BY ticker
@@ -1511,7 +1539,7 @@ def get_analyst_momentum_map(db_path: str, window_days: int = 90) -> dict:
     return {r["ticker"]: {
         "upgrades_90d":   r["upgrades"],
         "downgrades_90d": r["downgrades"],
-        "net_momentum":   r["upgrades"] - r["downgrades"],
+        "net_momentum":   float(r["net"]) if r["net"] is not None else 0.0,
     } for r in rows}
 
 

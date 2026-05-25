@@ -608,12 +608,28 @@ def score_inst_ownership(ticker: str, inst_data: "dict | None") -> float:
 
 
 def score_analyst_momentum(ticker: str, mom_data: "dict | None") -> float:
-    """Score 0-100 from net analyst upgrade/downgrade momentum over 90 days.
+    """Score 0-100 from net analyst momentum over 90 days.
 
-    net_momentum = upgrades_90d - downgrades_90d (upgrades include 'init' actions).
+    v0.16.0: net_momentum is now a FLOAT (was int). Hard rating actions
+    contribute ±1; soft actions (main/reit) with priceTargetAction
+    Raises/Lowers contribute ±0.25. See get_analyst_momentum_map for
+    the per-row contribution rules. PT weight 0.25 PROVISIONAL.
 
-    Catches: coordinated analyst downgrade cycles before price action.
-    Ignores: tickers with no analyst changes in window — treated as neutral 50.0.
+    Ladder (preserves integer thresholds; adds ±0.5 neutral band so a
+    single isolated PT move does NOT flip a ticker off neutral, but two
+    do — and three hard upgrades still = 80 exactly):
+
+        net >=  3.0 → 80   (e.g. 3 hard upgrades, or 12 Raises)
+        net >=  1.5 → 70
+        net >=  0.5 → 60   (e.g. 2 Raises + 0 Lowers = +0.50)
+       |net| <  0.5 → 50   (neutral band)
+        net <= -0.5 → 40
+        net <= -1.5 → 30
+        net <= -3.0 → 20
+
+    Catches: coordinated analyst downgrade cycles (hard or PT-implied)
+    before price action.
+    Ignores: tickers with no analyst changes in window — neutral 50.0.
     P5: mom_data is None → returns neutral 50.0.
     """
     if mom_data is None:
@@ -621,13 +637,13 @@ def score_analyst_momentum(ticker: str, mom_data: "dict | None") -> float:
     net = mom_data.get("net_momentum")
     if net is None:
         return 50.0
-    if net >= 3:  return 80.0
-    if net == 2:  return 70.0
-    if net == 1:  return 60.0
-    if net == 0:  return 50.0
-    if net == -1: return 40.0
-    if net == -2: return 30.0
-    return 20.0   # net <= -3
+    if net >=  3.0: return 80.0
+    if net >=  1.5: return 70.0
+    if net >=  0.5: return 60.0
+    if net <= -3.0: return 20.0
+    if net <= -1.5: return 30.0
+    if net <= -0.5: return 40.0
+    return 50.0   # |net| < 0.5  → neutral band
 
 
 # ── Composite scorer ──────────────────────────────

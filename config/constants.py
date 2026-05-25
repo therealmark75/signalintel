@@ -79,7 +79,15 @@ REQUEST_TIMEOUT       = 20
 #   MAJOR  (1.0.0 → 2.0.0)  : post-launch, breaking changes to scoring methodology
 # ⚠  Bump BEFORE shipping any change that affects scoring output.
 #    New data tagged with the old version is permanently mis-stamped.
-SCORING_ENGINE_VERSION = "0.15.0"
+SCORING_ENGINE_VERSION = "0.16.0"
+# v0.16.0 (25 May 2026): analyst_momentum widened to fold price-target
+# direction. Hard rating actions (up/init/down) unchanged at ±1. Soft
+# actions (main/reit) with priceTargetAction='Raises' contribute +0.25,
+# 'Lowers' -0.25, all else 0. No double-counting (hard rows ignore PT).
+# Float net_momentum with ±0.5 neutral band. Coverage 13.3% → 25.6% of
+# universe non-neutral; preserves integer thresholds (3 hard up = 80).
+# PT weight 0.25 is PROVISIONAL — chosen to keep PT/hard ratio ~4:1
+# given 90d population (14,041 PT vs 2,658 hard). Revisit with backtest.
 
 # ── Signal universe constraints ───────────────────
 # Floor for NEW signals only. Tickers below this price are not scored
