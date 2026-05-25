@@ -69,6 +69,9 @@ def tmp_db(tmp_path):
             from_grade TEXT,
             to_grade TEXT,
             action TEXT,
+            price_target_action TEXT,
+            current_price_target REAL,
+            prior_price_target REAL,
             source TEXT NOT NULL DEFAULT 'yahoo',
             scraped_at TEXT NOT NULL,
             UNIQUE (ticker, event_date, firm, action, source)
@@ -211,3 +214,61 @@ def test_analyst_momentum_map_shape(tmp_db):
     assert result["TSLA"]["upgrades_90d"]   == 0  # outside-window event excluded
     assert result["TSLA"]["downgrades_90d"] == 1
     assert result["TSLA"]["net_momentum"]   == -1
+
+
+def test_analyst_momentum_map_pt_contributions_v016(tmp_db):
+    """v0.16.0: soft action rows (main/reit) with priceTargetAction Raises/Lowers
+    contribute ±0.25 to net_momentum; hard rows ignore PT (no double-count).
+
+    Synthetic fixture covers the four contribution branches at once:
+      AAPL: 2 hard up + 3 main+Raises + 1 main+Lowers → net = 2 + 0.5 = +2.5
+      TSLA: 1 hard down + 1 up+Lowers (hard wins, PT ignored) → net = -1 + 1 = 0
+            (hard down=-1, hard up=+1; PT 'Lowers' on the up row IGNORED → net 0)
+      NVDA: 0 hard + 1 main+Maintains + 1 reit+Raises → net = +0.25
+            (Maintains contributes 0; only the reit Raises counts)
+
+    Catches:
+      - PT contribution branch missing entirely (NVDA would be absent from map).
+      - Double-counting: TSLA would land at -0.75 (=-1 -0.25 from up+Lowers PT)
+        instead of 0 if the SQL CASE allowed hard rows to fall through to PT.
+      - Maintains/Announces being mis-weighted: NVDA would drift off +0.25.
+    Ignores: ladder-tier behaviour (that's the scorer's job, covered by
+             test_phase2b_scorers float-ladder cases).
+    """
+    conn = sqlite3.connect(tmp_db)
+    conn.executemany(
+        "INSERT INTO analyst_changes "
+        "  (ticker, event_date, firm, action, price_target_action, scraped_at) "
+        "VALUES (?, date('now', ?), ?, ?, ?, '2026-05-25T00:00:00')",
+        [
+            # AAPL: 2 hard up + 3 main+Raises + 1 main+Lowers
+            ("AAPL", "-1 days", "F1", "up",   None,       ),
+            ("AAPL", "-2 days", "F2", "up",   None,       ),
+            ("AAPL", "-3 days", "F3", "main", "Raises",   ),
+            ("AAPL", "-4 days", "F4", "main", "Raises",   ),
+            ("AAPL", "-5 days", "F5", "main", "Raises",   ),
+            ("AAPL", "-6 days", "F6", "main", "Lowers",   ),
+            # TSLA: 1 hard down + 1 hard up with a 'Lowers' PT (PT must be IGNORED)
+            ("TSLA", "-1 days", "G1", "down", None,       ),
+            ("TSLA", "-2 days", "G2", "up",   "Lowers",   ),  # hard wins → +1, not +0.75
+            # NVDA: Maintains (=0) + reit+Raises (=+0.25)
+            ("NVDA", "-1 days", "H1", "main", "Maintains",),
+            ("NVDA", "-2 days", "H2", "reit", "Raises",   ),
+        ],
+    )
+    conn.commit()
+    conn.close()
+
+    result = get_analyst_momentum_map(tmp_db)
+
+    assert result["AAPL"]["upgrades_90d"]   == 2
+    assert result["AAPL"]["downgrades_90d"] == 0
+    assert result["AAPL"]["net_momentum"]   == pytest.approx(2.5)
+
+    assert result["TSLA"]["upgrades_90d"]   == 1
+    assert result["TSLA"]["downgrades_90d"] == 1
+    assert result["TSLA"]["net_momentum"]   == pytest.approx(0.0)  # PT on hard row ignored
+
+    assert result["NVDA"]["upgrades_90d"]   == 0
+    assert result["NVDA"]["downgrades_90d"] == 0
+    assert result["NVDA"]["net_momentum"]   == pytest.approx(0.25)

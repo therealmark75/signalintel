@@ -665,3 +665,73 @@ def test_analyst_mom_net_positive_1():
     Ignores: stronger positive signals.
     """
     assert score_analyst_momentum("AAPL", {"net_momentum": 1}) == pytest.approx(60.0)
+
+
+# ── v0.16.0 float-ladder cases (price-target contributions) ──────────────────
+
+def test_analyst_mom_v016_single_pt_raise_neutral_band():
+    """v0.16.0: single main+Raises contributes +0.25, lands in |net|<0.5 neutral band → 50.
+
+    Catches: ladder leaks fractional PT moves out of neutral; would have flipped
+             every ticker with one analyst PT tweak in 90d off neutral.
+    Ignores: stronger directional signals (those have their own tests).
+    """
+    assert score_analyst_momentum("X", {"net_momentum": 0.25}) == pytest.approx(50.0)
+
+
+def test_analyst_mom_v016_two_pt_raises_crosses_to_60():
+    """v0.16.0: two main+Raises = net +0.50, exactly the lower edge of tier 60.
+
+    Catches: >= vs > boundary error at +0.5.
+    Ignores: behaviour above/below the edge.
+    """
+    assert score_analyst_momentum("X", {"net_momentum": 0.5}) == pytest.approx(60.0)
+
+
+def test_analyst_mom_v016_two_pt_lowers_crosses_to_40():
+    """v0.16.0: two main+Lowers = net -0.50, exactly the upper edge of tier 40.
+
+    Catches: <= vs < boundary error at -0.5.
+    Ignores: behaviour above/below the edge.
+    """
+    assert score_analyst_momentum("X", {"net_momentum": -0.5}) == pytest.approx(40.0)
+
+
+def test_analyst_mom_v016_hard_plus_pt_mix():
+    """v0.16.0: 1 hard down + 1 main+Lowers = net -1.25 → tier 40 (|net|>=0.5 but <1.5).
+
+    Catches: ladder mid-band miscut between 30 and 40.
+    Ignores: pure-hard and pure-PT cases (covered elsewhere).
+    """
+    assert score_analyst_momentum("X", {"net_momentum": -1.25}) == pytest.approx(40.0)
+
+
+def test_analyst_mom_v016_boundary_neg_three_exact():
+    """v0.16.0: net = -3.0 exact → tier 20 (<=-3.0 boundary).
+
+    Catches: strict-less-than instead of <= at the bottom rail.
+    Ignores: net > -3 cases.
+    """
+    assert score_analyst_momentum("X", {"net_momentum": -3.0}) == pytest.approx(20.0)
+
+
+def test_analyst_mom_v016_boundary_pos_one_point_five():
+    """v0.16.0: net = +1.5 exact → tier 70.
+
+    Catches: strict-greater-than at the +1.5 edge.
+    Ignores: behaviour above/below the edge.
+    """
+    assert score_analyst_momentum("X", {"net_momentum": 1.5}) == pytest.approx(70.0)
+
+
+def test_analyst_mom_v016_heavy_pt_cluster_reaches_top_tier():
+    """v0.16.0: 12 main+Raises (no hard) = net +3.0 → tier 80.
+
+    Confirms that pure-PT activity can still reach the top tier under
+    v0.16.0 (impossible under v0.15.0 which ignored PT entirely).
+
+    Catches: PT contribution insufficient to ever flip a non-hard ticker
+             into the top bucket — would mean the recalibrated weight is too low.
+    Ignores: cases mixing hard + PT (separate tests).
+    """
+    assert score_analyst_momentum("X", {"net_momentum": 3.0}) == pytest.approx(80.0)
