@@ -216,22 +216,36 @@ def test_analyst_momentum_map_shape(tmp_db):
     assert result["TSLA"]["net_momentum"]   == -1
 
 
-def test_analyst_momentum_map_pt_contributions_v016(tmp_db):
-    """v0.16.0: soft action rows (main/reit) with priceTargetAction Raises/Lowers
-    contribute ±0.25 to net_momentum; hard rows ignore PT (no double-count).
+def test_analyst_momentum_map_soft_pt_neutralised_v017(tmp_db):
+    """v0.17.0: soft action rows (main/reit) contribute NOTHING to net_momentum,
+    regardless of priceTargetAction direction. Only hard up/init/down rows
+    contribute (±1). PT-direction folding was REMOVED after failing external
+    event-study validation on 25 May 2026 (Raises-Lowers 21d CAR spread
+    -0.79%, sign wrong, monotonicity inverted).
 
-    Synthetic fixture covers the four contribution branches at once:
-      AAPL: 2 hard up + 3 main+Raises + 1 main+Lowers → net = 2 + 0.5 = +2.5
-      TSLA: 1 hard down + 1 up+Lowers (hard wins, PT ignored) → net = -1 + 1 = 0
-            (hard down=-1, hard up=+1; PT 'Lowers' on the up row IGNORED → net 0)
-      NVDA: 0 hard + 1 main+Maintains + 1 reit+Raises → net = +0.25
-            (Maintains contributes 0; only the reit Raises counts)
+    Same synthetic fixture as the previous v0.16.0 test — different expected
+    outputs. Re-using the fixture data on purpose: it proves the change is
+    in the map builder, not in upstream data shape.
+
+      AAPL: 2 hard up + 3 main+Raises + 1 main+Lowers
+            v0.16: net = 2 + 3·0.25 - 0.25 = +2.5
+            v0.17: net = 2  (soft rows contribute 0)
+      TSLA: 1 hard down + 1 hard up (with a PT 'Lowers' on the up row)
+            v0.16 and v0.17: net = -1 + 1 = 0  (PT on hard rows always ignored)
+      NVDA: 1 main+Maintains + 1 reit+Raises (no hard actions)
+            v0.16: net = +0.25  (reit Raises contributed)
+            v0.17: net = 0      (all soft rows contribute 0; ticker still
+                                 in map because it has events in window)
 
     Catches:
-      - PT contribution branch missing entirely (NVDA would be absent from map).
-      - Double-counting: TSLA would land at -0.75 (=-1 -0.25 from up+Lowers PT)
-        instead of 0 if the SQL CASE allowed hard rows to fall through to PT.
-      - Maintains/Announces being mis-weighted: NVDA would drift off +0.25.
+      - Regression that re-introduces the v0.16 soft-PT branch (would push
+        AAPL back to +2.5 and NVDA back to +0.25).
+      - Mis-implementation that drops tickers with no hard activity entirely
+        (NVDA must remain in the map at net=0; the SQL GROUP BY produces
+        a row for every ticker with any event in window).
+      - Inverted-sign-flip (had we chosen to flip rather than neutralise,
+        AAPL would land at +1.5 and NVDA at -0.25; the neutralisation
+        decision is what these assertions enforce).
     Ignores: ladder-tier behaviour (that's the scorer's job, covered by
              test_phase2b_scorers float-ladder cases).
     """
@@ -248,10 +262,10 @@ def test_analyst_momentum_map_pt_contributions_v016(tmp_db):
             ("AAPL", "-4 days", "F4", "main", "Raises",   ),
             ("AAPL", "-5 days", "F5", "main", "Raises",   ),
             ("AAPL", "-6 days", "F6", "main", "Lowers",   ),
-            # TSLA: 1 hard down + 1 hard up with a 'Lowers' PT (PT must be IGNORED)
+            # TSLA: 1 hard down + 1 hard up with a 'Lowers' PT
             ("TSLA", "-1 days", "G1", "down", None,       ),
-            ("TSLA", "-2 days", "G2", "up",   "Lowers",   ),  # hard wins → +1, not +0.75
-            # NVDA: Maintains (=0) + reit+Raises (=+0.25)
+            ("TSLA", "-2 days", "G2", "up",   "Lowers",   ),
+            # NVDA: no hard activity; Maintains + reit+Raises (both soft, both 0 in v0.17)
             ("NVDA", "-1 days", "H1", "main", "Maintains",),
             ("NVDA", "-2 days", "H2", "reit", "Raises",   ),
         ],
@@ -263,12 +277,17 @@ def test_analyst_momentum_map_pt_contributions_v016(tmp_db):
 
     assert result["AAPL"]["upgrades_90d"]   == 2
     assert result["AAPL"]["downgrades_90d"] == 0
-    assert result["AAPL"]["net_momentum"]   == pytest.approx(2.5)
+    assert result["AAPL"]["net_momentum"]   == pytest.approx(2.0)  # soft rows contribute 0
 
     assert result["TSLA"]["upgrades_90d"]   == 1
     assert result["TSLA"]["downgrades_90d"] == 1
-    assert result["TSLA"]["net_momentum"]   == pytest.approx(0.0)  # PT on hard row ignored
+    assert result["TSLA"]["net_momentum"]   == pytest.approx(0.0)  # +1 -1 = 0
 
     assert result["NVDA"]["upgrades_90d"]   == 0
     assert result["NVDA"]["downgrades_90d"] == 0
-    assert result["NVDA"]["net_momentum"]   == pytest.approx(0.25)
+    assert result["NVDA"]["net_momentum"]   == pytest.approx(0.0)  # both soft rows = 0
+
+    # And no_activity_ticker: a ticker with no events in window must be ABSENT
+    # from the map (scorer treats absent key as None → neutral 50). This was
+    # the invariant in v0.15/v0.16 and stays in v0.17.
+    assert "NONEX" not in result

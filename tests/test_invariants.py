@@ -34,6 +34,55 @@ def test_component_scores_in_range(latest_signals):
                 assert 0 <= s <= 100, f"{row['ticker']} {col}={s} out of range"
 
 
+def test_v017_sub_scores_persisted(db, latest_signals):
+    """v0.17.0+ rows must persist the five component sub-scores
+    (earnings_score, piotroski_score, inst_own_score, analyst_mom_score,
+    altman_penalty). Pre-0.17 rows are NULL by design — the test
+    self-skips when the latest batch is older than v0.17.
+
+    The persistence is a prerequisite for the OOS gate's graduating bar
+    (forward IC + incremental Sharpe of any single component); without
+    it, marginal IC cannot be isolated from stored history.
+
+    Catches: regression where main.py drops one of the five values on the
+             way into score_rows (the failure mode the persistence change
+             was banked to prevent), OR a future schema migration that
+             accidentally removes one of the columns.
+    Ignores: pre-0.17 historical rows (their NULL sub-scores are correct;
+             no backfill applies), and the magnitude of the values (the
+             range invariant for momentum/quality/insider/reversion in
+             test_component_scores_in_range is sufficient; this test
+             checks PRESENCE, not value).
+    """
+    if not latest_signals:
+        pytest.skip("signal_scores is empty")
+    latest_version = latest_signals[0]["scoring_version"]
+    if latest_version is None or tuple(int(x) for x in latest_version.split(".")) < (0, 17, 0):
+        pytest.skip(f"latest scoring_version={latest_version} predates v0.17.0 sub-score persistence")
+
+    sub_score_cols = ("earnings_score", "piotroski_score", "inst_own_score",
+                      "analyst_mom_score", "altman_penalty")
+
+    # SIGNAL — at v0.17+ at least SOME rows must carry non-NULL sub-scores
+    # for each component. P5 allows a single ticker to legitimately have a
+    # neutral (50.0) earnings_score, but the WHOLE COLUMN being NULL across
+    # every row of a v0.17 batch is the exact failure mode that motivates
+    # this test (the values get computed in memory then dropped at insert).
+    for col in sub_score_cols:
+        n_non_null = sum(1 for r in latest_signals if r[col] is not None)
+        assert n_non_null > 0, (
+            f"v{latest_version} batch persists ZERO non-NULL values for {col} "
+            f"across {len(latest_signals)} rows — the in-memory scores are being "
+            f"dropped on the way into signal_scores"
+        )
+
+    # SILENCE — the column being PRESENT in the schema is necessary but
+    # not sufficient; check that the PRAGMA actually exposes all five.
+    pragma_cols = {r["name"] for r in db.execute("PRAGMA table_info(signal_scores)").fetchall()}
+    missing = [c for c in sub_score_cols if c not in pragma_cols]
+    assert not missing, f"signal_scores schema missing sub-score columns: {missing}"
+
+
 def test_all_ratings_valid(latest_signals):
     """Invariant 5: every rating must be one of the 7 known tiers."""
     for row in latest_signals:
