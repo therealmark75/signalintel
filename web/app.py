@@ -531,6 +531,12 @@ def dashboard():
         for r in news_panel
     ]
 
+    # ── Panel 14 — Short-Squeeze Setups (confluence: heavy SI + Very Strong/Strong) ─
+    squeeze_panel = [
+        {**r, "tier_short": tier_short(r["rating"])}
+        for r in _get_squeeze_candidates(DATABASE_PATH)
+    ]
+
     return render_template(
         "dashboard.html",
         user=user,
@@ -553,6 +559,7 @@ def dashboard():
         rating_changes_panel=rating_changes_panel,
         insider_panel=insider_panel,
         news_panel=news_panel,
+        squeeze_panel=squeeze_panel,
     )
 
 
@@ -961,6 +968,68 @@ def _get_sector_performance(db_path: str) -> list:
         ORDER BY rank_7d ASC
     """)
     rows = [dict(r) for r in cur.fetchall()]
+    conn.close()
+    return rows
+
+
+def _get_squeeze_candidates(db_path: str) -> list:
+    """Short-squeeze detector tile: confluence of heavy short interest and
+    a Very Strong / Strong composite rating.
+
+    Display-only (not a scoring component). FinViz `short_interest_pct` is
+    the only data source — ~49.5% universe coverage is accepted (the tile
+    is inherently selective and fires on the heavily-shorted tail where
+    FinViz coverage is strongest).
+
+    Fire conditions:
+      - rating IN ('STRONG_BUY','BUY')            (Very Strong or Strong)
+      - short_interest_pct >= 10                  (qualifying floor)
+      - short_interest_pct <= 100                 (implausibility guard,
+                                                   mirrors inst_own >100)
+      - julianday('now') - julianday(scraped_at) <= 14
+                                                  (staleness suppression —
+                                                   half a bi-monthly cycle)
+
+    Elevated band: short_interest_pct >= 20 → caller renders a gold chip.
+    Ordering: short_interest_pct DESC, top 10.
+
+    Returns list[dict] with keys: ticker, short_interest_pct, elevated_flag,
+    composite_score, rating, scraped_at. Empty list when nothing qualifies.
+    """
+    conn = get_connection(db_path)
+    cur  = conn.cursor()
+    cur.execute("""
+        WITH latest_per_ticker AS (
+            SELECT ticker, MAX(scraped_at) AS max_ts
+            FROM screener_snapshots
+            GROUP BY ticker
+        ),
+        latest_batch AS (
+            SELECT ticker, rating, composite_score
+            FROM signal_scores
+            WHERE DATE(scored_at) = DATE((SELECT MAX(scored_at) FROM signal_scores))
+              AND rating IN ('STRONG_BUY','BUY')
+        )
+        SELECT lb.ticker,
+               sn.short_interest_pct,
+               sn.scraped_at,
+               lb.rating,
+               lb.composite_score
+        FROM latest_batch lb
+        JOIN latest_per_ticker l  ON l.ticker = lb.ticker
+        JOIN screener_snapshots sn ON sn.ticker = lb.ticker AND sn.scraped_at = l.max_ts
+        WHERE sn.short_interest_pct IS NOT NULL
+          AND sn.short_interest_pct >= 10
+          AND sn.short_interest_pct <= 100
+          AND (julianday('now') - julianday(sn.scraped_at)) <= 14
+        ORDER BY sn.short_interest_pct DESC
+        LIMIT 10
+    """)
+    rows = []
+    for r in cur.fetchall():
+        d = dict(r)
+        d["elevated_flag"] = d["short_interest_pct"] >= 20
+        rows.append(d)
     conn.close()
     return rows
 

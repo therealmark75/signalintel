@@ -773,6 +773,29 @@
         <div class="panel-foot"><span class="panel-meta" style="color:var(--ink-500)">tap a headline to read</span></div>
       </section>
 
+      {# PANEL 14 — SHORT-SQUEEZE SETUPS (confluence: heavy SI + Very Strong/Strong) #}
+      <section class="panel">
+        <div class="panel-head">
+          <span class="panel-title"><span class="idx">14</span>Short-Squeeze Setups</span>
+          <span class="panel-meta">SI ≥ 10% · Strong+</span>
+        </div>
+        <div class="panel-body">
+          {% if squeeze_panel %}
+            {% for r in squeeze_panel %}
+            <a class="srow" href="/ticker/{{ r.ticker }}">
+              <span class="tk">{{ r.ticker }}</span>
+              <span class="tier-badge {% if r.rating == 'STRONG_BUY' %}tb-vs{% else %}tb-s{% endif %}">{{ r.tier_short }}</span>
+              <span class="thesis">SI {{ '%.1f'|format(r.short_interest_pct) }}%{% if r.elevated_flag %} <span class="tier-pill" style="margin-left:6px;">elevated</span>{% endif %}</span>
+              <span class="score">{{ '%.0f'|format(r.composite_score) }}</span>
+            </a>
+            {% endfor %}
+          {% else %}
+            <div class="empty-state">No squeeze setups currently.</div>
+          {% endif %}
+        </div>
+        <div class="panel-foot"><span class="panel-meta" style="color:var(--ink-500)">heavy short interest · top-tier rating</span></div>
+      </section>
+
     </div>
     {# ─── END BELOW THE FOLD ─────────────────────────────────────────── #}
   </main>
