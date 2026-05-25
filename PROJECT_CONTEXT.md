@@ -2083,15 +2083,71 @@ design constraints, not as backlog tickets.
   into the composite dilutes factor purity. Standing rule for all
   future component decisions.
 
-- **OUT-OF-SAMPLE VALIDATION GATE.** As the composite approaches 9+
-  components, in-sample overfitting risk rises. Before promoting any
-  new component to the composite (and before the BULLISH ACCURACY
-  DECISION GATE above can be re-evaluated), require positive
-  out-of-sample IC on a held-out window (~18 months) and positive
-  incremental Sharpe. Ties directly to the w=0.25 analyst PT weight
-  and the inst_own quartile cuts, both currently provisional —
-  validate these before locking, and apply the same gate to FINRA
-  short-interest before it joins the composite.
+- **VALIDATION GATE (substrate-conscious, 25 May 2026 rewrite).** The
+  earlier 18-month OOS IC + incremental Sharpe gate referenced data
+  that does not and will not exist for ~18 months. Phase 1 of the
+  harness scoping (25 May) inventoried the substrate and found:
+  signal_scores history is 35 days across 7 versions (longest single
+  version span 16 days, v0.16.0 is 1 day old), inst_own and analyst_mom
+  sub-scores are not persisted (only the composite they feed), every
+  map-builder in the scoring path reads "now" or "latest available"
+  (no as-of-aware path), institutional_holders is ~99% 2026 rows, and
+  screener_snapshots has no delisting tombstones (silent drop-offs).
+  An 18-month OOS window over that substrate is an aspiration, not a
+  gate. This entry replaces it with what the substrate actually supports.
+
+  **Interim validation method (in flight): external-data event study for
+  analyst_mom.** Take individual price-target events from analyst_changes
+  (universe-populated post 22 May bulk re-scrape, 410,829 events with
+  event_date spanning 2011-12-08 to 2026-10-05, PT-action fill healthy
+  back to ~2019 at 80%+ per year and degrading below that), pull
+  historical prices around each event from an external feed
+  (yfinance/FMP/Polygon), measure cumulative abnormal return versus the
+  relevant sector index over 1-21 trading days post event_date+1 BD.
+  Tests the directional thesis (Raises →
+  next-21d outperformance, Lowers → next-21d underperformance) directly,
+  on years of real events. Sidesteps the 35-day internal-history window
+  and the no-tombstone survivorship hole by working in tight post-event
+  windows, on external data, against a sector benchmark. Acceptance:
+  monotonic ordering of CARs across Raises/Maintains/Lowers, with the
+  Raises-vs-Lowers spread positive and statistically separable from zero
+  on a reasonable sample. Not "OOS IC against composite forward Sharpe",
+  but a real, honest external validation of the directional thesis the
+  weight bakes in.
+
+  **Graduating bar (organic, time-gated).** Forward IC + incremental
+  Sharpe of analyst_mom and inst_own within the composite, measured on
+  internal price+score history once it accumulates organically under a
+  single scoring version. First honest checkpoint: ~6 months post
+  v0.16.0 (late Nov 2026), full bar: ~18 months post (late Nov 2027),
+  contingent on no further version bump that resets the window. This
+  bar has a hard prerequisite: persist component sub-scores
+  (inst_own_score, analyst_mom_score, earnings_score, piotroski_score,
+  altman_penalty) on every signal_scores row going forward. Without
+  that persistence, marginal-IC of any single component cannot be
+  isolated from stored history. Persistence is a separate engineering
+  item, not part of this gate but required before it can be measured.
+
+  **inst_own validation: explicitly deferred to history accumulation.**
+  The institutional_holders substrate is empirically too thin today (~99%
+  of 57,040 rows are 2026), and the event-study trick above does not
+  apply: institutional ownership is a slow quarterly 13F signal with no
+  point-in-time event date to anchor a tight window study around. Wait
+  for ~4 quarterly 13F cycles of clean filing-date history (so 2027ish)
+  before any honest IC measurement of the quartile cuts. Until then the
+  inst_own quartile cuts stay PROVISIONAL on theory + universe-snapshot
+  distribution evidence (the 50.8% non-neutral lift banked at v0.15.0),
+  with no claim to forward validation.
+
+  **Standing requirement surfaced by this episode.** Any validation gate
+  banked as a principle must be checked against the data substrate at
+  banking time. A gate referencing unavailable data is an aspiration,
+  not a gate. Future "before X can ship, require Y" entries should
+  include a one-line empirical confirmation that Y is computable from
+  data we hold today (or will hold by the stated date). The earlier
+  18-month bar was banked from research notes (data_source_map.md) on
+  general principle, without that check, and would have blocked every
+  future component decision while measuring nothing.
 
 - **METHODOLOGY CITATIONS.** `docs/data_source_map.md` carries
   canonical papers per factor (Jegadeesh-Titman momentum, Novy-Marx
