@@ -135,6 +135,15 @@ def job_generate_signals(sector=None):
             "sector_strength_score": s.sector_strength_score,
             "sector_modifier_applied": s.sector_modifier_applied,
             "scoring_version": SCORING_ENGINE_VERSION,
+            # v0.17.0: persist the five component sub-scores on every row.
+            # Prerequisite for the OOS gate's graduating bar (forward IC +
+            # incremental Sharpe of any single component, ~6mo / ~18mo
+            # checkpoints, see PROJECT_CONTEXT VALIDATION GATE FOLLOWUP).
+            "earnings_score":    s.earnings_score,
+            "piotroski_score":   s.piotroski_score,
+            "inst_own_score":    s.inst_own_score,
+            "analyst_mom_score": s.analyst_mom_score,
+            "altman_penalty":    s.altman_penalty,
         } for s in signals]
         insert_signal_scores(DATABASE_PATH, score_rows)
 

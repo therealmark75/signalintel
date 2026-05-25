@@ -183,9 +183,27 @@ def initialise_schema(db_path: str) -> None:
             flags                   TEXT,
             target_price            REAL,
             target_upside           REAL,
-            target_calculated_at    TEXT
+            target_calculated_at    TEXT,
+            earnings_score          REAL,
+            piotroski_score         REAL,
+            inst_own_score          REAL,
+            analyst_mom_score       REAL,
+            altman_penalty          REAL
         )
     """)
+
+    # Idempotent migration: add component sub-score columns to pre-existing
+    # tables. Mirrors the 68d73f3 analyst_changes pattern: PRAGMA table_info
+    # gates each ALTER so re-running init is safe. Banked v0.17.0 for the
+    # graduating-bar prerequisite (marginal IC of any single component cannot
+    # be isolated from stored history without persistence — see PROJECT_CONTEXT
+    # VALIDATION GATE FOLLOWUP, commit a56afaa).
+    cur.execute("PRAGMA table_info(signal_scores)")
+    _ss_cols = {r["name"] for r in cur.fetchall()}
+    for col in ("earnings_score", "piotroski_score", "inst_own_score",
+                "analyst_mom_score", "altman_penalty"):
+        if col not in _ss_cols:
+            cur.execute(f"ALTER TABLE signal_scores ADD COLUMN {col} REAL")
 
     cur.execute("""
         CREATE INDEX IF NOT EXISTS idx_signal_ticker_date
@@ -429,24 +447,48 @@ def insert_insider_signal(db_path: str, signal: dict) -> None:
 
 
 def insert_signal_scores(db_path: str, rows: list[dict]) -> int:
-    """Insert signal score rows. Returns count inserted."""
+    """Insert signal score rows. Returns count inserted.
+
+    v0.17.0: persists the five component sub-scores (earnings_score,
+    piotroski_score, inst_own_score, analyst_mom_score, altman_penalty)
+    on every row. They default to NULL via row.setdefault() so legacy
+    callers / older test fixtures still work — pre-0.17.0 rows already
+    on disk stay NULL by design (no backfill).
+    """
     if not rows:
         return 0
     conn = get_connection(db_path)
     cur  = conn.cursor()
-    # Ensure new columns exist (idempotent; SQLite ignores duplicate ADD COLUMN)
+    # Ensure new columns exist (idempotent; SQLite ignores duplicate ADD COLUMN).
+    # NOTE: the canonical idempotent migration (PRAGMA-gated) lives in
+    # initialise_schema; this inline fallback is kept for the case where
+    # insert_signal_scores runs against a DB whose schema init lagged.
     for col, typ in [
         ("composite_score_raw",     "REAL"),
         ("sector_strength_score",   "REAL"),
         ("sector_modifier_applied", "REAL"),
         ("scoring_version",         "TEXT NOT NULL DEFAULT '0.9.0'"),
         ("volume_score",            "REAL"),
+        ("earnings_score",          "REAL"),
+        ("piotroski_score",         "REAL"),
+        ("inst_own_score",          "REAL"),
+        ("analyst_mom_score",       "REAL"),
+        ("altman_penalty",          "REAL"),
     ]:
         try:
             cur.execute(f"ALTER TABLE signal_scores ADD COLUMN {col} {typ}")
         except Exception:
             pass
     conn.commit()
+    # Default any of the five sub-score keys missing from a row to NULL so
+    # legacy callers (and any future caller that doesn't compute every
+    # component) write NULL, not KeyError, on insert.
+    for r in rows:
+        r.setdefault("earnings_score",    None)
+        r.setdefault("piotroski_score",   None)
+        r.setdefault("inst_own_score",    None)
+        r.setdefault("analyst_mom_score", None)
+        r.setdefault("altman_penalty",    None)
     # Delete today's existing scores before inserting fresh ones
     cur.execute(
         "DELETE FROM signal_scores WHERE DATE(scored_at) = DATE('now')"
@@ -456,12 +498,16 @@ def insert_signal_scores(db_path: str, rows: list[dict]) -> int:
             (scored_at, ticker, composite_score, composite_score_raw,
              momentum_score, quality_score, insider_score, reversion_score,
              volume_score, rating, flags, sector_strength_score,
-             sector_modifier_applied, scoring_version)
+             sector_modifier_applied, scoring_version,
+             earnings_score, piotroski_score, inst_own_score,
+             analyst_mom_score, altman_penalty)
         VALUES
             (:scored_at, :ticker, :composite_score, :composite_score_raw,
              :momentum_score, :quality_score, :insider_score, :reversion_score,
              :volume_score, :rating, :flags, :sector_strength_score,
-             :sector_modifier_applied, :scoring_version)
+             :sector_modifier_applied, :scoring_version,
+             :earnings_score, :piotroski_score, :inst_own_score,
+             :analyst_mom_score, :altman_penalty)
     """, rows)
     conn.commit()
     inserted = cur.rowcount
