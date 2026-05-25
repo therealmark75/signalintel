@@ -1492,22 +1492,32 @@ def get_inst_ownership_map(db_path: str) -> dict:
 def get_analyst_momentum_map(db_path: str, window_days: int = 90) -> dict:
     """Return {ticker: {upgrades_90d, downgrades_90d, net_momentum}} from analyst_changes.
 
-    v0.16.0 widening: net_momentum is now a float that folds price-target
-    direction on soft rating actions. Per-row contribution rules:
-      - Hard actions:  up=+1, init=+1, down=-1 (PT column IGNORED — no double-count)
-      - Soft actions (main, reit): priceTargetAction='Raises'=+0.25,
-        'Lowers'=-0.25, Maintains/Announces/Adjusts/Removes/NULL=0
-      - Any other action: 0
+    v0.17.0 neutralisation: the v0.16.0 soft-action PT contribution
+    (main/reit Raises=+0.25, Lowers=-0.25) was REMOVED after failing
+    external event-study validation on 25 May 2026. Real-cohort
+    Raises-minus-Lowers 21d CAR spread came back at -0.79% (t=-3.64,
+    p=2.7e-4), wrong sign, monotonicity inverted (Raises underperform,
+    Lowers outperform). Robust across 5/7 years, 10/11 sectors, 9/10
+    firms. Survived beta adjustment with comparable magnitude. Placebo
+    cohort showed the expected positive ordering, proving the inversion
+    was event-driven, not method artefact. Per the OUT-OF-SAMPLE
+    VALIDATION GATE (PROJECT_CONTEXT FOLLOWUPS, commit a56afaa), a
+    provisional weight that fails validation is pulled to neutral, not
+    sign-flipped on the same test (that would be re-using the test as
+    a fit). Hence the contribution is set to 0, not -0.25.
 
-    The hard/soft split ensures an 'up' row that also carries a 'Lowers'
-    target trim (54 such rows in the 90d population) contributes only the
-    hard +1 — the rating decision wins over the target tweak.
+    Per-row contribution rules under v0.17.0:
+      - Hard actions:  up=+1, init=+1, down=-1
+      - Soft actions (main, reit) and any other action: 0 (no contribution)
 
-    upgrades_90d / downgrades_90d are reported as INTEGER COUNTS of hard
-    rating changes (unchanged semantics) so existing display code keeps
-    working. net_momentum is a FLOAT (the score input).
+    net_momentum is mathematically (hard upgrades - hard downgrades),
+    integer-valued again as v0.15.0 had it. Returned as float for
+    type-compatibility with the scorer's float ladder (which still
+    works correctly on integer values — the ±0.5 neutral band is the
+    correct neutral-tier rule on integers, not v0.16-specific).
 
-    PT weight 0.25 is PROVISIONAL — see SCORING_ENGINE_VERSION comment.
+    upgrades_90d / downgrades_90d remain INTEGER COUNTS of hard rating
+    changes (unchanged semantics).
 
     Catches: analyst changes scraper job death.
     Ignores: tickers with no analyst activity in window (scorer treats
@@ -1520,13 +1530,13 @@ def get_analyst_momentum_map(db_path: str, window_days: int = 90) -> dict:
                -- hard rating counts (display + reporting)
                COUNT(CASE WHEN action IN ('up', 'init') THEN 1 END) AS upgrades,
                COUNT(CASE WHEN action = 'down'          THEN 1 END) AS downgrades,
-               -- per-row contribution: hard wins, then soft PT, then 0
+               -- per-row contribution: hard rating actions only.
+               -- v0.17.0: soft main/reit PT contribution removed
+               -- (see docstring for the event-study validation failure).
                SUM(
                  CASE
-                   WHEN action IN ('up', 'init')                             THEN  1.0
-                   WHEN action = 'down'                                      THEN -1.0
-                   WHEN action IN ('main','reit') AND price_target_action = 'Raises' THEN  0.25
-                   WHEN action IN ('main','reit') AND price_target_action = 'Lowers' THEN -0.25
+                   WHEN action IN ('up', 'init') THEN  1.0
+                   WHEN action = 'down'          THEN -1.0
                    ELSE 0.0
                  END
                ) AS net
