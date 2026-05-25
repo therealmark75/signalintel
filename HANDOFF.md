@@ -3,28 +3,24 @@
 **Tactical session state.** Updated end of each session. For stable
 project context (who/what/how), see `PROJECT_CONTEXT.md`.
 
-Last updated: 21 May 2026, end of session. Substantial day: fourteen commits to origin/main across five workstreams. Morning FMP entitlement observability (3 commits), afternoon design pass (1 design + brand commit), end-of-day banking (1 commit), parallel-session auth-adjacent pre-commit hook with P23 mechanical enforcement (5 commits), housekeeping cleanup (2 commits), and the Altman methodology switch from classic Z (1968 manufacturing) to Altman Z'' (1995 non-manufacturing) — three Phase 2 sub-phases (3 commits) bumping SCORING_ENGINE_VERSION 0.13.0 → 0.14.0. Mark drove the session through to end-of-day without break.
+Last updated: 25 May 2026, mid-afternoon. The Yahoo pipeline arc that opened 21 May closed today: **both headline workstreams (inst_own, analyst_mom) COMPLETE and pushed**. SCORING_ENGINE_VERSION 0.14.0 → 0.15.0 (inst_own recalibration, 21 May) → 0.16.0 (analyst_mom widening, 25 May). Coverage uplift across the composite: inst_own 0% → 50.8%, analyst_mom 0.06% → 20.4%. Suite 281-green. Stack pushed to origin/main.
 
-Next session: Yahoo Finance pipeline + next scoring component(s), fresh chat. Dashboard + nightly backup shipped and pushed 21 May.
+Next session: next net-new component (FINRA short-interest is the leading candidate — see PROJECT_CONTEXT FOLLOWUPS) OR backtest discipline to validate the provisional weights now in flight.
 
 ---
 
-## 21 MAY 2026 — END OF SESSION
+## 21–25 MAY 2026 — YAHOO PIPELINE ARC: BOTH WORKSTREAMS COMPLETE
 
-Yahoo pipeline session followed the morning's dashboard + backup ship. Three workstreams pursued; inst_own pushed, analyst_mom built and partially complete (resumable), econ_calendar reroute Phase-1-only. Plus test suite restored to honest and a dashboard cosmetic fix surfaced by the tier-leak guard. Six commits LOCAL-ONLY; push held until Saturday's analyst-resume gate passes.
+Yahoo pipeline session opened 21 May after the morning's dashboard + backup ship; closed 25 May with both headline workstreams (inst_own, analyst_mom) live on origin. inst_own pushed same-day 21 May. analyst_mom required the full arc: scoping → bulk job → crash → hardening (P31) → schema add → re-scrape → scorer widening. Plus test suite restored to honest and a dashboard cosmetic fix surfaced by the tier-leak guard.
 
 ### WORKSTREAM 1 — inst_own: DONE & PUSHED
 
 - Parser fix (pctHeld key + ×100 scaling, commit **383b3aa**), full-universe re-scrape (0.35% → 97.3% pct_out fill), scorer recalibrated to quartile-anchored cuts (>=48 → 75 / >=34 → 60 / >=12 → 45 / <12 → 30), >100 implausibility guard → neutral 50, SCORING_ENGINE_VERSION 0.14.0 → 0.15.0 (commit **175bbf7**). Both pushed. Full re-score (10,846 tickers), scheduler + gunicorn restarted, banner v0.15.0 confirmed live.
 - Contribution: 0% → 50.8% (5,506/10,846). Wiring verified by clean isolation (held all inputs fixed, toggled only inst_own; composite delta matched predicted ×0.125/1.60 to 4 dp). Tier spread populated 1,100-1,500 per tier.
 
-### WORKSTREAM 2 — analyst_mom: BULK JOB BUILT, RUN CRASHED PARTWAY, RESUMABLE
+### WORKSTREAM 2 — analyst_mom: DONE & PUSHED (v0.16.0)
 
-- Diagnosed CAUSE 1 (scoping): old job hit ~4 priority tickers/day; yfinance has data for 11/11 probed tickers universe-wide. NOT a retire candidate.
-- New `job_yahoo_analyst_bulk` built + slice-verified (commit **2e44a37**, LOCAL ONLY, gate pending). Append-only INSERT OR IGNORE; resumable via `external_scrape_log`; scheduled Wed 04:00.
-- FULL RUN CRASHED 21 May 17:24 on "database is locked" (ticker FLEU). Cause: detached bulk writer collided with the 16:30 Screener scrape (a ~54-min DB writer) + signal_generation — SQLite serialises writers, the lock error was unhandled and killed the run. Partial coverage banked: 1,545 distinct tickers / 156,705 rows (up from 30 post-slice). NO corruption; append-only + `external_scrape_log` mean a re-run skips the 1,545 done and resumes.
-- RESUME: SCHEDULED for Sat 23 May 04:00 BST, unattended. Launched via a backgrounded sleep-timer (resume command: `python -c "from main import job_yahoo_analyst_bulk; job_yahoo_analyst_bulk()"` — auto-skips the 1,545 done tickers via the `external_scrape_log` -6-day filter). Logs to `logs/analyst_resume_YYYYMMDD_HHMM.log`. Saturday cron is clear (all scrapers mon-fri; only weekend writers are Sun 03:00 / 04:00 + the daily 03:30 LaunchAgent backup). Write path now hardened (busy_timeout + retry, see below) so contention can't kill it. ON WAKING SATURDAY: check the resume log for `JOB DONE: Yahoo Analyst Bulk`, then run gate queries 5a/5b/5c.
-- LOCK-RETRY HARDENING: DONE. `busy_timeout=30000` added to `get_connection` app-wide (commit **2525183**); per-ticker write retry-with-backoff backstop in `job_yahoo_analyst_bulk`, with the failure-recording write wrapped to swallow final exhaustion so it can never abort the run (commit **48d7cb7**). Retry empirically verified (retries-then-succeeds, exhausts-then-raises, non-lock errors re-raise immediately). Suite 273-green. This also hardens the Wed 04:00 scheduled cron.
+Full arc: scoping diagnosis (CAUSE 1) → `job_yahoo_analyst_bulk` built → Fri crash on DB lock → busy_timeout + retry hardening (P31, proven surviving noon screener) → price-target schema add + passthrough → full universe re-scrape Sat (4,416 tickers, PT columns populated) → scorer widened to fold PT direction. Contribution 0.06% → 20.4% (hard up/init/down ±1; soft main/reit Raises/Lowers ±0.25; ±0.5 neutral band absorbs ~565 single-PT-move tickers by design). v0.16.0 live, re-scored, restarted, suite 281-green. Commits: **68d73f3** (PT schema), **498dea6** (scorer+version), **e0728f0** (tests). NOTE: w=0.25 soft-action weight is PROVISIONAL pending backtest.
 
 ### WORKSTREAM 3 — econ_calendar reroute: PHASE 1 COMPLETE, BUILD DEFERRED
 
@@ -39,13 +35,14 @@ Yahoo pipeline session followed the morning's dashboard + backup ship. Three wor
 
 ### GIT STATE
 
-8 commits LOCAL-ONLY, NOT pushed (**2e44a37, 4614841, 2bd01ba, 01245cc, 9de1261, f1495f7, 2525183, 48d7cb7**) on top of pushed **175bbf7 / 383b3aa**. HOLD push until the analyst bulk RESUMES and its gate passes Saturday — 2e44a37 sits under the others, so pushing anything pushes the ungated/crashed-run job. Push the whole stack together once Saturday's gate is green.
+All pushed. Stack on origin/main: **175bbf7 / 383b3aa** (inst_own, 21 May) → **2e44a37 / 2525183 / 48d7cb7** (analyst bulk job + lock hardening, P31) → **68d73f3 / 498dea6 / e0728f0** (analyst price-target schema + scorer widening, v0.16.0, 25 May). SCORING_ENGINE_VERSION 0.14.0 → 0.15.0 → 0.16.0. Scheduler + gunicorn restarted under v0.16.0 (PIDs 22877 / 22880); banner confirms.
 
-### PARKED FOR SATURDAY+
+### PARKED / NEXT
 
-- After resume + gate: decide analyst_mom scorer-widening (action='main' blind spot drops ~67% of events) off the REAL universe 5c distribution — NOT the 906-row pre-bulk sample (the earlier wind-down note quoting all-time 67% / 90d 89% was that stale sample, not universe data).
+- Backtest discipline: w=0.25 analyst PT weight is PROVISIONAL. inst_own quartile cuts also unbacktested. Both need out-of-sample IC validation before locking — ties to the new OOS VALIDATION GATE in PROJECT_CONTEXT FOLLOWUPS.
+- Next net-new component candidate: FINRA short-interest (Boehmer/Jones/Zhang 2008 evidence; powers the named short-squeeze differentiator). See PROJECT_CONTEXT FOLLOWUPS.
 - inst_own 60.0-tier coverage gap flagged by the 1c test audit: triage whether it's a test-coverage gap (trivial) or a ladder-logic gap (real) before filing.
-- Lock-retry hardening for `job_yahoo_analyst_bulk` (see Workstream 2).
+- analyst_mom 'reit' edge cases (1,103 rows / 90d): 84% are Maintains (zero-contribution), 14% directional via PT. Current design folds them identically to 'main' — revisit if backtest evidence diverges.
 
 ---
 

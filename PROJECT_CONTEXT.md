@@ -238,7 +238,7 @@ target-price work function, called inline by job_generate_signals (the
 trailing job_compute_target_prices cron wrapper was removed 9 May 2026).
 
 `config/constants.py`: TRACKED. SCORING_ENGINE_VERSION (currently
-0.13.0), DATABASE_PATH, SECTORS, SCREENER_SCRAPE_TIMES,
+0.16.0), DATABASE_PATH, SECTORS, SCREENER_SCRAPE_TIMES,
 NEWS_SCRAPE_TIMES, INSIDER_SCRAPE_TIMES, MIN_PRICE_FOR_SIGNAL,
 ALERT_MIN_COMPOSITE_SCORE, REQUEST_DELAY_SECONDS.
 
@@ -392,12 +392,24 @@ penalties applied before `_clamp`. Sector strength applies
 multiplicatively. Value's integration into composite is currently
 unclear; scoped for review during Yahoo pipeline session.
 
+As of v0.16.0 (25 May 2026), `analyst_mom` folds price-target direction
+in addition to hard rating changes. `get_analyst_momentum_map` produces
+a FLOAT net_momentum: hard up/init/down contribute ±1.0; soft action
+rows (`action IN ('main','reit')`) with `priceTargetAction='Raises'`
+contribute +0.25, `'Lowers'` −0.25, all other PT values (Maintains /
+Announces / Adjusts / Removes / NULL) contribute 0. No double-counting:
+on a hard row, the PT column is ignored entirely. The ladder has a
+±0.5 neutral band so a single isolated PT move does NOT flip a ticker
+off neutral; integer thresholds (3 hard upgrades = 80) preserved.
+Non-neutral coverage 0.06% → 20.4% of universe at first 0.16.0 batch.
+PT weight 0.25 is PROVISIONAL pending backtest.
+
 Components 9-16 land in the Yahoo pipeline session (next major work).
 Ticker page rendering is now array-driven via the COMPONENTS registry
 in ticker.html (11 May 2026 refactor), so new components will be
 registry additions, not template surgery.
 
-### SCORING_ENGINE_VERSION: 0.14.0
+### SCORING_ENGINE_VERSION: 0.16.0
 
 Bump policy: PATCH = bug fix without scoring change; MINOR = new
 component, weight change, OR substantive scoring substrate change
@@ -415,6 +427,21 @@ Version history:
   piotroski, inst_own, analyst_mom, altman_penalty); composite
   rebalanced to 9-component / 1.60-sum; Altman penalty additive;
   first prod rows 14 May 2026 14:19 BST.
+- 0.14.0: Altman methodology switch — classic Z (1968 manufacturing)
+  to Z'' (1995 non-manufacturing). Empirical distribution analysis
+  (3,631 tickers): classic penalised 62.9% → Z'' 47.8%. Penalty
+  magnitudes (-10/-30/-60) preserved. First prod rows 18 May 2026.
+- 0.15.0: inst_own recalibration — full-universe re-scrape (0.35% →
+  97.3% pct_out fill) + quartile-anchored cuts (>=48→75, >=34→60,
+  >=12→45, <12→30) + >100 implausibility guard → neutral 50.
+  Coverage 0% → 50.8%. First prod rows 21 May 2026.
+- 0.16.0: analyst_mom widening — fold price-target direction. SQL
+  CASE in `get_analyst_momentum_map` produces float net_momentum;
+  scorer uses float ladder with ±0.5 neutral band. Hard rating
+  actions unchanged (±1); soft actions contribute ±0.25 on
+  Raises/Lowers, no double-count. Coverage 0.06% → 20.4%. PT weight
+  0.25 PROVISIONAL pending backtest. First prod rows 25 May 2026
+  14:08 BST.
 
 The 11 May refactor (component registry in ticker.html) did NOT bump
 the version, purely presentational, no scoring substrate change.
@@ -2031,6 +2058,48 @@ NEW (21 May 2026, post-dashboard ship):
   works) while keeping exact tuned constants and inter-component
   weighting as the proprietary layer. Decide consciously pre-launch;
   flagged now so it's a choice.
+
+### NEXT-COMPONENT + VALIDATION PRINCIPLES (25 May 2026)
+
+Surfaced from `docs/data_source_map.md` (data-source research) and
+the v0.16.0 analyst_mom widening. Carry these forward as next-phase
+design constraints, not as backlog tickets.
+
+- **NEXT NET-NEW COMPONENT — FINRA SHORT-INTEREST.** Free FINRA
+  EquityShortInterest (bi-monthly) + regShoDaily feeds (no key, POST
+  JSON). Evidence: Boehmer/Jones/Zhang 2008 — heavily-shorted stocks
+  underperform ~15.6% annualized. Compute days-to-cover, SI/float,
+  SI %-change. Directly powers the named short-squeeze differentiator
+  (high SI + Very Strong confluence). Provisional weight ~0.10,
+  backtest before promoting. Build order: next net-new after the
+  current session.
+
+- **COMPOSITE PURITY INVARIANT.** Sentiment, congressional trading,
+  and ESG are DASHBOARD-ONLY surfaces, NEVER composite components.
+  Evidence: Eggers & Hainmueller 2013 contradicts the Ziobrowski
+  congressional-alpha result (−2-3%/yr underperformance); Kmak 2025
+  finds social sentiment weakly correlated with returns (comment
+  volume / search trends beat sentiment scoring). Blending these
+  into the composite dilutes factor purity. Standing rule for all
+  future component decisions.
+
+- **OUT-OF-SAMPLE VALIDATION GATE.** As the composite approaches 9+
+  components, in-sample overfitting risk rises. Before promoting any
+  new component to the composite (and before the BULLISH ACCURACY
+  DECISION GATE above can be re-evaluated), require positive
+  out-of-sample IC on a held-out window (~18 months) and positive
+  incremental Sharpe. Ties directly to the w=0.25 analyst PT weight
+  and the inst_own quartile cuts, both currently provisional —
+  validate these before locking, and apply the same gate to FINRA
+  short-interest before it joins the composite.
+
+- **METHODOLOGY CITATIONS.** `docs/data_source_map.md` carries
+  canonical papers per factor (Jegadeesh-Titman momentum, Novy-Marx
+  quality, Cohen-Malloy-Pomorski insider, Womack analyst revisions,
+  Bernard-Thomas PEAD, Boehmer short interest). Use these in the
+  methodology-documentation workstream above as the per-component
+  evidentiary citations — each component card on /methodology gets
+  its paper, period, sample, and headline statistic.
 
 ---
 
