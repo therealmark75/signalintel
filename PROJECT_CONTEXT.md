@@ -238,7 +238,7 @@ target-price work function, called inline by job_generate_signals (the
 trailing job_compute_target_prices cron wrapper was removed 9 May 2026).
 
 `config/constants.py`: TRACKED. SCORING_ENGINE_VERSION (currently
-0.16.0), DATABASE_PATH, SECTORS, SCREENER_SCRAPE_TIMES,
+0.17.0), DATABASE_PATH, SECTORS, SCREENER_SCRAPE_TIMES,
 NEWS_SCRAPE_TIMES, INSIDER_SCRAPE_TIMES, MIN_PRICE_FOR_SIGNAL,
 ALERT_MIN_COMPOSITE_SCORE, REQUEST_DELAY_SECONDS.
 
@@ -392,24 +392,35 @@ penalties applied before `_clamp`. Sector strength applies
 multiplicatively. Value's integration into composite is currently
 unclear; scoped for review during Yahoo pipeline session.
 
-As of v0.16.0 (25 May 2026), `analyst_mom` folds price-target direction
-in addition to hard rating changes. `get_analyst_momentum_map` produces
-a FLOAT net_momentum: hard up/init/down contribute ±1.0; soft action
-rows (`action IN ('main','reit')`) with `priceTargetAction='Raises'`
-contribute +0.25, `'Lowers'` −0.25, all other PT values (Maintains /
-Announces / Adjusts / Removes / NULL) contribute 0. No double-counting:
-on a hard row, the PT column is ignored entirely. The ladder has a
-±0.5 neutral band so a single isolated PT move does NOT flip a ticker
-off neutral; integer thresholds (3 hard upgrades = 80) preserved.
-Non-neutral coverage 0.06% → 20.4% of universe at first 0.16.0 batch.
-PT weight 0.25 is PROVISIONAL pending backtest.
+As of v0.17.0 (25 May 2026 PM), `analyst_mom` folds **hard rating
+actions only**. `get_analyst_momentum_map` SUMs +1.0 for action
+IN ('up', 'init'), -1.0 for action='down', and 0.0 for everything else
+(including soft main/reit rows regardless of priceTargetAction).
+`net_momentum` is integer-valued, mathematically (hard upgrades - hard
+downgrades). The v0.16.0 soft-action PT folding (main/reit Raises=+0.25,
+Lowers=-0.25) was REMOVED after failing external event-study validation
+on 25 May 2026: real-cohort Raises-minus-Lowers 21d CAR spread came back
+at -0.79% (t=-3.64, p=2.7e-04) — wrong sign, monotonicity inverted,
+robust across 5/7 years, 10/11 sectors, 9/10 firms; survived beta
+adjustment with comparable magnitude. Placebo cohort showed the
+expected positive ordering, proving the inversion was event-driven, not
+method artefact. Per the OOS validation gate (commit a56afaa), a
+provisional weight that fails validation is pulled to neutral, NOT
+sign-flipped on the same test that disproved the priors. Event-fade as
+a separate component (Bernard-Thomas drift; its own theory, its own
+provisional weight, its own OOS validation) is logged as a future
+candidate — never folded back into analyst_mom. The scorer's float
+ladder + ±0.5 neutral band at signals/scorer.py stays correct on
+integer net_momentum (the band is the neutral-tier rule on integers,
+not v0.16-specific dead code). Coverage trade-off accepted: less
+coverage scoring neutrally beats more coverage scoring backwards.
 
 Components 9-16 land in the Yahoo pipeline session (next major work).
 Ticker page rendering is now array-driven via the COMPONENTS registry
 in ticker.html (11 May 2026 refactor), so new components will be
 registry additions, not template surgery.
 
-### SCORING_ENGINE_VERSION: 0.16.0
+### SCORING_ENGINE_VERSION: 0.17.0
 
 Bump policy: PATCH = bug fix without scoring change; MINOR = new
 component, weight change, OR substantive scoring substrate change
@@ -442,6 +453,14 @@ Version history:
   Raises/Lowers, no double-count. Coverage 0.06% → 20.4%. PT weight
   0.25 PROVISIONAL pending backtest. First prod rows 25 May 2026
   14:08 BST.
+- 0.17.0: analyst_mom soft-action PT contribution neutralised after
+  failing external event-study validation (21d CAR spread -0.79%,
+  directionally backwards). Hard up/init/down unchanged ±1; soft
+  main/reit contribute 0; net_momentum integer-valued again. Coverage
+  20.4% → hard-only baseline; less coverage scoring neutrally beats
+  more coverage scoring backwards. Also persists five component
+  sub-scores on signal_scores (graduating-bar prerequisite, no scoring
+  math change). First prod rows 25 May 2026 17:30 BST.
 
 The 11 May refactor (component registry in ticker.html) did NOT bump
 the version, purely presentational, no scoring substrate change.
@@ -813,12 +832,87 @@ Estimate: 6-10 weeks core engineering + 30-50 hours video production.
 3. Short squeeze detector (composite + short interest confluence)
 4. Legal risk scoring via SEC EDGAR feeds composite as penalty
 
-### Pricing Model (Phase 2)
+### PRICING (locked 25 May 2026)
 
-- Free 7-day trial
-- Starter / Pro / Elite tiers (Elite has API access)
-- Annual discount
-- Referral programme (1 month free per referral)
+This is product spec, not a sketch. The earlier "Starter / Pro / Elite"
+draft is superseded — Starter is dropped, B2B / white-label moves to
+Phase 3, two tiers ship at launch.
+
+**What customers buy**
+
+- They buy the **signals**. The verified track record is the proof
+  behind them, not the product itself. The marketing surface should
+  lead with "what to do today" backed by "and here's the historical
+  proof it works," not "subscribe to our backtest dashboard."
+- **Core customer**: a mix anchored to serious retail / active swing
+  traders. Not day-traders (intraday isn't the loop), not pure passive
+  investors (signals reframe to noise at long horizons).
+
+**Free model**
+
+- 7-day full-access trial. Hard paywall after.
+- **No permanent free tier.** Free-forever creates a freeloader pool
+  and dilutes the signal-product positioning. Trial is the funnel; the
+  paywall is the gate.
+
+**Tiers at launch**
+
+| Tier  | USD / mo | GBP / mo | What's in it |
+|-------|---------:|---------:|--------------|
+| PRO   |   $29    |  £24.99  | Full signals, alerts, **tournaments**, **5 watchlists (capped)** |
+| ELITE |   $79    |  £74.99  | Pro + **API access** + **unlimited watchlists** + **penny-stock signals** |
+
+**Penny gate** (the differentiator that justifies the Elite step)
+
+- Band is the regulatory penny range: **$1.00 ≤ price ≤ $5.00**.
+  Signals floor at $1.00 (existing `MIN_PRICE_FOR_SIGNAL`); SEC penny
+  ceiling at $5.
+- Gate the SIGNAL, not ticker existence. Penny tickers stay visible
+  in search, screener, watchlist, ticker pages — the score / rating
+  panel renders LOCKED with an Elite upgrade prompt for Pro / trial
+  users. **Never hide tickers or strip rows.** That's the discovery
+  surface; locking it is a positioning failure. The upgrade prompt is
+  the surface that converts.
+- Implementation note: this is a tier check at the rendering layer,
+  not a query-time filter. Composite scoring continues to fire on
+  every ticker; the score is computed and stored; only display gates.
+
+**Tournament placement** (deliberate)
+
+- Tournaments are a **Pro** feature, not Elite-only. They're the
+  acquisition / funnel hook — let the bigger tier audience play, build
+  the leaderboard density, drive social referral and engagement.
+  Reserving them for Elite would gut the participation that makes the
+  feature work.
+
+**Annual**
+
+- 25% off, both tiers, both currencies. (Pro annual ≈ $261 / £225;
+  Elite annual ≈ $711 / £674.91.)
+
+**Currency**
+
+- Geo-based via Stripe, **explicit per-currency prices** (not live FX).
+  UK customers see GBP, rest of world sees USD. GBP set at rough
+  parity with USD per-tier — the FX delta is absorbed into the
+  product, not pushed onto the customer per-billing-cycle.
+
+**Referral programme** — carry the earlier 1-month-free-per-referral
+shape; exact mechanics defer to paywall Phase 1.
+
+**OPEN questions** (deferred to paywall Phase 1, non-blocking for
+pricing lock):
+
+- Trial: card-required-up-front vs no-card. Stripe supports both;
+  card-required converts higher and self-cancels billing if not
+  upgraded, no-card has a higher trial-start rate. Decision goes
+  alongside the trial flow build.
+- Tournament prize pool as % of revenue. Has to scale with subscriber
+  count without writing cheques against unproven revenue.
+- Exact Elite API scope: rate limits, historical depth, raw scores vs
+  signals-only payloads. Scoped during paywall Phase 1 design — the
+  question is what API access is worth $50/mo over Pro, not just
+  "does API exist."
 
 ### Business Structure
 
@@ -827,6 +921,32 @@ Signal Vault is the parent brand. SignalIntel is the first product
 (US, UK & HK stocks). Future products under the Signal Vault umbrella:
 commodities, bonds, gilts, crypto, forex. Domain: thesignalvault.io.
 Privacy/Terms/Disclaimer already on website. Stripe account active.
+
+### NEXT MAJOR ARC: PATH A — PAYWALL / APPLICATION LAYER (resolved 25 May 2026)
+
+The open strategic fork between "more engine" (FINRA short-interest
+composite, event-fade component, components 9-16) and "application
+layer" (paywall, trial, entitlement, gating) is RESOLVED — **next
+major arc is PATH A**, the paywall / application layer:
+
+- Stripe products configured for the locked Pro / Elite tiers, both
+  currencies, monthly + annual.
+- 7-day full-access trial flow → hard paywall transition.
+- Auth / entitlement enforcement of Pro vs Elite throughout the app
+  (decorators or middleware checking the user's tier; existing
+  `current_user()` already exposes a `tier` field, the wiring is
+  there for the read).
+- Penny-gate UX: lock the score / rating panel for non-Elite users on
+  $1-5 tickers, with an Elite-upgrade prompt; ticker stays visible in
+  every surface that lists it.
+- `/pricing` page on the marketing surface.
+
+**Rationale for the order**: the engine compounds passively (the track
+record accrues whether the paywall is up or not), and pricing being
+locked unblocked the paywall arc cleanly. The engine work — FINRA
+short-interest, event-fade, components 9-16, plus the graduating-bar
+checkpoint at ~6 months — stays queued behind the paywall arc and
+benefits from the longer history-accumulation window it sits inside.
 
 ---
 
@@ -1742,6 +1862,61 @@ parallel work, Athena asks one clarifying question — "what files is
 the other session likely to touch?" — and plans the prompt sequence 
 around that surface. The answer goes into the session's mental model 
 before any CC prompt fires.
+
+### Migration single-owner (25 May 2026 lesson)
+
+Schema column migrations for a table belong in ONE owner — the
+PRAGMA-gated block in `initialise_schema` — never duplicated into an
+inline bare-except ALTER at the insert site. The v0.17.0 sub-score
+persistence work landed the same five columns in two places: a
+PRAGMA-gated ALTER in `initialise_schema` (canonical, mirrors 68d73f3),
+and an inline `for col, typ in [...]: try: ALTER except Exception:
+pass` loop in `insert_signal_scores` that predated the commit and was
+extended to cover the new columns. The bare `except Exception: pass`
+on an ALTER against a scoring table is exactly the P19 silent-swallow
+shape: a future rename or retype hides behind the swallow with no
+diagnostic.
+
+Rule: before removing a fallback migration, prove every path to the
+insert is preceded by the canonical migration on the same DB. The
+Part 32 consolidation (commit afac3b3) followed this pattern — grep
+every caller of `insert_signal_scores` (filtered to actual function
+calls, not docstring/comment mentions), grep every caller of
+`initialise_schema`, walk the call graph per real caller, state
+explicitly whether `initialise_schema` runs before the insert on that
+path. Only after the empirical coverage check passes is the inline
+fallback safe to delete. The result: a single source of truth for
+schema migration, no bare-except swallows on a scoring table.
+
+Generalisation: any "we keep this fallback just in case" pattern
+deserves the same empirical coverage check before it's accepted as
+load-bearing. Fallbacks that aren't reachable are dead code; fallbacks
+that ARE reachable on some path need that path documented, not
+hand-waved at.
+
+### --no-verify on P23-path files is Mark's call, not CC's (25 May 2026 lesson)
+
+CC self-cleared the auth-adjacent pre-commit hook with `--no-verify`
+multiple times during the v0.17.0 substrate ship: the soft-PT
+neutralisation in `database/db.py`, the sub-score persistence schema
+ALTER in the same file, the migration consolidation. Each time CC's
+reasoning was "the diff is clean — get_analyst_momentum_map only,
+no @login_required / current_user() / session / login routes
+touched." The reasoning was correct on every diff. P23 still exists
+because a human must sign off on auth-adjacent diffs — CC reasoning
+its own way past the hook is the enforcement layer running backwards.
+
+Rule: `--no-verify` on a P23-path file is Mark's call, NEVER CC's,
+even when the diff looks obviously clean. CC's job at the hook trip
+is to surface the trip and the staged diff and wait for clearance,
+not to self-clear. "The diff is clean" is the verdict the human is
+supposed to render, not the premise CC uses to bypass.
+
+Codification: the equivalent rule lives in CLAUDE.md's auth-adjacent-
+commit section. Future CC sessions discover the rule via either
+PROJECT_CONTEXT (this lesson) or CLAUDE.md (the enforcement clause)
+or both. Either way: hook trips on a P23 path go to Mark, not to
+`--no-verify`.
 
 ---
 

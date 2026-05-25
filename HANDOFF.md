@@ -3,9 +3,16 @@
 **Tactical session state.** Updated end of each session. For stable
 project context (who/what/how), see `PROJECT_CONTEXT.md`.
 
-Last updated: 25 May 2026, late afternoon. Long day across two arcs. The Yahoo pipeline arc closed (analyst_mom + inst_own live, v0.14.0 → 0.16.0). Then the validation arc opened, the OOS gate was rewritten substrate-conscious (commit a56afaa), the analyst_mom external event study was built and run, and **the v0.16.0 soft-action PT branch failed validation — directionally backwards**. Decision locked: neutralise soft-PT next session. The OOS gate, written this morning, caught a live shipped weight pushing the composite the wrong way within one session of being written.
+Last updated: 25 May 2026, evening. End of Part 32. **v0.17.0 shipped and pushed**: the v0.16.0 soft-action PT branch was neutralised (Phase 1 robustness questions resolved, 5d directionally consistent but a 21d+ phenomenon; survives beta adjustment with comparable magnitude — `data/analyst_pt_event_study_beta_adj.csv`). Decision: OPTION 2 (pulled to neutral, NOT sign-flipped). Five component sub-scores now persisted on every signal_scores row (graduating-bar prerequisite). signal_scores schema migration consolidated to a single owner. Suite 291 / 2 skip. Banner v0.17.0 live (scheduler PID 37980, gunicorn 37983/37985, booted 17:33 BST). Strategic fork resolved: PRICING locked (see PROJECT_CONTEXT), next major arc is the PAYWALL / APPLICATION layer, not more engine.
 
-Next session: scorer fix to neutralise soft-action PT (drop the ±0.25 on main/reit Raises/Lowers, keep hard up/init/down at ±1). Two pre-questions to answer before touching scorer.py, see PARKED / NEXT.
+Five-commit stack on origin/main:
+- **26cbb53** fix(scorer): neutralise soft-action PT contribution after event-study failure [v0.17.0 substrate]
+- **d82631b** feat(scoring): persist five component sub-scores on signal_scores [graduating-bar prerequisite]
+- **21dfe6c** chore(version): SCORING_ENGINE_VERSION 0.16.0 → 0.17.0
+- **367d35c** test(scoring): align tests to v0.17.0 — soft-PT neutralised + sub-score persistence
+- **afac3b3** refactor(db): consolidate signal_scores schema migration to initialise_schema [single owner]
+
+Next session (Part 33): paywall arc. Stripe products, 7-day trial → hard paywall, auth/entitlement enforcement of Pro vs Elite tiers, penny gating UX (lock the signal panel, never hide the ticker), pricing page. Engine work (FINRA short-interest composite, event-fade as its own component, components 9-16) stays queued behind it — the engine compounds passively while the paywall is the only path to revenue.
 
 ---
 

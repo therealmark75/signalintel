@@ -289,7 +289,17 @@ controlling terminal. This is intentional. The flow is:
    shell history marks the commit as having bypassed the gate by
    design, not by accident.
 4. Never default to `--no-verify` for auth-adjacent commits. The
-   decision to bypass comes from Mark, not from CC.
+   decision to bypass comes from Mark, not from CC. **"The diff is
+   clean" is NOT a CC self-justification for `--no-verify`** (25 May
+   2026 lesson). The hook fires on path-match precisely because P23
+   exists for a human to render the verdict — CC reasoning its own
+   way past the hook is the enforcement layer running backwards. On
+   a hook trip, CC's job is to surface the trip and the staged diff
+   and wait for Mark's clearance, not to self-clear because the diff
+   looks obviously clean. Even on diffs that ARE empirically clean
+   (e.g. a scoring-map change in `database/db.py` with zero
+   `current_user()` / `session[` / `@login_required` references),
+   the clearance is Mark's call.
 
 **What the hook does NOT do**
 
