@@ -10,3 +10,10 @@ logs/
 *.log
 data/trading_system.db-shm
 data/trading_system.db-wal
+
+# Analysis artefacts under data/ (event studies, distribution outputs,
+# parquet snapshots) — regeneratable, never seed/fixture/config. Globs are
+# non-recursive: future data/<subdir>/ contents are NOT swept up; use a
+# !data/specific.csv negation if a specific file ever needs tracking.
+data/*.csv
+data/*.parquet
