@@ -28,6 +28,7 @@ from database.db import (
     get_top_signals_of_day, generate_top_signals_of_day,
 )
 from config.tiers import can_create_watchlist, watchlist_limit, get_tier, next_tier
+from config.entitlements import effective_tier, can_view_penny_signals
 from config.settings import FLASK_SECRET_KEY
 from signals.signal_labels import tier_short
 
@@ -239,7 +240,11 @@ def logout():
 def dashboard():
     user        = current_user()
     tier_key    = user.get("tier", "free") if user else "free"
-    is_elite    = (tier_key == "elite")
+    # is_elite reads the trial-aware resolver so a day-3 trialist (stored
+    # tier='free', trial active) correctly sees the Elite penny panel.
+    # tier_key stays as the RAW stored column — BUG-001 contract requires
+    # the nav badge to reflect DB state, not the overlay.
+    is_elite    = (effective_tier(user) == 'elite')
 
     # ── Live header context (dash-head subline) ──────────────────────────────
     meta_row = db_query("""
@@ -2531,6 +2536,12 @@ def _get_penny_pick_full(db_path: str) -> "dict | None":
 @app.route("/api/penny/stock-of-day")
 @login_required
 def api_penny_stock_of_day():
+    # Penny signals are Elite-only. Gate BEFORE the fetch — _get_penny_pick_full
+    # must not run for a non-elite caller. "locked": True distinguishes this
+    # response from the existing no-pick-today branch below ({"stock": None}).
+    tier = effective_tier(current_user())
+    if not can_view_penny_signals(tier):
+        return jsonify({"stock": None, "locked": True})
     stock = _get_penny_pick_full(DATABASE_PATH)
     if not stock:
         return jsonify({"stock": None})
@@ -2540,6 +2551,14 @@ def api_penny_stock_of_day():
 @app.route("/api/penny/hot")
 @login_required
 def api_penny_hot():
+    # Penny signals are Elite-only. Gate BEFORE the exchange loop — no
+    # query fires for a non-elite caller. Empty per-exchange arrays plus
+    # "locked": True so the client can distinguish a gated response from
+    # a genuinely empty result.
+    tier = effective_tier(current_user())
+    if not can_view_penny_signals(tier):
+        return jsonify({"NASDAQ": [], "NYSE": [], "OTC": [], "locked": True})
+
     # One row per ticker (latest snapshot + latest signal score)
     lts_sq = """
         SELECT ticker, MAX(scraped_at) AS max_ts
