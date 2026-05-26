@@ -721,13 +721,17 @@ def initialise_user_schema(db_path: str) -> None:
     conn = get_connection(db_path)
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS users (
-            id            INTEGER PRIMARY KEY AUTOINCREMENT,
-            username      TEXT    NOT NULL UNIQUE,
-            email         TEXT    NOT NULL UNIQUE,
-            password_hash TEXT    NOT NULL,
-            created_at    TEXT    NOT NULL,
-            is_active     INTEGER DEFAULT 1,
-            tier          TEXT    DEFAULT 'free'
+            id                     INTEGER PRIMARY KEY AUTOINCREMENT,
+            username               TEXT    NOT NULL UNIQUE,
+            email                  TEXT    NOT NULL UNIQUE,
+            password_hash          TEXT    NOT NULL,
+            created_at             TEXT    NOT NULL,
+            is_active              INTEGER DEFAULT 1,
+            tier                   TEXT    DEFAULT 'free',
+            trial_started_at       TEXT,
+            stripe_customer_id     TEXT,
+            stripe_subscription_id TEXT,
+            tier_effective_until   TEXT
         );
 
         CREATE TABLE IF NOT EXISTS watchlists_meta (
@@ -779,6 +783,35 @@ def initialise_user_schema(db_path: str) -> None:
     if 'tier' not in user_cols:
         cur.execute("ALTER TABLE users ADD COLUMN tier TEXT DEFAULT 'free'")
         conn.commit()
+
+    # Migration: paywall arc — trial overlay + Stripe billing identity columns.
+    # Single-owner pattern (v0.17.0 lesson): NEVER add an inline bare-except
+    # ALTER at an insert site. Column shape lives here only.
+    # Refresh user_cols in case the tier migration above just ran.
+    user_cols = {r[1] for r in cur.execute("PRAGMA table_info(users)").fetchall()}
+    if 'trial_started_at' not in user_cols:
+        cur.execute("ALTER TABLE users ADD COLUMN trial_started_at TEXT")
+        conn.commit()
+    if 'stripe_customer_id' not in user_cols:
+        cur.execute("ALTER TABLE users ADD COLUMN stripe_customer_id TEXT")
+        conn.commit()
+    if 'stripe_subscription_id' not in user_cols:
+        cur.execute("ALTER TABLE users ADD COLUMN stripe_subscription_id TEXT")
+        conn.commit()
+    if 'tier_effective_until' not in user_cols:
+        cur.execute("ALTER TABLE users ADD COLUMN tier_effective_until TEXT")
+        conn.commit()
+
+    # Indexes for Stripe webhook lookups (webhook itself lands in a later step).
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS idx_users_stripe_customer
+        ON users(stripe_customer_id)
+    """)
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS idx_users_stripe_subscription
+        ON users(stripe_subscription_id)
+    """)
+    conn.commit()
 
     # Migration: upgrade old single-watchlist schema if watchlist_id column is missing
     wl_cols = {r[1] for r in cur.execute("PRAGMA table_info(watchlists)").fetchall()}
