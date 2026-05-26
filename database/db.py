@@ -914,7 +914,7 @@ def get_user_by_username(db_path: str, username: str):
 def get_user_by_id(db_path: str, user_id: int):
     conn = get_connection(db_path)
     cur  = conn.cursor()
-    cur.execute("SELECT * FROM users WHERE id = ?", (user_id,))
+    cur.execute("SELECT * FROM users WHERE id = ? AND is_active = 1", (user_id,))
     row = cur.fetchone()
     conn.close()
     return dict(row) if row else None
