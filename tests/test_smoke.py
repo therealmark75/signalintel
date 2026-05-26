@@ -261,8 +261,10 @@ def test_api_watchlists_create_tier_limit_returns_structured_error(client):
     from database.db import get_connection
     from config.constants import DATABASE_PATH as DB
 
-    # Set tier='starter' (watchlist_limit=5) so the limit check in
+    # Set tier='pro' (watchlist_limit=5) so the limit check in
     # /api/watchlists fires when we attempt to create a 6th watchlist.
+    # (Pre-paywall arc this used tier='starter'; 'starter' is now a
+    # dead tier and Pro carries the 5-watchlist cap.)
     conn = get_connection(DB)
     # Save production watchlist data before wiping for test setup.
     _saved_meta = conn.execute(
@@ -272,7 +274,7 @@ def test_api_watchlists_create_tier_limit_returns_structured_error(client):
     _saved_watchlists = conn.execute(
         "SELECT user_id, watchlist_id, ticker, added_at, notes FROM watchlists WHERE user_id=2"
     ).fetchall()
-    conn.execute("UPDATE users SET tier='starter' WHERE id=2")
+    conn.execute("UPDATE users SET tier='pro' WHERE id=2")
     conn.execute("DELETE FROM watchlists WHERE user_id=2")
     conn.execute("DELETE FROM watchlists_meta WHERE user_id=2")
     for i in range(5):
