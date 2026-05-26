@@ -757,9 +757,41 @@ def assign_rating(composite: float, reversion: float,
         return "SELL"
     return "STRONG_HOLD"
 
+# Proprietary flag strings — paywall arc Step 4d.
+# These flags are derived from proprietary sub-scores (insider_score,
+# reversion_score). Tagging at the source: build_flags appends ONLY from
+# these named constants, and PROPRIETARY_FLAGS exposes the same set for
+# the entitlements gate to filter against. No parallel hand-maintained
+# list — single source of truth. Stored flag output is byte-identical
+# to pre-4d (no SCORING_ENGINE_VERSION bump required).
+_PROPRIETARY_INSIDER_FLAGS = (
+    "★ Strong insider buying",
+    "⚠ Insider selling pressure",
+)
+_PROPRIETARY_REVERSION_FLAGS = (
+    "↩ Mean reversion candidate",
+)
+
+PROPRIETARY_FLAGS = frozenset(
+    _PROPRIETARY_INSIDER_FLAGS + _PROPRIETARY_REVERSION_FLAGS
+)
+
+
 def build_flags(row: dict, insider_score: float,
                 reversion_score: float) -> list[str]:
-    """Human-readable flags summarising why a ticker scored the way it did."""
+    """Human-readable flags summarising why a ticker scored the way it did.
+
+    Flag strings sourced from the descriptive market data in `row`
+    (RSI, SMA, short interest, analyst, 52w bands) and from two
+    proprietary sub-scores. Proprietary flag strings come from the
+    _PROPRIETARY_* tuples — never inline literals — so adding a new
+    proprietary flag means appending to those tuples, and the
+    entitlements gate's PROPRIETARY_FLAGS set inherits the addition
+    automatically.
+
+    Return value is the same flat list[str] as pre-4d. Stored output
+    byte-compatible.
+    """
     flags = []
 
     rsi = row.get("rsi_14")
@@ -777,8 +809,10 @@ def build_flags(row: dict, insider_score: float,
         if sma200 > 0: flags.append("↑ Above 200d SMA")
         else:          flags.append("↓ Below 200d SMA")
 
-    if insider_score >= 70:  flags.append("★ Strong insider buying")
-    elif insider_score <= 30:flags.append("⚠ Insider selling pressure")
+    if insider_score >= 70:
+        flags.append(_PROPRIETARY_INSIDER_FLAGS[0])   # "★ Strong insider buying"
+    elif insider_score <= 30:
+        flags.append(_PROPRIETARY_INSIDER_FLAGS[1])   # "⚠ Insider selling pressure"
 
     short = row.get("short_interest_pct")
     if short and short > 20: flags.append(f"⚠ High short interest {short:.1f}%")
@@ -794,7 +828,8 @@ def build_flags(row: dict, insider_score: float,
     if high_52w is not None and high_52w > -5:
         flags.append("🔝 Near 52-week high")
 
-    if reversion_score >= 75: flags.append("↩ Mean reversion candidate")
+    if reversion_score >= 75:
+        flags.append(_PROPRIETARY_REVERSION_FLAGS[0])  # "↩ Mean reversion candidate"
 
     return flags
 

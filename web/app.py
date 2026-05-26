@@ -30,7 +30,7 @@ from database.db import (
 from config.tiers import can_create_watchlist, watchlist_limit, get_tier, next_tier
 from config.entitlements import (
     effective_tier, can_view_penny_signals, can_view_score_for_ticker,
-    strip_scores_for_non_elite,
+    strip_scores_for_non_elite, filter_proprietary_flags_for_non_elite,
 )
 from config.settings import FLASK_SECRET_KEY
 from signals.signal_labels import tier_short
@@ -895,6 +895,7 @@ LEFT JOIN (
     # Price-aware score gate (penny rows stripped for non-elite).
     tier = effective_tier(current_user())
     rows = strip_scores_for_non_elite(rows, tier, price_key='price')
+    filter_proprietary_flags_for_non_elite(rows, tier, price_key='price')
     return jsonify(rows)
 @app.route("/api/signals/sector/<sector>")
 @login_required
@@ -926,6 +927,7 @@ def api_signals_by_sector(sector):
     # Price-aware score gate (penny rows stripped for non-elite).
     tier = effective_tier(current_user())
     rows = strip_scores_for_non_elite(rows, tier, price_key='price')
+    filter_proprietary_flags_for_non_elite(rows, tier, price_key='price')
     return jsonify(rows)
 
 @app.route("/api/signals/<rating>")
@@ -959,6 +961,7 @@ def api_signals_by_rating(rating):
     # Price-aware score gate (penny rows stripped for non-elite).
     tier = effective_tier(current_user())
     rows = strip_scores_for_non_elite(rows, tier, price_key='price')
+    filter_proprietary_flags_for_non_elite(rows, tier, price_key='price')
     return jsonify(rows)
 
 
@@ -2593,14 +2596,21 @@ def _select_penny_stock_of_day():
 @login_required
 def penny():
     user = current_user()
-    return render_template("penny.html", user=user)
+    # Server-driven locked decision (4d). Template renders the
+    # locked-teaser when locked=True and does NOT fire the /api/penny/*
+    # XHRs — avoids the empty-loading flash on a known-gated state.
+    tier = effective_tier(user)
+    locked = not can_view_penny_signals(tier)
+    return render_template("penny.html", user=user, locked=locked)
 
 
 @app.route("/penny/screener")
 @login_required
 def penny_screener():
     user = current_user()
-    return render_template("penny_screener.html", user=user)
+    tier = effective_tier(user)
+    locked = not can_view_penny_signals(tier)
+    return render_template("penny_screener.html", user=user, locked=locked)
 
 
 def _get_penny_pick_full(db_path: str) -> "dict | None":

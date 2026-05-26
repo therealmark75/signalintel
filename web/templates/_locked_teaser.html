@@ -1,0 +1,45 @@
+{# Shared locked-teaser component (paywall arc Step 4d).
+
+Single source of truth for the "Upgrade to Elite" lock UX across:
+  - dashboard.html Panel 7 (canonical caller, migrated from inline)
+  - penny.html
+  - penny_screener.html
+  - backtest.html (per-tier trades, inline variant — uses .lt-inline CSS)
+  - ticker.html (score panel reveal)
+
+CSS lives in _nav.html (universally included on authenticated pages).
+Adding a new surface: import this macro and call it. Single style
+source means future copy/spacing changes happen in one place.
+
+Usage — plain banner:
+    {% from "_locked_teaser.html" import locked_teaser %}
+    {{ locked_teaser("Penny Stock of the Day",
+                     "Daily curated penny pick — Elite tier.") }}
+
+Usage — with blurred placeholder behind (dashboard Panel 7 parity
+shape — pass placeholder HTML via {% call %}):
+    {% call locked_teaser("Penny Stock of the Day", "...") %}
+      <div class="spot-col">...fake placeholder content...</div>
+    {% endcall %}
+
+Args:
+  title       — short heading visible in the overlay
+  description — supporting copy under the title
+  cta_text    — CTA button text (default "Upgrade to Elite →")
+  cta_url     — CTA href (default /account)
+#}
+{% macro locked_teaser(title, description, cta_text="Upgrade to Elite →", cta_url="/account") -%}
+<div class="locked-teaser{% if caller %} with-placeholder{% endif %}">
+  {%- if caller %}
+  <div class="lt-placeholder" aria-hidden="true">
+    {{ caller() }}
+  </div>
+  {%- endif %}
+  <div class="lt-overlay">
+    <span class="lt-icon">🔒</span>
+    <span class="lt-title">{{ title }}</span>
+    <span class="lt-desc">{{ description }}</span>
+    <a href="{{ cta_url }}" class="lt-cta">{{ cta_text }}</a>
+  </div>
+</div>
+{%- endmacro %}

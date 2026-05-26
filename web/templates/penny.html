@@ -1,3 +1,4 @@
+{% from "_locked_teaser.html" import locked_teaser %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -125,6 +126,7 @@ main{padding:24px;max-width:1400px;margin:0 auto;}
 .empty{text-align:center;padding:32px;color:var(--muted);font-family:var(--mono);font-size:11px;}
 .loading-text{text-align:center;padding:24px;color:var(--muted);font-family:var(--mono);font-size:11px;}
 </style>
+{% include "_locked_teaser_css.html" %}
 </head>
 <body>
 {% include '_nav.html' %}
@@ -148,6 +150,18 @@ main{padding:24px;max-width:1400px;margin:0 auto;}
     </div>
 
     <!-- Top Grid: SOTD + Hot Movers -->
+    {% if locked %}
+    <div class="grid-top">
+        {{ locked_teaser(
+            title="Penny Stock of the Day",
+            description="A daily curated penny pick with full composite breakdown and legal-risk context. Available on the Elite tier."
+        ) }}
+        {{ locked_teaser(
+            title="Hot Penny Stocks",
+            description="Cross-exchange penny movers ranked by SignalIntel scoring. Available on the Elite tier."
+        ) }}
+    </div>
+    {% else %}
     <div class="grid-top">
         <!-- Penny Stock of the Day -->
         <div class="sotd-card" id="sotd-card">
@@ -167,6 +181,7 @@ main{padding:24px;max-width:1400px;margin:0 auto;}
             <div id="hot-body"><div class="loading-text">Loading…</div></div>
         </div>
     </div>
+    {% endif %}
 
     <!-- Quick Links -->
     <div class="quick-card">
@@ -349,8 +364,10 @@ function renderHot(exch) {
     }).join('');
 }
 
+{% if not locked %}
 loadSOTD();
 loadHot();
+{% endif %}
 </script>
 {% include '_footer.html' %}
 </body>

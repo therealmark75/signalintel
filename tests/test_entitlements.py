@@ -590,6 +590,124 @@ def test_strip_new_rating_old_rating_aliases_nulled():
     assert rows[0]['change_date'] == '2026-05-07'
 
 
+def test_filter_proprietary_flags_free_penny_drops_proprietary_keeps_descriptive():
+    """Free + penny row: proprietary flags dropped from flag_list,
+    descriptive flags retained. Catches: the filter dropping too
+    much (descriptive lost — over-broad gate) or too little
+    (proprietary leaked — under-broad gate).
+
+    Uses the actual proprietary strings from signals/scorer's named
+    constants — sourced via the PROPRIETARY_FLAGS frozenset, so this
+    test follows the same single-source-of-truth as production.
+
+    Ignores: order of remaining descriptive flags.
+    """
+    from config.entitlements import filter_proprietary_flags_for_non_elite
+    from signals.scorer import PROPRIETARY_FLAGS
+    descriptive = "⚠ Overbought RSI"
+    other_descriptive = "↑ Above 50d SMA"
+    proprietary_a = "★ Strong insider buying"
+    proprietary_b = "↩ Mean reversion candidate"
+    # Sanity: confirm our test fixtures match the production set
+    assert proprietary_a in PROPRIETARY_FLAGS
+    assert proprietary_b in PROPRIETARY_FLAGS
+    assert descriptive not in PROPRIETARY_FLAGS
+
+    rows = [{
+        'ticker': 'ALTO', 'price': 2.50,
+        'flag_list': [descriptive, other_descriptive, proprietary_a,
+                      "⚠ High short interest 25.0%", proprietary_b]
+    }]
+    filter_proprietary_flags_for_non_elite(rows, 'free')
+    remaining = rows[0]['flag_list']
+    assert proprietary_a not in remaining
+    assert proprietary_b not in remaining
+    assert descriptive in remaining
+    assert other_descriptive in remaining
+    assert "⚠ High short interest 25.0%" in remaining
+
+
+def test_filter_proprietary_flags_pro_non_penny_keeps_all():
+    """Pro + non-penny: gate doesn't fire → all flags kept INCLUDING
+    proprietary. Pro pays for scores on non-penny tickers.
+
+    Catches: filter over-broadly dropping flags for pro on any price.
+    Ignores: descriptive flag presence (only the proprietary survival
+             matters here).
+    """
+    from config.entitlements import filter_proprietary_flags_for_non_elite
+    rows = [{
+        'ticker': 'AAPL', 'price': 175.0,
+        'flag_list': ["⚠ Overbought RSI", "★ Strong insider buying"]
+    }]
+    filter_proprietary_flags_for_non_elite(rows, 'pro')
+    assert "★ Strong insider buying" in rows[0]['flag_list']
+
+
+def test_filter_proprietary_flags_pro_penny_drops_proprietary():
+    """Pro + penny: gate fires (penny is Elite-only) → proprietary
+    flags dropped. Descriptive flags kept.
+
+    Catches: filter not firing for the pro+penny case.
+    """
+    from config.entitlements import filter_proprietary_flags_for_non_elite
+    rows = [{
+        'ticker': 'ALTO', 'price': 2.50,
+        'flag_list': ["⚠ Overbought RSI", "★ Strong insider buying"]
+    }]
+    filter_proprietary_flags_for_non_elite(rows, 'pro')
+    assert "★ Strong insider buying" not in rows[0]['flag_list']
+    assert "⚠ Overbought RSI" in rows[0]['flag_list']
+
+
+def test_filter_proprietary_flags_elite_short_circuits():
+    """Elite caller: helper short-circuits — proprietary flags
+    survive unchanged on any row.
+
+    Catches: the elite branch accidentally iterating and mutating.
+    """
+    from config.entitlements import filter_proprietary_flags_for_non_elite
+    rows = [{
+        'ticker': 'ALTO', 'price': 2.50,
+        'flag_list': ["★ Strong insider buying", "↩ Mean reversion candidate"]
+    }]
+    before = list(rows[0]['flag_list'])
+    filter_proprietary_flags_for_non_elite(rows, 'elite')
+    assert rows[0]['flag_list'] == before
+
+
+def test_filter_proprietary_flags_missing_price_fails_closed():
+    """price=None for non-elite → gated → proprietary flags dropped.
+    Mirrors can_view_score_for_ticker's None-fails-closed branch.
+
+    Catches: a fail-open path on missing price.
+    """
+    from config.entitlements import filter_proprietary_flags_for_non_elite
+    rows = [{
+        'ticker': 'ALTO', 'price': None,
+        'flag_list': ["⚠ Overbought RSI", "★ Strong insider buying"]
+    }]
+    filter_proprietary_flags_for_non_elite(rows, 'pro')
+    assert "★ Strong insider buying" not in rows[0]['flag_list']
+    assert "⚠ Overbought RSI" in rows[0]['flag_list']
+
+
+def test_filter_proprietary_flags_empty_flag_list_noop():
+    """Row with empty flag_list (or missing key) → no-op, no error.
+
+    Catches: helper crashing on rows that don't have flag_list yet
+             (would break any route where flags aren't always present).
+    """
+    from config.entitlements import filter_proprietary_flags_for_non_elite
+    rows = [
+        {'ticker': 'ALTO', 'price': 2.50, 'flag_list': []},
+        {'ticker': 'AACG', 'price': 1.79},  # no flag_list key at all
+    ]
+    filter_proprietary_flags_for_non_elite(rows, 'free')
+    assert rows[0]['flag_list'] == []
+    assert 'flag_list' not in rows[1]
+
+
 def test_strip_two_tier_intended_behaviour():
     """P15 documentary test: spells out the THREE-tier strip pattern
     on a single mixed list with one penny and one non-penny row.

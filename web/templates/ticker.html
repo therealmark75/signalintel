@@ -225,6 +225,7 @@
 .ticker-sub-bar{display:flex;align-items:center;gap:12px;padding:8px 24px;border-bottom:1px solid var(--border);background:rgba(8,12,20,0.8);}
 .ticker-sub-bar a,.ticker-sub-bar button{font-family:var(--mono);font-size:11px;}
 </style>
+{% include "_locked_teaser_css.html" %}
 </head>
 <body>
 {% include '_nav.html' %}
@@ -582,8 +583,10 @@ async function loadPage() {
             </div>
         </div>
 
+        <!-- Locked teaser (4d) — replaces the signal-banner when API returns data.locked=true (penny + non-elite). -->
+        ${data.locked ? `<div class="signal-banner" style="justify-content:center;padding:24px"><div class="lt-inline"><span class="lt-inline-title">🔒 SignalIntel signal &amp; composite breakdown — Elite tier required for sub-$5 tickers</span><a href="/account" class="lt-inline-cta">Upgrade to Elite</a></div></div>` : ''}
         <!-- Signal banner -->
-        <div class="signal-banner">
+        <div class="signal-banner" style="${data.locked ? 'display:none' : ''}">
             <div>
                 <div style="font-family:var(--mono);font-size:10px;color:var(--muted2);margin-bottom:8px">SIGNAL STRENGTH</div>
                 <div class="rating-tooltip-wrap">

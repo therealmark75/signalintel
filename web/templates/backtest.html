@@ -61,6 +61,7 @@
     .breakdown-ticker{color:var(--accent);cursor:pointer;}
     .breakdown-ticker:hover{text-decoration:underline;}
 </style>
+{% include "_locked_teaser_css.html" %}
 </head>
 <body>
 {% include '_nav.html' %}
@@ -156,7 +157,7 @@ async function load() {
                 <div class="breakdown-panel" id="bd-${i}">
                     <table>
                         <thead><tr><th>Ticker</th><th>Date</th><th>Entry</th><th>Return</th><th>Days</th></tr></thead>
-                        <tbody>${tradesHtml || '<tr><td colspan="5" style="color:var(--muted);text-align:center">No trades</td></tr>'}</tbody>
+                        <tbody>${tradesHtml || (data.locked ? '<tr><td colspan="5"><div class="lt-inline"><span class="lt-inline-title">🔒 Example trades — Elite tier</span><a href="/account" class="lt-inline-cta">Upgrade to see</a></div></td></tr>' : '<tr><td colspan="5" style="color:var(--muted);text-align:center">No trades</td></tr>')}</tbody>
                     </table>
                 </div>
             </div>`;

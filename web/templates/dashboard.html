@@ -1,4 +1,5 @@
 {# Phase 2A — 6 above-fold panels (1-6). Phase 2B adds Elite Spotlight + panels 7-13. #}
+{% from "_locked_teaser.html" import locked_teaser %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -353,6 +354,7 @@
   }
   @media (max-width: 680px)  { .grid-3 { grid-template-columns: 1fr; } }
 </style>
+{% include "_locked_teaser_css.html" %}
 </head>
 <body>
 
@@ -598,40 +600,37 @@
         </div>
       </section>
     {% else %}
-      {# Non-elite branch — locked teaser only. NO real pick data in the source. #}
-      <section class="spotlight locked" id="spotlight">
-        <div class="spot-lock-overlay">
-          <span class="ico">🔒</span>
-          <span class="ttl">Penny Stock of the Day</span>
-          <span class="desc">A daily curated penny pick with full composite breakdown and legal-risk context. Available on the Elite tier.</span>
-          <a href="/account" class="upgrade">Upgrade to Elite →</a>
+      {# Non-elite branch — migrated to shared locked_teaser macro (4d).
+         Visual parity with the pre-4d inline locked spotlight: placeholder
+         content (spot-cols) renders behind the .lt-overlay (CSS handles
+         the blur). NO real pick data reaches the HTML. #}
+      {% call locked_teaser(
+          title="Penny Stock of the Day",
+          description="A daily curated penny pick with full composite breakdown and legal-risk context. Available on the Elite tier."
+      ) %}
+        <div class="spot-col">
+          <div class="spot-eyebrow"><span class="lock">★</span>Penny Stock of the Day · Elite</div>
+          <div class="spot-ticker">— — — —</div>
+          <div class="spot-company">Locked preview</div>
+          <div class="spot-price">$—.—— <span class="chg up">+—.—%</span></div>
         </div>
-        <div class="spot-inner" aria-hidden="true">
-          {# Placeholder filler — visually blurred behind the overlay. NO real ticker data. #}
-          <div class="spot-col">
-            <div class="spot-eyebrow"><span class="lock">★</span>Penny Stock of the Day · Elite</div>
-            <div class="spot-ticker">— — — —</div>
-            <div class="spot-company">Locked preview</div>
-            <div class="spot-price">$—.—— <span class="chg up">+—.—%</span></div>
+        <div class="spot-col">
+          <div class="spot-breakdown-title">Composite breakdown</div>
+          {% for lbl in ['Momentum','Quality','Insider'] %}
+          <div class="comp-bar-row">
+            <div class="comp-bar-label"><span>{{ lbl }}</span><span class="v">—</span></div>
+            <div class="comp-track"><div class="comp-fill" style="width:42%"></div></div>
           </div>
-          <div class="spot-col">
-            <div class="spot-breakdown-title">Composite breakdown</div>
-            {% for lbl in ['Momentum','Quality','Insider'] %}
-            <div class="comp-bar-row">
-              <div class="comp-bar-label"><span>{{ lbl }}</span><span class="v">—</span></div>
-              <div class="comp-track"><div class="comp-fill" style="width:42%"></div></div>
-            </div>
-            {% endfor %}
-          </div>
-          <div class="spot-col">
-            <div class="spot-why-title">Why we're watching</div>
-            <ul class="why-list">
-              <li>Curated rationale available on Elite.</li>
-              <li>Composite breakdown and legal-risk context unlocked at upgrade.</li>
-            </ul>
-          </div>
+          {% endfor %}
         </div>
-      </section>
+        <div class="spot-col">
+          <div class="spot-why-title">Why we're watching</div>
+          <ul class="why-list">
+            <li>Curated rationale available on Elite.</li>
+            <li>Composite breakdown and legal-risk context unlocked at upgrade.</li>
+          </ul>
+        </div>
+      {% endcall %}
     {% endif %}
 
     <div class="fold-divider">Below the fold · context &amp; flow</div>

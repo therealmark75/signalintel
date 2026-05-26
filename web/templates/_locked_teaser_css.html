@@ -1,0 +1,41 @@
+{# Shared CSS for the locked-teaser component (paywall arc Step 4d).
+   Single source of truth. Include once per page that uses the
+   locked_teaser macro (dashboard.html does NOT include _nav.html,
+   so CSS placed in _nav.html doesn't reach it — hence this dedicated
+   partial). Pages with the macro:
+     dashboard.html · penny.html · penny_screener.html
+     backtest.html  · ticker.html
+   Place this include in <head> or near the top of <body>, anywhere
+   before the macro emits markup. #}
+<style>
+.locked-teaser{position:relative;border-radius:12px;background:rgba(15,37,64,0.45);
+  border:1px solid var(--border);padding:32px;min-height:160px;
+  display:flex;align-items:center;justify-content:center;overflow:hidden;}
+.locked-teaser .lt-overlay{display:flex;flex-direction:column;align-items:center;
+  gap:10px;text-align:center;max-width:380px;z-index:2;}
+.locked-teaser .lt-icon{font-size:24px;}
+.locked-teaser .lt-title{font-size:22px;font-weight:400;color:var(--text,#e2e8f0);
+  font-family:var(--font-display,inherit);}
+.locked-teaser .lt-desc{font-size:13px;color:var(--muted2,#94a3b8);line-height:1.5;}
+.locked-teaser .lt-cta{margin-top:8px;font-family:var(--mono);font-size:11px;
+  font-weight:600;color:var(--accent);text-decoration:none;letter-spacing:.5px;
+  padding:8px 16px;border:1px solid var(--accent);border-radius:4px;
+  transition:all .15s;}
+.locked-teaser .lt-cta:hover{background:var(--accent);color:#0a1729;}
+/* with-placeholder shape: blurred fake content behind the overlay
+   (dashboard Panel 7 visual parity). */
+.locked-teaser.with-placeholder .lt-placeholder{filter:blur(3px) saturate(0.5);
+  opacity:0.4;pointer-events:none;width:100%;}
+.locked-teaser.with-placeholder .lt-overlay{position:absolute;inset:0;
+  background:rgba(8,12,20,0.55);backdrop-filter:blur(2px);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:10px;}
+/* Inline variant — compact, used in table cells / small surfaces
+   like the backtest per-tier "no trades" replacement. */
+.lt-inline{display:flex;flex-direction:column;align-items:center;gap:6px;
+  padding:12px;}
+.lt-inline-title{font-family:var(--mono);font-size:11px;color:var(--muted2,#94a3b8);}
+.lt-inline-cta{font-family:var(--mono);font-size:11px;font-weight:600;
+  color:var(--accent);text-decoration:none;letter-spacing:.5px;}
+.lt-inline-cta:hover{text-decoration:underline;}
+</style>

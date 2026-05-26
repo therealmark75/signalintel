@@ -254,3 +254,42 @@ def strip_scores_for_non_elite(rows, tier, price_key='price'):
                 if f in r:
                     r[f] = None
     return rows
+
+
+def filter_proprietary_flags_for_non_elite(rows, tier, price_key='price', flag_key='flag_list'):
+    """For rows where `tier` can't see scores at the row's price band,
+    DROP proprietary flag strings from row[flag_key]. Descriptive
+    flags (RSI/SMA/short/analyst/52w bands) survive — they're
+    market-data pass-through, not proprietary score output.
+
+    PROPRIETARY_FLAGS is sourced from signals/scorer.py — the same
+    named-constant tuples that `build_flags` appends from. Single
+    source of truth for proprietary classification; no parallel
+    hand-maintained list. Adding a new proprietary flag in scorer.py
+    means appending to those tuples and the gate-set inherits it
+    automatically.
+
+    Tier semantics mirror strip_scores_for_non_elite:
+      - elite : SHORT-CIRCUITS. No iteration, no mutation.
+      - pro   : iterates per row; penny rows lose proprietary flags;
+                non-penny rows untouched.
+      - free  : iterates per row; every row loses proprietary flags
+                (Free=floor — no proprietary signal output anywhere).
+
+    Mutates in place; returns the same `rows` list.
+
+    Import is lazy to avoid circular imports between signals/scorer
+    and config/entitlements (scorer doesn't import entitlements
+    today, but the lazy import keeps that property robust to
+    refactors).
+    """
+    from signals.scorer import PROPRIETARY_FLAGS
+    if tier == 'elite':
+        return rows
+    for r in rows:
+        flags = r.get(flag_key)
+        if not flags:
+            continue
+        if not can_view_score_for_ticker(tier, r.get(price_key)):
+            r[flag_key] = [f for f in flags if f not in PROPRIETARY_FLAGS]
+    return rows

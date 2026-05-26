@@ -1,3 +1,4 @@
+{% from "_locked_teaser.html" import locked_teaser %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -158,6 +159,7 @@ tr:hover td{background:rgba(245,158,11,0.025);cursor:pointer;}
 .vol-tag-high{background:rgba(255,59,92,0.15);color:#ff3b5c;border:1px solid rgba(255,59,92,0.3);}
 .vol-tag-mid{background:rgba(245,158,11,0.12);color:#f59e0b;border:1px solid rgba(245,158,11,0.3);}
 </style>
+{% include "_locked_teaser_css.html" %}
 </head>
 <body>
 {% include '_nav.html' %}
@@ -178,6 +180,16 @@ tr:hover td{background:rgba(245,158,11,0.025);cursor:pointer;}
     <a href="/penny" class="back-link">← Penny Hub</a>
 </div>
 
+{% if locked %}
+{# Server-side locked teaser (4d). The data layer (/api/screener with
+   penny rows) is already gated by strip_scores_for_non_elite at the
+   route, so the data wouldn't leak even if JS fired — but the locked
+   teaser prevents the empty-table flash. #}
+{{ locked_teaser(
+    title="Penny Screener",
+    description="Filterable list of sub-$5 tickers with full proprietary scoring (composite, momentum, quality, insider) and ratings. Available on the Elite tier."
+) }}
+{% else %}
 <!-- Price Tier Tabs -->
 <div class="tier-bar" id="tier-bar">
     <button class="tier-tab active" data-tier="all" onclick="setTier(this,'all')">All Penny (&lt;$5)</button>
@@ -320,6 +332,7 @@ tr:hover td{background:rgba(245,158,11,0.025);cursor:pointer;}
         <div class="pagination" id="pagination"></div>
     </div>
 </div>
+{% endif %}
 
 <script>
 // ── State ─────────────────────────────────────────
@@ -677,7 +690,9 @@ function goPage(p) {
 }
 
 // ── Init ──────────────────────────────────────────
+{% if not locked %}
 boot();
+{% endif %}
 </script>
 {% include '_footer.html' %}
 </body>
