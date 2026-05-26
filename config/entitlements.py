@@ -181,3 +181,69 @@ def can_call_api(tier):
     `tier` MUST be effective_tier(user), never user['tier'] raw.
     """
     return tier == 'elite'
+
+
+# ── Bulk row-strip for list endpoints ──────────────────────────────
+#
+# Every proprietary score field a list/JSON endpoint can emit. The
+# strip helper below NULLs each of these on rows that the caller's
+# tier cannot view. Single source of truth for the field set so the
+# 10+ leak surfaces stay synchronised — adding a new score column to
+# signal_scores in the future means adding it here and the gate
+# catches every route automatically.
+PROPRIETARY_SCORE_FIELDS = (
+    'composite_score',
+    'momentum_score',
+    'quality_score',
+    'insider_score',
+    'reversion_score',
+    'target_price',
+    'target_upside',
+    'rating',
+)
+
+
+def strip_scores_for_non_elite(rows, tier, price_key='price'):
+    """Mutate each row in `rows` IN PLACE: for any row whose price band
+    is gated for `tier`, NULL every PROPRIETARY_SCORE_FIELDS key that
+    EXISTS on the row. Non-score keys (ticker, price, volume, etc.)
+    are untouched. Keys absent from the row are NOT added.
+
+    Per-row gate calls can_view_score_for_ticker(tier, row[price_key])
+    so the $5 boundary stays single-sourced in that predicate. Rows
+    where price_key is absent or None fall through to the predicate's
+    fail-closed branch (treated as gated for non-elite).
+
+    Tier semantics (consistent with the entitlement contract):
+      - elite : SHORT-CIRCUITS. No iteration, no mutation. Returns rows
+                immediately because the predicate is True at every band.
+      - pro   : iterates per row. Penny rows (price<5) stripped;
+                non-penny rows preserved.
+      - free  : iterates per row. Every row stripped at every price band.
+                This is the locked Free=floor invariant — a free user
+                sees NO proprietary scores anywhere, penny or not.
+
+    `rows` must be a list of dicts (mutable mappings). The web/app.py
+    db_query helper returns list[dict] via `[dict(r) for r in
+    cur.fetchall()]`, so this is the shape every score-emitting route
+    already passes downstream. Raw sqlite3.Row instances are immutable
+    and would raise TypeError on assignment — that is an explicit
+    failure mode, not a silent leak.
+
+    `price_key` defaults to 'price' but accepts alternatives — e.g.
+    'price_at_change' for the backtest `recent` array, 'current_price'
+    for portfolio holdings. The predicate decision is identical; only
+    the lookup name changes.
+
+    Returns the same `rows` list. Callers can rely on either the
+    in-place mutation or the return value, both are equivalent.
+    """
+    if tier == 'elite':
+        return rows
+    for r in rows:
+        price = r.get(price_key)
+        if not can_view_score_for_ticker(tier, price):
+            for f in PROPRIETARY_SCORE_FIELDS:
+                if f in r:
+                    r[f] = None
+    return rows

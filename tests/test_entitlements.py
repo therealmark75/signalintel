@@ -307,3 +307,258 @@ def test_trial_days_locked_at_seven():
              a deliberate decision.
     """
     assert TRIAL_DAYS == 7
+
+
+# ── strip_scores_for_non_elite — bulk row helper ──────────────────
+
+
+def _sample_row(ticker, price, with_all_scores=True):
+    """Representative response row carrying every proprietary score
+    field plus non-score fields that MUST survive every strip path."""
+    row = {
+        'ticker':   ticker,
+        'company':  'Acme Corp',
+        'price':    price,
+        'volume':   1_000_000,
+    }
+    if with_all_scores:
+        row.update({
+            'composite_score': 67.5,
+            'momentum_score':  72.0,
+            'quality_score':   55.0,
+            'insider_score':   60.0,
+            'reversion_score': 40.0,
+            'target_price':    8.50,
+            'target_upside':   25.0,
+            'rating':          'BUY',
+        })
+    return row
+
+
+def test_strip_free_penny_row_nulls_all_score_fields():
+    """Free + penny: every PROPRIETARY_SCORE_FIELDS key on the row →
+    None. Non-score keys (ticker/price/volume/company) untouched.
+
+    Catches: a regression where the strip set narrows or stops
+             touching one of the eight fields.
+    Ignores: dict key order.
+    """
+    from config.entitlements import (
+        strip_scores_for_non_elite, PROPRIETARY_SCORE_FIELDS,
+    )
+    rows = [_sample_row('ALTO', 4.5)]
+    strip_scores_for_non_elite(rows, 'free')
+    r = rows[0]
+    for f in PROPRIETARY_SCORE_FIELDS:
+        assert r[f] is None, f'{f} not nulled: {r[f]!r}'
+    assert r['ticker'] == 'ALTO'
+    assert r['price'] == 4.5
+    assert r['volume'] == 1_000_000
+    assert r['company'] == 'Acme Corp'
+
+
+def test_strip_free_non_penny_row_also_stripped():
+    """Free + non-penny ($175 AAPL-shaped): ALSO stripped. Free is
+    the unpaid floor — sees no proprietary scores at any price band.
+
+    This is the intended two-tier behaviour: free=blanks-everywhere,
+    pro=blanks-on-penny-only, elite=intact-everywhere. Anyone reading
+    the free-strips-everything behaviour as a bug should re-read
+    this docstring; it is the locked Free=floor invariant from Step 0.
+
+    Catches: a future change that lets free see non-penny scores —
+             would silently turn 'free' into a partial-access tier.
+    Ignores: which specific non-score keys exist on the row.
+    """
+    from config.entitlements import (
+        strip_scores_for_non_elite, PROPRIETARY_SCORE_FIELDS,
+    )
+    rows = [_sample_row('AAPL', 175.0)]
+    strip_scores_for_non_elite(rows, 'free')
+    for f in PROPRIETARY_SCORE_FIELDS:
+        assert rows[0][f] is None, f'free should strip {f} at non-penny prices'
+
+
+def test_strip_pro_penny_row_nulls_scores():
+    """Pro + penny: stripped. Penny signals are Elite-only.
+
+    Catches: a parallel $5 boundary creeping into the helper that
+             bypasses can_view_score_for_ticker.
+    Ignores: which non-score fields survive.
+    """
+    from config.entitlements import (
+        strip_scores_for_non_elite, PROPRIETARY_SCORE_FIELDS,
+    )
+    rows = [_sample_row('ALTO', 4.5)]
+    strip_scores_for_non_elite(rows, 'pro')
+    for f in PROPRIETARY_SCORE_FIELDS:
+        assert rows[0][f] is None
+
+
+def test_strip_pro_non_penny_row_preserved():
+    """Pro + non-penny ($175): NOT stripped. Pro sees full scores on
+    price >= 5 rows — this is what Pro pays for.
+
+    Catches: an over-broad strip that hits all rows regardless of
+             price for the pro tier.
+    Ignores: exact field values, only that they survive non-None.
+    """
+    from config.entitlements import (
+        strip_scores_for_non_elite, PROPRIETARY_SCORE_FIELDS,
+    )
+    rows = [_sample_row('AAPL', 175.0)]
+    strip_scores_for_non_elite(rows, 'pro')
+    for f in PROPRIETARY_SCORE_FIELDS:
+        assert rows[0][f] is not None, f'{f} stripped despite pro+non-penny'
+
+
+def test_strip_elite_penny_row_preserved():
+    """Elite + penny: NOT stripped. Elite sees everything at any band.
+
+    Catches: a regression in the elite short-circuit that mutated
+             rows anyway.
+    Ignores: exact field values.
+    """
+    from config.entitlements import (
+        strip_scores_for_non_elite, PROPRIETARY_SCORE_FIELDS,
+    )
+    rows = [_sample_row('ALTO', 4.5)]
+    strip_scores_for_non_elite(rows, 'elite')
+    for f in PROPRIETARY_SCORE_FIELDS:
+        assert rows[0][f] is not None
+
+
+def test_strip_missing_price_fails_closed_for_non_elite():
+    """Row missing price_key (or price=None) for non-elite → stripped.
+    Mirrors can_view_score_for_ticker's price=None branch (elite-only).
+
+    Catches: a fail-open path where a NULL price silently let scores
+             through to a non-elite caller.
+    Ignores: the exact reason price was missing (no key vs None value).
+    """
+    from config.entitlements import (
+        strip_scores_for_non_elite, PROPRIETARY_SCORE_FIELDS,
+    )
+    # price=None
+    rows = [_sample_row('ALTO', None)]
+    strip_scores_for_non_elite(rows, 'pro')
+    for f in PROPRIETARY_SCORE_FIELDS:
+        assert rows[0][f] is None
+
+    # price key entirely absent
+    r = {'ticker': 'ALTO', 'volume': 100_000,
+         'composite_score': 67.0, 'rating': 'BUY'}
+    strip_scores_for_non_elite([r], 'pro')
+    assert r['composite_score'] is None
+    assert r['rating'] is None
+
+
+def test_strip_only_nulls_existing_fields_no_new_keys():
+    """A row missing some score fields keeps its shape. The helper
+    does NOT add keys that were absent on input — that would expand
+    response payloads with spurious nulls and could break clients
+    expecting a specific shape.
+
+    Catches: an implementation that templates all 8 fields onto every
+             row.
+    Ignores: order of remaining keys.
+    """
+    from config.entitlements import strip_scores_for_non_elite
+    r = {'ticker': 'ALTO', 'price': 4.5,
+         'composite_score': 67.0, 'rating': 'BUY'}
+    before_keys = set(r.keys())
+    strip_scores_for_non_elite([r], 'free')
+    after_keys = set(r.keys())
+    assert before_keys == after_keys, \
+        f'helper added keys: {after_keys - before_keys}'
+    assert r['composite_score'] is None
+    assert r['rating'] is None
+    # Fields never on the row stay absent
+    assert 'momentum_score' not in r
+    assert 'target_upside' not in r
+
+
+def test_strip_alternate_price_key_for_backtest_recent():
+    """The backtest 'recent' array uses 'price_at_change' as the
+    price field. Helper must honour the alternate key.
+
+    Catches: a hardcoded 'price' lookup that would miss the backtest
+             surface entirely (rows would look like NULL-price ones
+             — still stripped for non-elite, but for the WRONG reason
+             — and elite's short-circuit could mask the bug).
+    Ignores: actual price values, only the lookup mechanism.
+    """
+    from config.entitlements import strip_scores_for_non_elite
+    rows = [{
+        'ticker':           'MTEX',
+        'price_at_change':  4.62,
+        'composite_score':  33.1,
+        'new_rating':       'SELL',  # NOT in PROPRIETARY_SCORE_FIELDS
+    }]
+    strip_scores_for_non_elite(rows, 'pro', price_key='price_at_change')
+    assert rows[0]['composite_score'] is None
+    # 'new_rating' is the backtest field name; only 'rating' is in the
+    # strip set, so 'new_rating' survives unchanged.
+    assert rows[0]['new_rating'] == 'SELL'
+
+
+def test_strip_elite_short_circuits_mixed_list():
+    """Mixed list (penny + non-penny) for elite caller comes back
+    fully intact. Elite predicate is True at all bands; the short-
+    circuit skips per-row work entirely.
+
+    Catches: the elite branch accidentally iterating and mutating
+             (would surface if someone removed the if-tier=='elite'
+             guard).
+    Ignores: timing — this is correctness, not perf.
+    """
+    from config.entitlements import strip_scores_for_non_elite
+    rows = [_sample_row('ALTO', 4.5), _sample_row('AAPL', 175.0)]
+    before = [dict(r) for r in rows]
+    strip_scores_for_non_elite(rows, 'elite')
+    assert rows == before, 'elite caller saw mutation'
+
+
+def test_strip_returns_the_same_list_object():
+    """Helper returns the list passed in (not a copy). Callers can
+    rely on either the return value or the in-place mutation.
+
+    Catches: an accidental list comprehension that returns a copy
+             and leaves the original list unchanged.
+    Ignores: row-element identity (the dicts inside can still be
+             the same instances either way).
+    """
+    from config.entitlements import strip_scores_for_non_elite
+    rows = [_sample_row('ALTO', 4.5)]
+    returned = strip_scores_for_non_elite(rows, 'free')
+    assert returned is rows
+
+
+def test_strip_two_tier_intended_behaviour():
+    """P15 documentary test: spells out the THREE-tier strip pattern
+    on a single mixed list with one penny and one non-penny row.
+
+      free  → both rows stripped (Free=floor, no scores anywhere)
+      pro   → penny stripped, non-penny preserved
+      elite → both intact (no stripping at any band)
+
+    Catches: a future relaxation of the floor that lets free see
+             non-penny scores; or pro becoming over-broad.
+    Ignores: which non-score keys exist on each row.
+    """
+    from config.entitlements import strip_scores_for_non_elite
+
+    def fresh():
+        return [_sample_row('ALTO', 4.5), _sample_row('AAPL', 175.0)]
+
+    free_rows = strip_scores_for_non_elite(fresh(), 'free')
+    assert free_rows[0]['composite_score'] is None  # penny stripped
+    assert free_rows[1]['composite_score'] is None  # non-penny ALSO (floor)
+
+    pro_rows = strip_scores_for_non_elite(fresh(), 'pro')
+    assert pro_rows[0]['composite_score'] is None      # penny stripped
+    assert pro_rows[1]['composite_score'] is not None  # non-penny preserved
+
+    elite_rows = strip_scores_for_non_elite(fresh(), 'elite')
+    assert elite_rows[0]['composite_score'] is not None  # penny intact
+    assert elite_rows[1]['composite_score'] is not None  # non-penny intact
