@@ -314,7 +314,13 @@ def test_trial_days_locked_at_seven():
 
 def _sample_row(ticker, price, with_all_scores=True):
     """Representative response row carrying every proprietary score
-    field plus non-score fields that MUST survive every strip path."""
+    field plus non-score fields that MUST survive every strip path.
+
+    Includes the rating_changes aliases (new_rating, old_rating) even
+    though they typically appear only on /api/backtest/stats `recent`
+    rows — so matrix tests verify the full PROPRIETARY_SCORE_FIELDS
+    set, not just the 'rating' subset.
+    """
     row = {
         'ticker':   ticker,
         'company':  'Acme Corp',
@@ -331,6 +337,8 @@ def _sample_row(ticker, price, with_all_scores=True):
             'target_price':    8.50,
             'target_upside':   25.0,
             'rating':          'BUY',
+            'new_rating':      'BUY',
+            'old_rating':      'HOLD',
         })
     return row
 
@@ -480,26 +488,43 @@ def test_strip_only_nulls_existing_fields_no_new_keys():
 
 def test_strip_alternate_price_key_for_backtest_recent():
     """The backtest 'recent' array uses 'price_at_change' as the
-    price field. Helper must honour the alternate key.
+    price field. Helper must honour the alternate key — the predicate
+    decision must be driven by the value under price_key, not by
+    looking for 'price' which isn't on these rows.
+
+    Tested both branches (penny + non-penny) to prove the alternate
+    key actually drives the gate, not just that strip happens for
+    other reasons (NULL-price fail-closed branch would also strip,
+    masking a buggy price_key lookup).
 
     Catches: a hardcoded 'price' lookup that would miss the backtest
-             surface entirely (rows would look like NULL-price ones
-             — still stripped for non-elite, but for the WRONG reason
-             — and elite's short-circuit could mask the bug).
-    Ignores: actual price values, only the lookup mechanism.
+             surface entirely.
+    Ignores: which other fields exist on the backtest row.
     """
     from config.entitlements import strip_scores_for_non_elite
+    # Non-penny price under the alternate key → pro gate OPEN → preserved
     rows = [{
-        'ticker':           'MTEX',
-        'price_at_change':  4.62,
-        'composite_score':  33.1,
-        'new_rating':       'SELL',  # NOT in PROPRIETARY_SCORE_FIELDS
+        'ticker':          'AAPL',
+        'price_at_change': 175.0,
+        'composite_score': 85.0,
+        'new_rating':      'STRONG_BUY',
+    }]
+    strip_scores_for_non_elite(rows, 'pro', price_key='price_at_change')
+    assert rows[0]['composite_score'] == 85.0, \
+        'non-penny price_at_change should NOT trigger strip for pro'
+    assert rows[0]['new_rating'] == 'STRONG_BUY'
+
+    # Penny price under the alternate key → pro gate CLOSES → stripped
+    rows = [{
+        'ticker':          'MTEX',
+        'price_at_change': 4.62,
+        'composite_score': 33.1,
+        'new_rating':      'SELL',
     }]
     strip_scores_for_non_elite(rows, 'pro', price_key='price_at_change')
     assert rows[0]['composite_score'] is None
-    # 'new_rating' is the backtest field name; only 'rating' is in the
-    # strip set, so 'new_rating' survives unchanged.
-    assert rows[0]['new_rating'] == 'SELL'
+    # new_rating is now in PROPRIETARY_SCORE_FIELDS (rating alias) — stripped
+    assert rows[0]['new_rating'] is None
 
 
 def test_strip_elite_short_circuits_mixed_list():
@@ -532,6 +557,37 @@ def test_strip_returns_the_same_list_object():
     rows = [_sample_row('ALTO', 4.5)]
     returned = strip_scores_for_non_elite(rows, 'free')
     assert returned is rows
+
+
+def test_strip_new_rating_old_rating_aliases_nulled():
+    """A backtest-shaped row carrying new_rating/old_rating (the
+    rating_changes aliases) → both nulled for non-elite alongside
+    composite_score. Non-score fields (ticker, price_at_change,
+    change_date) preserved.
+
+    Catches: a regression where the rating-alias additions to
+             PROPRIETARY_SCORE_FIELDS get reverted, leaving the
+             backtest 'recent' array partially gated (composite null
+             but rating values still leaking).
+    Ignores: which other backtest-side fields exist on the row.
+    """
+    from config.entitlements import strip_scores_for_non_elite
+    rows = [{
+        'ticker':          'MTEX',
+        'price_at_change': 4.62,
+        'change_date':     '2026-05-07',
+        'old_rating':      'HOLD',
+        'new_rating':      'SELL',
+        'composite_score': 33.1,
+    }]
+    strip_scores_for_non_elite(rows, 'free', price_key='price_at_change')
+    assert rows[0]['composite_score'] is None
+    assert rows[0]['old_rating'] is None
+    assert rows[0]['new_rating'] is None
+    # Non-score fields preserved
+    assert rows[0]['ticker'] == 'MTEX'
+    assert rows[0]['price_at_change'] == 4.62
+    assert rows[0]['change_date'] == '2026-05-07'
 
 
 def test_strip_two_tier_intended_behaviour():

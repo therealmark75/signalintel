@@ -200,6 +200,13 @@ PROPRIETARY_SCORE_FIELDS = (
     'target_price',
     'target_upside',
     'rating',
+    # Rating-change aliases pulled from rating_changes (currently only
+    # /api/backtest/stats `recent` array). Same proprietary semantic as
+    # 'rating', different column names. The `if f in r` guard in
+    # strip_scores_for_non_elite makes these no-op on routes that don't
+    # carry them — safe to extend the global set.
+    'new_rating',
+    'old_rating',
 )
 
 

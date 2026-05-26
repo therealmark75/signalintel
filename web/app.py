@@ -28,7 +28,10 @@ from database.db import (
     get_top_signals_of_day, generate_top_signals_of_day,
 )
 from config.tiers import can_create_watchlist, watchlist_limit, get_tier, next_tier
-from config.entitlements import effective_tier, can_view_penny_signals, can_view_score_for_ticker
+from config.entitlements import (
+    effective_tier, can_view_penny_signals, can_view_score_for_ticker,
+    strip_scores_for_non_elite,
+)
 from config.settings import FLASK_SECRET_KEY
 from signals.signal_labels import tier_short
 
@@ -626,6 +629,9 @@ def api_industry(industry_name):
         ORDER BY sc.composite_score DESC NULLS LAST
         LIMIT 200
     """, (industry_name,))
+    # Price-aware score gate (penny rows stripped for non-elite).
+    tier = effective_tier(current_user())
+    rows = strip_scores_for_non_elite(rows, tier, price_key='price')
     return jsonify(rows)
 
 @app.route("/signals")
@@ -1743,6 +1749,15 @@ def api_screener():
     if rows and target_count < len(rows) * 0.5:
         target_banner = "Target prices are being recalculated — check back shortly."
 
+    # Price-aware score gate. Per-row strip via the shared helper —
+    # penny rows ($1-5) lose composite + sub-scores + rating + targets
+    # for non-elite. The $5 boundary lives in can_view_score_for_ticker;
+    # no parallel price logic here. target_banner is computed BEFORE the
+    # strip on purpose — it reflects backend data freshness, not the
+    # caller's tier view.
+    tier = effective_tier(current_user())
+    rows = strip_scores_for_non_elite(rows, tier, price_key='price')
+
     return jsonify({
         "rows":          rows,
         "total":         total,
@@ -2125,7 +2140,13 @@ def api_portfolio_detail(portfolio_id):
     port["total_value"] = round(total_value, 2)
     port["total_return"] = round(total_value - port["starting_balance"], 2)
     port["total_return_pct"] = round(((total_value - port["starting_balance"]) / port["starting_balance"]) * 100, 2)
-    
+
+    # Price-aware score gate on holdings. A free user holding penny
+    # tickers loses rating/composite for those positions; their pnl,
+    # shares, avg_buy_price, current_price all remain visible.
+    tier = effective_tier(user)
+    strip_scores_for_non_elite(holdings, tier, price_key='current_price')
+
     return jsonify({"portfolio": port, "holdings": holdings, "transactions": transactions})
 
 @app.route("/api/portfolios/<int:portfolio_id>/trade", methods=["POST"])
@@ -2408,6 +2429,25 @@ def _api_backtest_stats_inner():
     except Exception as e:
         sector_comparison["note"] = f"Sector comparison unavailable: {e}"
 
+    # Price-aware score gate on the two leak surfaces of this endpoint:
+    #   (1) `recent` carries per-trade composite + new_rating + old_rating
+    #       — direct strip via the helper, price_key='price_at_change'.
+    #   (2) `stats[].trades` carries no rating field per-trade, but the
+    #       parent dict's 'rating' tier name + the trade's ticker would
+    #       let a non-elite caller infer rating-by-penny-ticker. Helper
+    #       can't null fields that don't exist; structural filter drops
+    #       penny-band trades from each tier's list. Aggregate stats
+    #       (avg_return, win_rate, samples) computed BEFORE this filter
+    #       — those are cohort-level, not per-ticker, so they stay.
+    tier = effective_tier(current_user())
+    strip_scores_for_non_elite(recent, tier, price_key='price_at_change')
+    if tier != 'elite':
+        for entry in result:
+            entry['trades'] = [
+                t for t in entry['trades']
+                if can_view_score_for_ticker(tier, t.get('entry_price'))
+            ]
+
     return jsonify({
         'stats': result,
         'recent': recent,
@@ -2667,10 +2707,16 @@ def api_ticker_tape():
     """)
     rows = cur.fetchall()
     conn.close()
-    return jsonify([
+    tape = [
         {"ticker": r[0], "price": r[1], "change_pct": r[2], "rating": r[3]}
         for r in rows
-    ])
+    ]
+    # Price-aware score gate. Tape carries 'rating' on every row;
+    # penny rows lose rating for non-elite (the only proprietary field
+    # on this endpoint — composite/sub-scores are not exposed here).
+    tier = effective_tier(current_user())
+    strip_scores_for_non_elite(tape, tier, price_key='price')
+    return jsonify(tape)
 
 
 # ── Static / public pages ─────────────────────────────
