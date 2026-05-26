@@ -410,13 +410,23 @@ def get_dividends(db_path: str, min_yield: float = 0, sector: str = None,
     c = conn.cursor()
     q = """
         SELECT d.*, sig.rating, sig.composite_score,
-               wl.ticker IS NOT NULL as in_watchlist
+               wl.ticker IS NOT NULL as in_watchlist,
+               ss.price
         FROM dividends d
         LEFT JOIN (
             SELECT ticker, rating, MAX(composite_score) as composite_score
             FROM signal_scores GROUP BY ticker
         ) sig ON d.ticker = sig.ticker
         LEFT JOIN (SELECT DISTINCT ticker FROM watchlists) wl ON d.ticker = wl.ticker
+        LEFT JOIN (
+            SELECT s.ticker, s.price
+            FROM screener_snapshots s
+            INNER JOIN (
+                SELECT ticker, MAX(scraped_at) AS max_ts
+                FROM screener_snapshots
+                GROUP BY ticker
+            ) lts ON s.ticker = lts.ticker AND s.scraped_at = lts.max_ts
+        ) ss ON d.ticker = ss.ticker
         WHERE d.dividend_yield >= ?
     """
     params = [min_yield]

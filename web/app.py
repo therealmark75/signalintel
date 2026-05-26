@@ -873,12 +873,16 @@ def api_signals():
         SELECT ss.ticker, ss.rating, MAX(ss.composite_score) as composite_score,
         ss.momentum_score, ss.quality_score, ss.insider_score,
         ss.reversion_score, ss.flags, MAX(ss.scored_at) as scored_at,
-        sc.sector, sc.industry
+        sc.sector, sc.industry, sc.price
 FROM signal_scores ss
 LEFT JOIN (
-    SELECT ticker, sector, industry
-    FROM screener_snapshots
-    GROUP BY ticker
+    SELECT s.ticker, s.sector, s.industry, s.price
+    FROM screener_snapshots s
+    INNER JOIN (
+        SELECT ticker, MAX(scraped_at) AS max_ts
+        FROM screener_snapshots
+        GROUP BY ticker
+    ) lts ON s.ticker = lts.ticker AND s.scraped_at = lts.max_ts
 ) sc ON ss.ticker = sc.ticker
         WHERE DATE(ss.scored_at) = DATE((SELECT MAX(scored_at) FROM signal_scores))
         GROUP BY ss.ticker
@@ -888,6 +892,9 @@ LEFT JOIN (
         raw = (r.get("flags") or "").split("|")
         r["flag_list"] = [f.strip() for f in raw if f.strip()]
         r.pop("flags", None)
+    # Price-aware score gate (penny rows stripped for non-elite).
+    tier = effective_tier(current_user())
+    rows = strip_scores_for_non_elite(rows, tier, price_key='price')
     return jsonify(rows)
 @app.route("/api/signals/sector/<sector>")
 @login_required
@@ -896,12 +903,16 @@ def api_signals_by_sector(sector):
         SELECT ss.ticker, ss.rating, MAX(ss.composite_score) as composite_score,
                ss.momentum_score, ss.quality_score, ss.insider_score,
                ss.reversion_score, ss.flags, MAX(ss.scored_at) as scored_at,
-               sc.sector, sc.industry
+               sc.sector, sc.industry, sc.price
         FROM signal_scores ss
         LEFT JOIN (
-            SELECT ticker, sector, industry
-            FROM screener_snapshots
-            GROUP BY ticker
+            SELECT s.ticker, s.sector, s.industry, s.price
+            FROM screener_snapshots s
+            INNER JOIN (
+                SELECT ticker, MAX(scraped_at) AS max_ts
+                FROM screener_snapshots
+                GROUP BY ticker
+            ) lts ON s.ticker = lts.ticker AND s.scraped_at = lts.max_ts
         ) sc ON ss.ticker = sc.ticker
         WHERE DATE(ss.scored_at) = DATE((SELECT MAX(scored_at) FROM signal_scores))
         AND sc.sector = ?
@@ -912,19 +923,32 @@ def api_signals_by_sector(sector):
         raw = (r.get("flags") or "").split("|")
         r["flag_list"] = [f.strip() for f in raw if f.strip()]
         r.pop("flags", None)
+    # Price-aware score gate (penny rows stripped for non-elite).
+    tier = effective_tier(current_user())
+    rows = strip_scores_for_non_elite(rows, tier, price_key='price')
     return jsonify(rows)
 
 @app.route("/api/signals/<rating>")
 @login_required
 def api_signals_by_rating(rating):
     rows = db_query("""
-        SELECT ticker, rating, MAX(composite_score) as composite_score,
-               momentum_score, quality_score, insider_score,
-               reversion_score, flags, MAX(scored_at) as scored_at
-        FROM signal_scores
-        WHERE DATE(scored_at) = DATE((SELECT MAX(scored_at) FROM signal_scores))
-          AND rating = ?
-        GROUP BY ticker
+        SELECT sig.ticker, sig.rating, MAX(sig.composite_score) as composite_score,
+               sig.momentum_score, sig.quality_score, sig.insider_score,
+               sig.reversion_score, sig.flags, MAX(sig.scored_at) as scored_at,
+               sc.price
+        FROM signal_scores sig
+        LEFT JOIN (
+            SELECT s.ticker, s.price
+            FROM screener_snapshots s
+            INNER JOIN (
+                SELECT ticker, MAX(scraped_at) AS max_ts
+                FROM screener_snapshots
+                GROUP BY ticker
+            ) lts ON s.ticker = lts.ticker AND s.scraped_at = lts.max_ts
+        ) sc ON sig.ticker = sc.ticker
+        WHERE DATE(sig.scored_at) = DATE((SELECT MAX(scored_at) FROM signal_scores))
+          AND sig.rating = ?
+        GROUP BY sig.ticker
         ORDER BY composite_score DESC
         LIMIT 100
     """, (rating.upper(),))
@@ -932,6 +956,9 @@ def api_signals_by_rating(rating):
         raw = (r.get("flags") or "").split("|")
         r["flag_list"] = [f.strip() for f in raw if f.strip()]
         r.pop("flags", None)
+    # Price-aware score gate (penny rows stripped for non-elite).
+    tier = effective_tier(current_user())
+    rows = strip_scores_for_non_elite(rows, tier, price_key='price')
     return jsonify(rows)
 
 
@@ -1091,13 +1118,17 @@ def api_search():
     prefix = q + "%"
     substr = "%" + q + "%"
     rows = db_query("""
-        SELECT ss.ticker, ss.company,
+        SELECT ss.ticker, ss.company, ss.price,
                sig.rating, sig.composite_score, sig.target_price, sig.target_upside
         FROM (
-            SELECT ticker, company
-            FROM screener_snapshots
-            WHERE ticker LIKE ? OR UPPER(company) LIKE ?
-            GROUP BY ticker
+            SELECT s.ticker, s.company, s.price
+            FROM screener_snapshots s
+            INNER JOIN (
+                SELECT ticker, MAX(scraped_at) AS max_ts
+                FROM screener_snapshots
+                WHERE ticker LIKE ? OR UPPER(company) LIKE ?
+                GROUP BY ticker
+            ) lts ON s.ticker = lts.ticker AND s.scraped_at = lts.max_ts
         ) ss
         LEFT JOIN (
             SELECT ticker, rating, composite_score, target_price, target_upside,
@@ -1110,7 +1141,11 @@ def api_search():
             sig.composite_score DESC
         LIMIT 10
     """, (prefix, substr, prefix))
-    return jsonify({"results": [dict(r) for r in rows]})
+    results = [dict(r) for r in rows]
+    # Price-aware score gate (penny matches stripped for non-elite).
+    tier = effective_tier(current_user())
+    strip_scores_for_non_elite(results, tier, price_key='price')
+    return jsonify({"results": results})
 
 
 @app.route("/dividends")
@@ -1169,6 +1204,12 @@ def api_dividends():
         wl = {r["ticker"] for r in wl_rows}
     for r in rows:
         r["in_watchlist"] = r.get("ticker") in wl
+
+    # Price-aware score gate. get_dividends() now JOINs latest
+    # screener_snapshots and exposes 'price' on each row (4c SQL change
+    # in scrapers/fmp_scraper.py).
+    tier = effective_tier(user)
+    strip_scores_for_non_elite(rows, tier, price_key='price')
 
     return jsonify({"rows": rows, "total": len(rows)})
 
