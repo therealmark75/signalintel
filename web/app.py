@@ -28,7 +28,7 @@ from database.db import (
     get_top_signals_of_day, generate_top_signals_of_day,
 )
 from config.tiers import can_create_watchlist, watchlist_limit, get_tier, next_tier
-from config.entitlements import effective_tier, can_view_penny_signals
+from config.entitlements import effective_tier, can_view_penny_signals, can_view_score_for_ticker
 from config.settings import FLASK_SECRET_KEY
 from signals.signal_labels import tier_short
 
@@ -1918,24 +1918,35 @@ def api_ticker(ticker):
     """)
     sector_perf_list = [dict(r) for r in sector_perf] if sector_perf else []
 
-    return jsonify({
+    # Score-panel gate (price-aware). For non-elite + penny band ($1-5),
+    # strip signal/history/technical/fair_value to teaser values; surface
+    # "locked": True. The $5 boundary lives in can_view_score_for_ticker
+    # — do NOT reimplement it inline. price=None fails closed (elite-only).
+    tier = effective_tier(user)
+    price = sc.get('price')
+    score_visible = can_view_score_for_ticker(tier, price)
+
+    payload = {
         "ticker":               ticker,
         "screener":             sc,
         "metadata":             tm,
-        "signal":               dict(signal[0]) if signal else {},
+        "signal":               dict(signal[0]) if (signal and score_visible) else {},
         "insiders":             insiders,
         "news":                 news,
-        "history":              history,
+        "history":              history if score_visible else [],
         "in_watchlist":         in_watchlist,
         "user_watchlists":      user_watchlists,
         "ticker_watchlist_ids": list(ticker_watchlist_ids),
-        "fair_value":           {"estimated": fair_value, "discount_pct": fv_discount, "label": fv_label} if fair_value else None,
-        "technical":            tech,
+        "fair_value":           ({"estimated": fair_value, "discount_pct": fv_discount, "label": fv_label} if fair_value else None) if score_visible else None,
+        "technical":            tech if score_visible else None,
         "legal_risk":           legal,
         "analyst_updated_at":   analyst_updated_at,
         "next_earnings_date":   next_earnings_date,
         "sector_performance":   sector_perf_list,
-    })
+    }
+    if not score_visible:
+        payload["locked"] = True
+    return jsonify(payload)
 
 
 @app.route("/api/ticker/<ticker>/events")
@@ -1944,29 +1955,42 @@ def api_ticker_events(ticker):
     ticker = ticker.upper()
     events = []
 
-    # Rating changes (last 15)
-    rc = db_query("""
-        SELECT change_date as date, old_rating, new_rating, price_at_change, composite_score
-        FROM rating_changes WHERE ticker = ?
-        ORDER BY change_date DESC LIMIT 15
-    """, (ticker,))
-    for r in rc:
-        up_tiers = {'STRONG_BUY','BUY','STRONG_HOLD'}
-        down_tiers = {'SELL','STRONG_SELL','WEAK_HOLD'}
-        direction = 'up' if r['new_rating'] in up_tiers else 'down' if r['new_rating'] in down_tiers else 'neutral'
-        new_label = tier_short(r['new_rating'])
-        if r['old_rating']:
-            title = f"Rating changed: {tier_short(r['old_rating'])} → {new_label}"
-        else:
-            title = f"Rating set: {new_label}"
-        events.append({
-            'type': 'rating',
-            'date': r['date'],
-            'title': title,
-            'detail': f"Score {r['composite_score']:.1f} · Price ${r['price_at_change']:.2f}" if r['composite_score'] and r['price_at_change'] else None,
-            'direction': direction,
-            'new_rating': r['new_rating'],
-        })
+    # Score-panel gate: rating events embed composite_score in their detail
+    # string. For non-elite + penny band, skip the rating_changes query
+    # entirely (gate-before-fetch). Insider/legal/earnings still emit —
+    # factual record, not proprietary score output.
+    tier = effective_tier(current_user())
+    price_row = db_query(
+        "SELECT price FROM screener_snapshots WHERE ticker = ? ORDER BY scraped_at DESC LIMIT 1",
+        (ticker,)
+    )
+    price = price_row[0]['price'] if price_row else None
+    score_visible = can_view_score_for_ticker(tier, price)
+
+    if score_visible:
+        # Rating changes (last 15)
+        rc = db_query("""
+            SELECT change_date as date, old_rating, new_rating, price_at_change, composite_score
+            FROM rating_changes WHERE ticker = ?
+            ORDER BY change_date DESC LIMIT 15
+        """, (ticker,))
+        for r in rc:
+            up_tiers = {'STRONG_BUY','BUY','STRONG_HOLD'}
+            down_tiers = {'SELL','STRONG_SELL','WEAK_HOLD'}
+            direction = 'up' if r['new_rating'] in up_tiers else 'down' if r['new_rating'] in down_tiers else 'neutral'
+            new_label = tier_short(r['new_rating'])
+            if r['old_rating']:
+                title = f"Rating changed: {tier_short(r['old_rating'])} → {new_label}"
+            else:
+                title = f"Rating set: {new_label}"
+            events.append({
+                'type': 'rating',
+                'date': r['date'],
+                'title': title,
+                'detail': f"Score {r['composite_score']:.1f} · Price ${r['price_at_change']:.2f}" if r['composite_score'] and r['price_at_change'] else None,
+                'direction': direction,
+                'new_rating': r['new_rating'],
+            })
 
     # Insider trades (last 10)
     it = db_query("""
@@ -2024,7 +2048,10 @@ def api_ticker_events(ticker):
 
     # Sort all events by date desc, take last 10
     events.sort(key=lambda e: e['date'] or '', reverse=True)
-    return jsonify({'events': events[:10]})
+    payload = {'events': events[:10]}
+    if not score_visible:
+        payload['locked'] = True
+    return jsonify(payload)
 
 
 @app.route("/api/run_log")
