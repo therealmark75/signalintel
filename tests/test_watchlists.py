@@ -145,8 +145,19 @@ def test_ticker_count_in_meta(tmp_db, user_id):
 
 @pytest.fixture
 def api_user(tmp_db):
-    """Create a user in the tmp_db and return (db_path, user_id)."""
+    """Create a user in the tmp_db and return (db_path, user_id).
+
+    Bumps tier to 'pro' after create_user so watchlist-creating tests
+    aren't blocked by the Step-0 free=floor cap
+    (free.watchlist_limit=0). Tests in this file that want to
+    exercise the free-tier rejection should override inline — none
+    exist today (gap flagged as a follow-up).
+    """
     uid = create_user(tmp_db, "apiuser", "api@example.com", _hash("pw"))
+    conn = sqlite3.connect(tmp_db)
+    conn.execute("UPDATE users SET tier='pro' WHERE id=?", (uid,))
+    conn.commit()
+    conn.close()
     return tmp_db, uid
 
 
