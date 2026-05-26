@@ -1150,7 +1150,10 @@ Section 5: Live proof (numbers, not testimonials)
 Section 6: Pricing (Beta-marked, Option B from earlier lock)
 - Headline: "Pricing"
 - Subhead: "Free during beta. Full pricing rolls out at general launch."
-- 4-column pricing table matching config/tiers.py: Free / Starter / Pro / Elite.
+- 3-column pricing table matching config/tiers.py (2-tier + floor launch
+  model, post-Step-3): Free (unpaid floor) / Pro / Elite. Starter is a
+  DEAD tier — removed at Step 0 of the paywall arc; any legacy stored
+  value coerces to 'free' via get_tier's default branch.
 - Each column: feature checklist (3-5 lines), "Free during beta" marker, sign-up CTA.
 - Bottom line: "All paid tiers free during beta. Pricing announced before general launch."
 
@@ -1919,6 +1922,98 @@ or both. Either way: hook trips on a P23 path go to Mark, not to
 `--no-verify`.
 
 ---
+
+## PAYWALL ENFORCEMENT LAYER (Step 3 — complete 26-27 May 2026)
+
+The paywall ENFORCEMENT layer is shipped end-to-end across commits
+8382004 → cafe6a3. Billing is NOT started — schema columns
+(`trial_started_at`, `stripe_customer_id`, `stripe_subscription_id`,
+`tier_effective_until`) exist but no Stripe code writes them yet. A
+user cannot pay to change tier today; that's the next arc (Part 34).
+
+**Tier model (locked, two-tier + floor):**
+  - `free` — UNPAID FLOOR. `watchlist_limit=0`. Sees no proprietary
+    scoring data anywhere. Post-trial state and the hard-paywall floor.
+  - `pro` — full signals, alerts, tournaments. `watchlist_limit=5`.
+  - `elite` — Pro + API access + unlimited watchlists + penny ($1-5)
+    score panel.
+  - `starter` is a DEAD tier; any legacy stored value coerces to `free`
+    via `get_tier()`'s default branch.
+
+**Trial model (overlay, NOT a tier):** `config/entitlements.py`
+`effective_tier(user)` returns the HIGHER of (`user.tier`,
+`trial_overlay`) by USER_TIERS order. While
+`(now - trial_started_at) < 7 days`, the overlay grants `'elite'`
+regardless of stored tier. Day-8 the overlay lifts at access time
+(no cron dependency) and effective_tier falls to the stored column —
+hard paywall for unpaid trialists, paid floor for paying users.
+
+**New module: `config/entitlements.py`** (single source of truth for
+all tier-aware decisions):
+  - `effective_tier(user)` — trial overlay resolver
+  - `trial_active(user)`, `TRIAL_DAYS=7`
+  - Capability predicates: `can_view_penny_signals(tier)`,
+    `can_view_score_for_ticker(tier, price)` ($5 boundary lives
+    HERE — single-sourced), `can_use_alerts(tier)`,
+    `can_enter_tournament(tier)`, `can_call_api(tier)`,
+    `can_create_watchlist(tier, count)` (delegates to config/tiers.py)
+  - Row-strip helper: `strip_scores_for_non_elite(rows, tier,
+    price_key='price')` — nulls every field in
+    `PROPRIETARY_SCORE_FIELDS` on rows the tier can't see scores for.
+  - Flag-filter helper: `filter_proprietary_flags_for_non_elite(rows,
+    tier, price_key, flag_key)` — drops proprietary flag strings from
+    `flag_list` for gated rows.
+  - `PROPRIETARY_SCORE_FIELDS` (10 fields: composite + 4 sub-scores +
+    target_price + target_upside + rating + new_rating + old_rating).
+  - `PROPRIETARY_FLAGS` imported from `signals/scorer.py`.
+
+**Proprietary-flag discipline (`signals/scorer.py`):** `build_flags`
+appends proprietary flag strings ONLY from named-tuple constants
+(`_PROPRIETARY_INSIDER_FLAGS`, `_PROPRIETARY_REVERSION_FLAGS`).
+`PROPRIETARY_FLAGS` is a `frozenset` derived from those same tuples —
+single source, no parallel hand-maintained list. Adding a future
+proprietary flag means appending to the tuple; the gate set inherits
+automatically. Stored flag column is byte-identical to pre-Step-3 —
+NO `SCORING_ENGINE_VERSION` bump. Inline-literal-regression test in
+`tests/test_scorer.py` asserts every proprietary code path emits a
+flag that's a member of `PROPRIETARY_FLAGS`.
+
+**Locked-teaser UX (`web/templates/_locked_teaser.html` macro +
+`_locked_teaser_css.html` partial):** Single source for the
+"Upgrade to Elite" lock state across dashboard Panel 7 (migrated),
+`/penny`, `/penny/screener`, `/backtest` per-tier trades (inline
+variant), and the `/ticker` score panel. CSS partial is included
+per-page (dashboard does NOT include `_nav.html` — that was the
+Walk-F discovery; CSS in `_nav.html` would have missed dashboard).
+
+**Schema (added in commit 0d0b8ab, UNWIRED):** `users.trial_started_at
+TEXT`, `users.stripe_customer_id TEXT`, `users.stripe_subscription_id
+TEXT`, `users.tier_effective_until TEXT`. Indexes on the two Stripe
+columns. Migration single-owner in `initialise_user_schema`.
+
+**`get_user_by_id` now filters `is_active=1`** (commit 72b55b8) —
+parity with `get_user_by_username`. Cancellation = deactivation
+path; a deactivated user with a live session loses access at the
+next session lookup.
+
+**PROCESS NOTE — scope leak surface by DATA, not by URL.** The
+original Step-3 Phase 1 scoped "penny endpoints" and missed ~10
+routes that leaked penny scores (screener with `?price_max=5`,
+signals family, search, dividends, industry, ticker-tape,
+portfolios, backtest, news, ratings). The real surface was "any
+endpoint emitting score columns to a non-elite caller for a
+penny-band ticker." A second sweep — grepping every `@app.route`
+for `composite_score`/`momentum_score`/etc. references — found the
+broader leak. Future leak/gate scoping: define the surface by the
+data that must be protected, not the routes you expect to carry it.
+
+**PROCESS NOTE — run the FULL test suite before each commit.**
+`tests/test_watchlists.py` had 7 fixture-rooted failures from
+Step 0 (free=floor + `watchlist_limit=0` broke the fixture that
+created a user without setting tier). The failures went unnoticed
+for 8 commits because the arc ran a 4-suite subset (smoke +
+entitlements + tiers + schema). Standing rule going forward:
+`python -m pytest tests/` before every commit, not a subset.
 
 ## FOLLOWUPS
 

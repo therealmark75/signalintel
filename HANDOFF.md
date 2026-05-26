@@ -3,6 +3,140 @@
 **Tactical session state.** Updated end of each session. For stable
 project context (who/what/how), see `PROJECT_CONTEXT.md`.
 
+Last updated: 26-27 May 2026 (Part 33). **STEP 3 / PAYWALL ENFORCEMENT
+LAYER COMPLETE.** Every score-leak surface gated and verified live.
+Commit stack 8382004 → cafe6a3.
+
+## CRITICAL FRAMING
+
+Enforcement is done. **BILLING IS NOT STARTED.** Schema columns exist
+but nothing writes them. `current_user()` exposes tier, gates read it,
+but there are NO Stripe products, no checkout flow, no webhook, no
+`/pricing` page. **A user cannot pay to change tier today.** That's
+the next arc.
+
+## STEP 3 — what shipped (commits 8382004 → cafe6a3)
+
+Tier model collapsed to two-tier + floor: `free` (unpaid floor,
+watchlist_limit=0, no proprietary access), `pro` (cap 5, full signals
++ alerts + tournaments), `elite` (Pro + API + unlimited watchlists +
+penny $1-5 score panel). `starter` is dead. Trial is an OVERLAY on top
+of the stored column — `effective_tier(user)` returns elite for 7 days
+post-`trial_started_at`, falls to the stored tier on day-8.
+
+New module `config/entitlements.py`: `effective_tier`,
+`trial_active`, capability predicates (`can_view_penny_signals`,
+`can_view_score_for_ticker` — $5 boundary single-sourced here, etc.),
+`strip_scores_for_non_elite` row helper,
+`filter_proprietary_flags_for_non_elite`, `PROPRIETARY_SCORE_FIELDS`
+constant set.
+
+Score-leak audit and gate: 10 ungated endpoints found by sweeping
+routes that select proprietary score columns (the broader sweep
+beyond "penny endpoints"). All gated:
+  - `/api/penny/stock-of-day`, `/api/penny/hot` — Commit 1
+  - `/api/ticker/<ticker>`, `/api/ticker/<ticker>/events` — Commit 3
+  - `/api/screener`, `/api/industry`, `/api/ticker-tape`,
+    `/api/portfolios/<id>`, `/api/backtest/stats` — Commit 4b
+  - `/api/signals`, `/api/signals/sector/<s>`, `/api/signals/<rating>`,
+    `/api/search`, `/api/dividends` — Commit 4c
+  - flag_list filtering on the 3 signals routes — Commit 4d
+
+Schema added (UNWIRED): `users.trial_started_at`,
+`users.stripe_customer_id`, `users.stripe_subscription_id`,
+`users.tier_effective_until`. Indexes on Stripe IDs. Single-owner
+migration in `initialise_user_schema`.
+
+`get_user_by_id` now filters `is_active=1` (parity fix; cancellation
+= deactivation path).
+
+Locked-teaser UX shipped: `_locked_teaser.html` macro +
+`_locked_teaser_css.html` partial. Dashboard Panel 7 migrated to the
+macro (visual parity confirmed via Walk F after the CSS-partial fix —
+dashboard doesn't include `_nav.html`, so the CSS partial is included
+per-page).
+
+Proprietary-flag discipline: `build_flags` in `signals/scorer.py`
+sources proprietary strings from named-tuple constants;
+`PROPRIETARY_FLAGS` frozenset exposes the same set for the gate.
+Single source. Stored flag column byte-identical to pre-Step-3 —
+NO SCORING_ENGINE_VERSION bump, no re-score needed.
+
+Suite at close: 349 passed / 3 skip (data-state) / 0 fail.
+
+## NEXT ARC — Part 34: STRIPE BILLING
+
+Fresh chat. Products on locked price points (Pro $29/£24.99, Elite
+$79/£74.99, 25% annual discount), 7-day trial flow, Stripe webhook
+that flips `users.tier` on payment and writes the four Stripe schema
+columns, `/pricing` page on the marketing site. Pricing copy locked in
+PROJECT_CONTEXT.
+
+## FOLLOWUPS — carried into Part 34 (8 items)
+
+1. **Flaky test** `tests/test_api_rating_display.py::test_ticker_events_uses_display_labels`
+   + `::test_ticker_events_initial_rating_uses_rating_set_phrasing`.
+   Order-dependent, shared-state suspect — both pass in isolation,
+   fail intermittently in full-suite runs (saw it once across 2 full
+   runs at Step-3 close). Not Step-3-introduced. Don't chase blind;
+   first check is "is this the known flake, or is it new?" Resolution
+   plan when picked up: bisect the suite for the predecessor polluting
+   state; fix is likely a tier-reset teardown.
+
+2. **`/api/portfolios/<id>` own-holding gate semantics.** Currently
+   strips proprietary fields on a user's own penny holdings.
+   Working as designed (consistent with Free=floor). Flagged for
+   product review — should a user see their own holding's score
+   even on penny? Not engineering, semantics.
+
+3. **`flag_list` descriptive-flag re-audit.** RSI/SMA/short/analyst/
+   52w-band flags are descriptive pass-through today, kept visible
+   for non-elite. Re-audit if any later get reclassified as
+   proprietary-derived.
+
+4. **(DONE — folded into Step 3 4d.)** Backtest free-tier
+   `stats[].trades` empty-arrays UX → locked teaser. Shipped.
+
+5. **(DONE — commit b033ce4.)** `.gitignore` data/ analysis files:
+   `data/*.csv` + `data/*.parquet` non-recursive globs landed; live
+   DB rules unchanged. Verified via `git check-ignore -v` on all 4
+   artefact paths.
+
+6. **Orphan `.spotlight.locked` CSS in `dashboard.html:286-298`.**
+   Dead after the macro migration. Cleanup commit when convenient.
+
+7. **Orphan `.nav-tier-starter` CSS in `_nav.html:21`.** Dead style
+   class (no `user.tier == 'starter'` exists post-Step-0). Cleanup
+   commit when convenient.
+
+8. **Free-tier rejection test for `/api/watchlists`.** Coverage gap
+   noted in the watchlist-fixture-fix commit (`bdcf7dd`): smoke
+   covers over-cap rejection at `tier='pro'`, but no test asserts
+   that a `tier='free'` user gets 403 from `/api/watchlists` POST.
+   Add the test.
+
+## PROCESS LESSONS BANKED (Step 3)
+
+- **Scope leak surface by DATA, not URL.** Phase 1 scoped "penny
+  endpoints" and missed ~10 leaking routes. A second-pass grep of
+  every `@app.route` that selects proprietary score columns found
+  them. Future leak/gate scoping audits the data shape, not the URL
+  list you expected to carry it.
+- **Run the FULL test suite before each commit.** Subsets hid 7
+  failures in `tests/test_watchlists.py` from Step 0 through 8 commits
+  (`api_user` fixture defaulted to free=floor, broke watchlist
+  creation). Standing rule: `pytest tests/` before every commit.
+- **The hook is the gate, not `--no-verify`.** Mark commits
+  interactively through the auth-adjacent pre-commit hook from his
+  own terminal so the hook prompts him `y/N`. CC never reaches for
+  `--no-verify`, even with explicit verbal approval — the approval is
+  the verdict surfaced AT the hook, not a bypass token. Memorialised
+  in `~/.claude/projects/-Users-markn/memory/feedback_p23_no_bypass_token.md`.
+
+---
+
+## ARCHIVE — 25 May 2026 (end of Part 32, v0.17.0 ship)
+
 Last updated: 25 May 2026, evening. End of Part 32. **v0.17.0 shipped and pushed**: the v0.16.0 soft-action PT branch was neutralised (Phase 1 robustness questions resolved, 5d directionally consistent but a 21d+ phenomenon; survives beta adjustment with comparable magnitude — `data/analyst_pt_event_study_beta_adj.csv`). Decision: OPTION 2 (pulled to neutral, NOT sign-flipped). Five component sub-scores now persisted on every signal_scores row (graduating-bar prerequisite). signal_scores schema migration consolidated to a single owner. Suite 291 / 2 skip. Banner v0.17.0 live (scheduler PID 37980, gunicorn 37983/37985, booted 17:33 BST). Strategic fork resolved: PRICING locked (see PROJECT_CONTEXT), next major arc is the PAYWALL / APPLICATION layer, not more engine.
 
 Five-commit stack on origin/main:
