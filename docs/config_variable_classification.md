@@ -100,6 +100,8 @@ All SECRET values below are empty-string placeholders in the tracked file.
 | **TELEGRAM_BOT_TOKEN** | **SECRET** | Telegram bot API token |
 | **TELEGRAM_CHAT_ID** | **SECRET** | Telegram channel/chat identifier |
 | **FMP_API_KEY** | **SECRET** | Financial Modeling Prep API key |
+| **STRIPE_SECRET_KEY** | **SECRET** | Stripe API secret key (sk_test_* / sk_live_*). Empty in tracked .example.py; populated in gitignored settings.py. |
+| **STRIPE_WEBHOOK_SECRET** | **SECRET** | Stripe webhook endpoint signing secret (whsec_*). Used by stripe.Webhook.construct_event to verify inbound webhook signatures. |
 
 ---
 

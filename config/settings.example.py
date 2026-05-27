@@ -88,3 +88,13 @@ TELEGRAM_CHAT_ID   = ""
 
 # ── Financial Modeling Prep API ───────────────────
 FMP_API_KEY = ""
+
+# ── Stripe billing ────────────────────────────────
+# STRIPE_SECRET_KEY: from Stripe Dashboard → Developers → API keys.
+#   Test mode prefix: sk_test_*  Live mode prefix: sk_live_*
+# STRIPE_WEBHOOK_SECRET: from Stripe Dashboard → Developers → Webhooks
+#   → endpoint → signing secret. Prefix: whsec_*
+# Both stay empty in this tracked template; populate locally in
+# config/settings.py (gitignored).
+STRIPE_SECRET_KEY     = ""
+STRIPE_WEBHOOK_SECRET = ""
