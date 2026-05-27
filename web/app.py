@@ -5,6 +5,7 @@ import sys, json, sqlite3, requests as http_requests
 from pathlib import Path
 from datetime import datetime
 from functools import wraps
+import stripe
 from flask import (Flask, jsonify, render_template, request,
                    redirect, url_for, session, flash)
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -33,7 +34,7 @@ from config.entitlements import (
     effective_tier, can_view_penny_signals, can_view_score_for_ticker,
     strip_scores_for_non_elite, filter_proprietary_flags_for_non_elite,
 )
-from config.settings import FLASK_SECRET_KEY
+from config.settings import FLASK_SECRET_KEY, STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET
 from signals.signal_labels import tier_short
 
 app = Flask(__name__, template_folder="templates", static_folder="static")
@@ -53,6 +54,10 @@ limiter = Limiter(
 # Ensure user tables exist
 initialise_user_schema(DATABASE_PATH)
 initialise_subscription_events_schema(DATABASE_PATH)
+
+# Wire Stripe SDK with the secret key (empty in dev until populated locally).
+if STRIPE_SECRET_KEY:
+    stripe.api_key = STRIPE_SECRET_KEY
 
 # Ensure contact_submissions table exists
 def _init_contact_table():
@@ -236,6 +241,295 @@ def register():
 def logout():
     session.clear()
     return redirect(url_for("login"))
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Stripe webhook (Phase 2 Commit 4)
+# ──────────────────────────────────────────────────────────────────────
+#
+# Authenticated by Stripe-Signature header (HMAC-SHA256 over
+# `{timestamp}.{payload}` keyed by STRIPE_WEBHOOK_SECRET). NOT by Flask
+# session — the webhook is called by Stripe's servers, not by a browser.
+#
+# Idempotency: subscription_events.stripe_event_id has a UNIQUE
+# constraint. The first action of every webhook is to INSERT that row
+# inside a try/except sqlite3.IntegrityError. Duplicate Stripe deliveries
+# fail the INSERT and short-circuit to a 200 no-op without touching the
+# users table.
+#
+# Cancellation contract (locked): RIDE OUT THE PERIOD. On
+# customer.subscription.deleted we set tier_effective_until to the
+# subscription's end date and do NOT change users.tier or users.is_active.
+# The downgrade-to-free sweep when the period actually expires is its own
+# concern (deferred — see docs/stripe_billing_phase1.md § 8).
+
+def _resolve_tier_from_subscription(subscription):
+    """Resolve (tier, tier_effective_until_iso) from a Stripe Subscription.
+
+    Reads lookup_key from the subscription's first item's price.
+    lookup_key format is '<tier>_<currency>_<interval>' so tier is
+    lookup_key.split('_')[0]. Validates against price.metadata.tier
+    as belt-and-braces — catches Stripe-side fat-fingers where a price
+    was created with the wrong lookup_key.
+    """
+    item = subscription["items"]["data"][0]
+    price = item["price"]
+    try:
+        lookup_key = price["lookup_key"]
+    except (KeyError, TypeError):
+        lookup_key = None
+    if not lookup_key:
+        raise ValueError(
+            f"subscription {subscription['id']} price has no lookup_key — "
+            f"webhook cannot resolve tier without it"
+        )
+    tier_from_lookup = lookup_key.split("_")[0]
+
+    try:
+        metadata_tier = price["metadata"]["tier"]
+    except (KeyError, TypeError):
+        metadata_tier = None
+    if metadata_tier and metadata_tier != tier_from_lookup:
+        raise ValueError(
+            f"price {price['id']} has inconsistent tier: "
+            f"lookup_key={lookup_key} → {tier_from_lookup}, "
+            f"metadata.tier={metadata_tier}"
+        )
+
+    if tier_from_lookup not in ("pro", "elite"):
+        raise ValueError(
+            f"price {price['id']} lookup_key {lookup_key!r} "
+            f"resolves to unknown tier {tier_from_lookup!r}"
+        )
+
+    period_end_iso = datetime.utcfromtimestamp(
+        subscription["current_period_end"]
+    ).isoformat()
+    return tier_from_lookup, period_end_iso
+
+
+def _handle_checkout_completed(conn, event):
+    """First successful payment: flip user tier + write Stripe IDs.
+
+    The checkout session carries client_reference_id (our user_id),
+    customer (stripe_customer_id), and subscription (stripe_subscription_id).
+    We fetch the full subscription to read lookup_key, then resolve tier.
+
+    Returns (tier_before, tier_after).
+    """
+    sess = event["data"]["object"]
+    user_id_raw = sess.get("client_reference_id") if hasattr(sess, "get") else None
+    if user_id_raw is None:
+        try:
+            user_id_raw = sess["client_reference_id"]
+        except (KeyError, TypeError):
+            user_id_raw = None
+    if not user_id_raw:
+        raise ValueError(
+            f"checkout.session.completed missing client_reference_id "
+            f"(session_id={sess.get('id') if hasattr(sess, 'get') else sess['id']})"
+        )
+    user_id = int(user_id_raw)
+
+    try:
+        sub_id = sess["subscription"]
+    except (KeyError, TypeError):
+        sub_id = None
+    if not sub_id:
+        raise ValueError("checkout.session.completed missing subscription id")
+    try:
+        customer_id = sess["customer"]
+    except (KeyError, TypeError):
+        customer_id = None
+
+    subscription = stripe.Subscription.retrieve(
+        sub_id, expand=["items.data.price"]
+    )
+    new_tier, period_end_iso = _resolve_tier_from_subscription(subscription)
+
+    cur = conn.cursor()
+    row = cur.execute(
+        "SELECT tier FROM users WHERE id = ?", (user_id,)
+    ).fetchone()
+    if row is None:
+        raise ValueError(
+            f"checkout.session.completed user_id={user_id} not found in users table"
+        )
+    tier_before = row["tier"]
+
+    cur.execute(
+        """
+        UPDATE users
+        SET tier = ?,
+            stripe_customer_id = ?,
+            stripe_subscription_id = ?,
+            tier_effective_until = ?
+        WHERE id = ?
+        """,
+        (new_tier, customer_id, sub_id, period_end_iso, user_id),
+    )
+    conn.commit()
+    return tier_before, new_tier
+
+
+def _handle_subscription_deleted(conn, event):
+    """Subscription ended/canceled — RIDE OUT semantics.
+
+    Set tier_effective_until to the actual subscription end (ended_at
+    if present, else current_period_end). Do NOT change users.tier.
+    Do NOT change users.is_active. The downgrade-to-free sweep is a
+    separate concern.
+
+    Returns (tier_before, tier_after) — tier_after == tier_before
+    because tier is deliberately unchanged.
+    """
+    sub = event["data"]["object"]
+    sub_id = sub["id"]
+
+    end_unix = None
+    try:
+        end_unix = sub["ended_at"]
+    except (KeyError, TypeError):
+        pass
+    if not end_unix:
+        try:
+            end_unix = sub["current_period_end"]
+        except (KeyError, TypeError):
+            pass
+    if not end_unix:
+        raise ValueError(
+            f"customer.subscription.deleted {sub_id} missing both "
+            f"ended_at and current_period_end"
+        )
+    end_iso = datetime.utcfromtimestamp(end_unix).isoformat()
+
+    cur = conn.cursor()
+    row = cur.execute(
+        "SELECT id, tier FROM users WHERE stripe_subscription_id = ?",
+        (sub_id,),
+    ).fetchone()
+    if row is None:
+        raise ValueError(
+            f"customer.subscription.deleted sub_id={sub_id} "
+            f"not matched to any user"
+        )
+    tier_before = row["tier"]
+
+    cur.execute(
+        """
+        UPDATE users
+        SET tier_effective_until = ?
+        WHERE stripe_subscription_id = ?
+        """,
+        (end_iso, sub_id),
+    )
+    conn.commit()
+    return tier_before, tier_before
+
+
+@app.route("/webhooks/stripe", methods=["POST"])
+def stripe_webhook():
+    """Stripe webhook endpoint. Signature-verified, idempotent.
+
+    Returns:
+      400 if signature is missing/invalid.
+      500 if STRIPE_WEBHOOK_SECRET is empty (misconfiguration).
+      200 in every other case — including handler failures (logged
+          to subscription_events.status='failed' for forensics).
+          Returning 200 on handler failure prevents Stripe from
+          retrying a deterministic bug; the failed row in our audit
+          log surfaces it for operator review.
+    """
+    if not STRIPE_WEBHOOK_SECRET:
+        return jsonify({"error": "webhook secret not configured"}), 500
+
+    sig_header = request.headers.get("Stripe-Signature", "")
+    payload = request.get_data()
+
+    try:
+        event = stripe.Webhook.construct_event(
+            payload, sig_header, STRIPE_WEBHOOK_SECRET
+        )
+    except (ValueError, stripe.error.SignatureVerificationError):
+        return jsonify({"error": "invalid signature"}), 400
+
+    event_id = event["id"]
+    event_type = event["type"]
+
+    conn = get_connection(DATABASE_PATH)
+    try:
+        cur = conn.cursor()
+        try:
+            cur.execute(
+                """
+                INSERT INTO subscription_events
+                  (stripe_event_id, event_type, received_at, raw_payload)
+                VALUES (?, ?, ?, ?)
+                """,
+                (
+                    event_id,
+                    event_type,
+                    datetime.utcnow().isoformat(),
+                    payload.decode("utf-8"),
+                ),
+            )
+            event_row_id = cur.lastrowid
+            conn.commit()
+        except sqlite3.IntegrityError:
+            return jsonify({"status": "duplicate", "event_id": event_id}), 200
+
+        try:
+            if event_type == "checkout.session.completed":
+                tier_before, tier_after = _handle_checkout_completed(conn, event)
+            elif event_type == "customer.subscription.deleted":
+                tier_before, tier_after = _handle_subscription_deleted(conn, event)
+            else:
+                cur.execute(
+                    "UPDATE subscription_events "
+                    "SET status=?, processed_at=? WHERE id=?",
+                    ("skipped", datetime.utcnow().isoformat(), event_row_id),
+                )
+                conn.commit()
+                return (
+                    jsonify({"status": "skipped", "event_type": event_type}),
+                    200,
+                )
+
+            cur.execute(
+                """
+                UPDATE subscription_events
+                SET status=?, processed_at=?, tier_before=?, tier_after=?
+                WHERE id=?
+                """,
+                (
+                    "processed",
+                    datetime.utcnow().isoformat(),
+                    tier_before,
+                    tier_after,
+                    event_row_id,
+                ),
+            )
+            conn.commit()
+            return jsonify({"status": "ok", "event_type": event_type}), 200
+
+        except Exception as e:
+            cur.execute(
+                """
+                UPDATE subscription_events
+                SET status=?, processed_at=?, error_message=?
+                WHERE id=?
+                """,
+                (
+                    "failed",
+                    datetime.utcnow().isoformat(),
+                    str(e)[:500],
+                    event_row_id,
+                ),
+            )
+            conn.commit()
+            return jsonify({"status": "failed", "error": str(e)}), 200
+    finally:
+        conn.close()
 
 
 # ── /dashboard ───────────────────────────────────────────────────────────────
