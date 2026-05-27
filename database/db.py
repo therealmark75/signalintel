@@ -880,13 +880,17 @@ def _migrate_watchlists_to_multi(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
-def create_user(db_path: str, username: str, email: str, password_hash: str) -> int:
+def create_user(db_path: str, username: str, email: str, password_hash: str,
+                trial_started_at=None) -> int:
+    # trial_started_at is the caller's responsibility — register() stamps a
+    # naive UTC ISO so _parse_trial_start round-trips it; test fixtures that
+    # don't exercise trial state pass None and land at the 'free' floor.
     conn = get_connection(db_path)
     cur  = conn.cursor()
     cur.execute("""
-        INSERT INTO users (username, email, password_hash, created_at)
-        VALUES (?, ?, ?, ?)
-    """, (username, email, password_hash, datetime.now().isoformat()))
+        INSERT INTO users (username, email, password_hash, created_at, trial_started_at)
+        VALUES (?, ?, ?, ?, ?)
+    """, (username, email, password_hash, datetime.now().isoformat(), trial_started_at))
     conn.commit()
     user_id = cur.lastrowid
     conn.close()
