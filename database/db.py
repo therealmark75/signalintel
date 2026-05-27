@@ -841,6 +841,45 @@ def initialise_user_schema(db_path: str) -> None:
     conn.close()
 
 
+def initialise_subscription_events_schema(db_path: str) -> None:
+    """Stripe webhook idempotency log.
+
+    stripe_event_id is UNIQUE so a redelivered webhook INSERT hits
+    IntegrityError — the handler catches it, returns 200, and skips
+    the tier write. The three explicit indexes serve operator
+    forensics (lookups by user, by customer, by time). Idempotent:
+    safe to re-run on every boot via web/app.py.
+    """
+    conn = get_connection(db_path)
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS subscription_events (
+            id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+            stripe_event_id    TEXT    NOT NULL UNIQUE,
+            event_type         TEXT    NOT NULL,
+            user_id            INTEGER REFERENCES users(id),
+            stripe_customer_id TEXT,
+            received_at        TEXT    NOT NULL,
+            processed_at       TEXT,
+            status             TEXT    NOT NULL DEFAULT 'received',
+            error_message      TEXT,
+            tier_before        TEXT,
+            tier_after         TEXT,
+            raw_payload        TEXT
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_sub_events_user
+        ON subscription_events(user_id);
+
+        CREATE INDEX IF NOT EXISTS idx_sub_events_customer
+        ON subscription_events(stripe_customer_id);
+
+        CREATE INDEX IF NOT EXISTS idx_sub_events_received_at
+        ON subscription_events(received_at);
+    """)
+    conn.commit()
+    conn.close()
+
+
 def _migrate_watchlists_to_multi(conn: sqlite3.Connection) -> None:
     """Migrate watchlists from UNIQUE(user_id,ticker) to multi-watchlist schema."""
     cur = conn.cursor()

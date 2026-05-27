@@ -19,6 +19,7 @@ from database.db import (
     get_connection, get_latest_screener, get_recent_insiders,
     get_cluster_signals, get_top_signals, get_signal_summary,
     get_ticker_sentiment, initialise_user_schema,
+    initialise_subscription_events_schema,
     create_user, get_user_by_username, get_user_by_email, get_user_by_id,
     get_watchlist, get_watchlists_meta, get_or_create_default_watchlist,
     create_watchlist, rename_watchlist, delete_watchlist,
@@ -51,6 +52,7 @@ limiter = Limiter(
 
 # Ensure user tables exist
 initialise_user_schema(DATABASE_PATH)
+initialise_subscription_events_schema(DATABASE_PATH)
 
 # Ensure contact_submissions table exists
 def _init_contact_table():
