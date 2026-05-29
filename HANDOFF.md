@@ -3,135 +3,259 @@
 **Tactical session state.** Updated end of each session. For stable
 project context (who/what/how), see `PROJECT_CONTEXT.md`.
 
-Last updated: 26-27 May 2026 (Part 33). **STEP 3 / PAYWALL ENFORCEMENT
-LAYER COMPLETE.** Every score-leak surface gated and verified live.
-Commit stack 8382004 → cafe6a3.
+Last updated: 29 May 2026 (Part 34). **PHASE 2 STRIPE BILLING
+COMPLETE.** 8 commits on origin/main, `aa88847..41dd275`. Full
+payment pipeline live end-to-end against the real Stripe test API:
+signature-verified webhook with idempotency, geo-resolved checkout,
+real card flipped a real free user to pro with all four Stripe
+columns populated and `tier_effective_until` one month out. Proven
+against the real API, not just unit tests.
 
 ## CRITICAL FRAMING
 
-Enforcement is done. **BILLING IS NOT STARTED.** Schema columns exist
-but nothing writes them. `current_user()` exposes tier, gates read it,
-but there are NO Stripe products, no checkout flow, no webhook, no
-`/pricing` page. **A user cannot pay to change tier today.** That's
-the next arc.
+Payment pipeline is real and proven. **Users can now pay to change
+tier.** A real test-mode card flipped a real free user to pro
+end-to-end: checkout session → Stripe-hosted page → conversion
+event → webhook flipped `users.tier` and wrote
+`stripe_customer_id`, `stripe_subscription_id`,
+`tier_effective_until`.
 
-## STEP 3 — what shipped (commits 8382004 → cafe6a3)
+What still blocks full launch:
+- `/pricing` marketing page — users currently have to hit
+  `/upgrade?tier=&interval=` by hand, no UI affordance.
+- `tier_effective_until → free` downgrade sweep — ride-out
+  cancellation needs something to actually drop tier when the
+  period expires.
+- Email confirmation on signup (lands with SendGrid integration).
+- Referral programme.
 
-Tier model collapsed to two-tier + floor: `free` (unpaid floor,
-watchlist_limit=0, no proprietary access), `pro` (cap 5, full signals
-+ alerts + tournaments), `elite` (Pro + API + unlimited watchlists +
-penny $1-5 score panel). `starter` is dead. Trial is an OVERLAY on top
-of the stored column — `effective_tier(user)` returns elite for 7 days
-post-`trial_started_at`, falls to the stored tier on day-8.
+## PART 34 — what shipped (commits aa88847..41dd275)
+
+**Hotfix BEFORE any Stripe work: `register()` now stamps
+`trial_started_at`.** The 7-day trial overlay was inert because the
+anchor was never written. Every fresh user since the schema landed
+had been hitting the free paywall on signup instead of the elite
+overlay. Caught by the Phase 1 diagnostic
+(`docs/stripe_billing_phase1.md` § 2) before any Stripe code
+touched. `create_user()` now accepts an optional
+`trial_started_at`; `register()` stamps it with naive UTC ISO that
+round-trips through `_parse_trial_start`. Day-0 fresh registrants
+resolve to elite via the overlay, fall to free at day-8 per the
+locked design.
+
+**Commit 1 — `subscription_events` idempotency table.**
+`stripe_event_id` UNIQUE constraint as the idempotency lock. Three
+forensic indexes (user, customer, time). Audit columns
+`tier_before` / `tier_after` / `raw_payload` / `error_message` for
+post-hoc reconstruction of any tier flip. Migration co-located with
+`initialise_user_schema` in `database/db.py`, called from the same
+boot path.
+
+**Commit 2 — Stripe SDK + secrets wiring.** `stripe>=10.0.0` added
+to `requirements.txt` (resolves to stripe-python 15.1.0). Secret
+pattern: real values in gitignored `config/settings.py`,
+placeholders in tracked `config/settings.example.py`,
+`STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` documented as
+SECRET in `docs/config_variable_classification.md`. No `.env` file
+(locked).
+
+**Commit 3 — Stripe products + prices setup script.** Idempotent
+`scripts/setup_stripe_products.py` creates 2 Products (SignalIntel
+Pro, SignalIntel Elite) and 8 Prices in Stripe test mode using the
+lookup_key scheme `<tier>_<currency>_<interval>`. Live-mode guard
+refuses to run unless `STRIPE_SECRET_KEY` starts with `sk_test_`.
+Re-runs are no-ops; products matched by
+`metadata.signalintel_tier`, prices by lookup_key uniqueness.
+
+**Commit 4 — `POST /webhooks/stripe`.** HMAC signature verification
+via `stripe.Webhook.construct_event`. Idempotency via the UNIQUE
+constraint on `subscription_events.stripe_event_id` — duplicate
+deliveries fail INSERT, route returns 200 no-op, handler never
+runs. Handlers: `checkout.session.completed` flips `users.tier` and
+writes the three Stripe columns + `tier_effective_until`;
+`customer.subscription.deleted` updates `tier_effective_until`
+only, tier and `is_active` unchanged per locked ride-out
+semantics. Fails soft to 200 on handler exceptions
+(`status='failed'` audit row) to prevent Stripe retry storms on
+deterministic bugs.
+
+**Commit 5 — `GET /upgrade?tier=&interval=`.** `@login_required`
+page route that creates a Stripe Checkout Session and 303-redirects
+to the Stripe-hosted URL.
+`client_reference_id=str(session['user_id'])` — the load-bearing
+thread the webhook reads to identify the user (verified live:
+webhook fails with "missing client_reference_id" when omitted).
+Currency precedence: explicit `?currency=` query > `CF-IPCountry`
+header > `Accept-Language: en-GB` > USD default. UK → GBP,
+everything else → USD per locked policy. Rate-limited 10/min.
+
+**Fix — `current_period_end` API drift.** Stripe API version
+2025-03-31 moved `current_period_start`/`current_period_end` off
+the top-level Subscription onto each SubscriptionItem.
+stripe-python 15.x returns the new shape; both webhook handlers
+were reading from the old top-level path, crashing the conversion
+handler with `KeyError: 'current_period_end'` before any
+user-column write. Both read sites fixed. Test fixture had drifted
+the same direction — both wrong, cancelling out — fixture
+corrected.
+
+**Rebase — secret-scanner false positive scrubbed from history.** A
+placeholder in `tests/test_setup_stripe_guard.py:77` — literally
+`sk_test_` followed by 24 x's — matched GitHub's
+`sk_test_[a-zA-Z0-9]{24,}` pattern and blocked the first push.
+Empirically confirmed not a real key (compared against
+`STRIPE_SECRET_KEY` without printing it). Replaced with
+`sk_test_NOT-A-REAL-KEY-unit-test-only` (hyphens break the
+alphanumeric run). Scrubbed via `git rebase -i 28c6f69^`, four
+commit SHAs rotated, original literal verified absent from history.
+**Not a real key leak.** Real Stripe secrets live only in
+gitignored `config/settings.py`.
+
+## DEFERRED — post-Phase-2 backlog
+
+- **`/pricing` marketing page.** Users currently have to construct
+  the `/upgrade` URL by hand.
+- **`tier_effective_until → free` downgrade sweep.** Ride-out
+  cancellation needs something to actually drop tier when the
+  period expires. Scheduled job vs entitlement-layer check both
+  viable; design call deferred.
+- **Email confirmation on signup.** Lands with SendGrid integration.
+- **Referral programme.**
+
+## CARRIED FORWARD — pre-Phase-2 backlog
+
+- Path B (Yahoo Finance pipeline + components 9-16).
+- Virtual portfolio system.
+- Scraper substrate audit.
+- Component rendering refactor.
+- 8 followups from Step 3 still queued (see Part 33 archive below).
+
+## CARRIED FORWARDS — housekeeping, non-blocking
+
+- **CLAUDE.md doc drift.** Says "20% annual" and three tiers
+  (Starter / Pro / Elite). Locked spec is **25%** annual and **two**
+  paid tiers (Pro + Elite + free + 7-day overlay). Doc-hygiene fix
+  when prioritised.
+- **`AGENTS.md` untracked in repo root.** Origin unknown. Mark to
+  confirm or delete.
+- **Historical secrets exposure in pre-5-May-2026 commits.**
+  Telegram bot token, FMP API key, SMTP password were tracked in
+  `config/settings.py` before it was gitignored. Pre-existing, not
+  caused this session. Own cleanup arc when prioritised.
+
+## INFRA — Part 34 session
+
+- `launchctl`-managed gunicorn restarted after every `web/app.py`
+  commit per drift discipline.
+- `stripe listen --forward-to localhost:5001/webhooks/stripe` used
+  for local end-to-end webhook testing.
+- Test mode end-to-end with card `4242 4242 4242 4242`.
+- `thesignalvault.io` live behind Cloudflare unchanged.
+
+## PROCESS LESSONS BANKED (Part 34)
+
+- **Matching wrongness on both sides of a test (P15 lesson).**
+  Handler read `current_period_end` from `Subscription`; fixture
+  constructed `current_period_end` on `Subscription`. Tests passed
+  against a fiction; real Stripe API caught it. Fixture must mirror
+  production shape, not handler-side reads.
+- **Diagnose-before-fix discipline (P2) held through 4 separate
+  bugs this session:** inert trial diagnosed via `effective_tier`
+  literal trace; webhook 500s diagnosed via curl probe
+  distinguishing missing-secret 500 vs handler-exception 500;
+  `current_period_end` diagnosed against the SDK 15.x shape change
+  before applying fix; GitHub Push Protection trip confirmed
+  placeholder vs real key via empirical comparison before deciding
+  fix-vs-scrub.
+- **Temporary debug code marked + removed cleanly.** Added a loud
+  `TEMPORARY DEBUG — REMOVE` block to surface a webhook traceback,
+  used it, removed it, working tree returned bit-for-bit to
+  committed state before the next commit.
+- **`git rebase -i` for secret scrub on local-only history.** Four
+  commits rewritten without conflict because the bad-commit file
+  wasn't touched by later commits. No `--force` needed (remote
+  hadn't accepted the push).
+- **Stripe MCP connector limitation.** Only OAuth `authenticate` +
+  `complete_authentication` exposed; no read tools available
+  without completing the auth flow. SDK reads via
+  `stripe.Price.list` and `stripe.checkout.Session.retrieve`
+  substituted equivalently for the "Stripe MCP read" gate.
+
+---
+
+## ARCHIVE — 26-27 May 2026 (end of Part 33, Step 3 paywall enforcement)
+
+**Step 3 / paywall enforcement layer complete.** Commit stack
+`8382004 → cafe6a3`. Tier model collapsed to two-tier + floor:
+`free` (unpaid, watchlist_limit=0), `pro` (cap 5, full signals +
+alerts + tournaments), `elite` (Pro + API + unlimited watchlists +
+penny $1-5 score panel). `starter` dead. Trial is an OVERLAY:
+`effective_tier(user)` returns elite for 7 days
+post-`trial_started_at`, falls to stored tier on day-8. **Trial
+overlay was inert as shipped** — `register()` never stamped
+`trial_started_at`. Fixed at Part 34 open as a precursor hotfix.
 
 New module `config/entitlements.py`: `effective_tier`,
 `trial_active`, capability predicates (`can_view_penny_signals`,
-`can_view_score_for_ticker` — $5 boundary single-sourced here, etc.),
-`strip_scores_for_non_elite` row helper,
-`filter_proprietary_flags_for_non_elite`, `PROPRIETARY_SCORE_FIELDS`
-constant set.
+`can_view_score_for_ticker` with $5 boundary single-sourced),
+`strip_scores_for_non_elite`,
+`filter_proprietary_flags_for_non_elite`,
+`PROPRIETARY_SCORE_FIELDS`.
 
-Score-leak audit and gate: 10 ungated endpoints found by sweeping
-routes that select proprietary score columns (the broader sweep
-beyond "penny endpoints"). All gated:
-  - `/api/penny/stock-of-day`, `/api/penny/hot` — Commit 1
-  - `/api/ticker/<ticker>`, `/api/ticker/<ticker>/events` — Commit 3
-  - `/api/screener`, `/api/industry`, `/api/ticker-tape`,
-    `/api/portfolios/<id>`, `/api/backtest/stats` — Commit 4b
-  - `/api/signals`, `/api/signals/sector/<s>`, `/api/signals/<rating>`,
-    `/api/search`, `/api/dividends` — Commit 4c
-  - flag_list filtering on the 3 signals routes — Commit 4d
+10 leak surfaces gated by sweeping every `@app.route` selecting
+proprietary score columns: `/api/penny/stock-of-day`,
+`/api/penny/hot`, `/api/ticker/<t>`, `/api/ticker/<t>/events`,
+`/api/screener`, `/api/industry`, `/api/ticker-tape`,
+`/api/portfolios/<id>`, `/api/backtest/stats`, `/api/signals`,
+`/api/signals/sector/<s>`, `/api/signals/<rating>`, `/api/search`,
+`/api/dividends` + `flag_list` filtering on three signals routes.
 
-Schema added (UNWIRED): `users.trial_started_at`,
-`users.stripe_customer_id`, `users.stripe_subscription_id`,
-`users.tier_effective_until`. Indexes on Stripe IDs. Single-owner
-migration in `initialise_user_schema`.
+Schema added: `users.trial_started_at`, `users.stripe_customer_id`,
+`users.stripe_subscription_id`, `users.tier_effective_until`.
+Indexes on Stripe IDs. Single-owner migration in
+`initialise_user_schema`. `get_user_by_id` filters `is_active=1`
+(parity fix; the original "cancellation = deactivation" framing was
+superseded in Part 34 by ride-out semantics — tier stays until
+`tier_effective_until`, `is_active` unchanged on cancel).
 
-`get_user_by_id` now filters `is_active=1` (parity fix; cancellation
-= deactivation path).
+Suite at close: 349 passed / 3 skip / 0 fail.
 
-Locked-teaser UX shipped: `_locked_teaser.html` macro +
-`_locked_teaser_css.html` partial. Dashboard Panel 7 migrated to the
-macro (visual parity confirmed via Walk F after the CSS-partial fix —
-dashboard doesn't include `_nav.html`, so the CSS partial is included
-per-page).
-
-Proprietary-flag discipline: `build_flags` in `signals/scorer.py`
-sources proprietary strings from named-tuple constants;
-`PROPRIETARY_FLAGS` frozenset exposes the same set for the gate.
-Single source. Stored flag column byte-identical to pre-Step-3 —
-NO SCORING_ENGINE_VERSION bump, no re-score needed.
-
-Suite at close: 349 passed / 3 skip (data-state) / 0 fail.
-
-## NEXT ARC — Part 34: STRIPE BILLING
-
-Fresh chat. Products on locked price points (Pro $29/£24.99, Elite
-$79/£74.99, 25% annual discount), 7-day trial flow, Stripe webhook
-that flips `users.tier` on payment and writes the four Stripe schema
-columns, `/pricing` page on the marketing site. Pricing copy locked in
-PROJECT_CONTEXT.
-
-## FOLLOWUPS — carried into Part 34 (8 items)
+### Followups carried into Part 34 (status as of end of Part 34)
 
 1. **Flaky test** `tests/test_api_rating_display.py::test_ticker_events_uses_display_labels`
    + `::test_ticker_events_initial_rating_uses_rating_set_phrasing`.
-   Order-dependent, shared-state suspect — both pass in isolation,
-   fail intermittently in full-suite runs (saw it once across 2 full
-   runs at Step-3 close). Not Step-3-introduced. Don't chase blind;
-   first check is "is this the known flake, or is it new?" Resolution
-   plan when picked up: bisect the suite for the predecessor polluting
-   state; fix is likely a tier-reset teardown.
-
+   Order-dependent, shared-state suspect; pass in isolation, fail
+   intermittently in full-suite runs. Bisect for predecessor
+   polluting state; fix likely a tier-reset teardown. **STILL OPEN.**
 2. **`/api/portfolios/<id>` own-holding gate semantics.** Currently
-   strips proprietary fields on a user's own penny holdings.
-   Working as designed (consistent with Free=floor). Flagged for
-   product review — should a user see their own holding's score
-   even on penny? Not engineering, semantics.
-
+   strips proprietary fields on own penny holdings. Working as
+   designed (consistent with Free=floor). Flagged for product
+   review. **STILL OPEN.**
 3. **`flag_list` descriptive-flag re-audit.** RSI/SMA/short/analyst/
-   52w-band flags are descriptive pass-through today, kept visible
-   for non-elite. Re-audit if any later get reclassified as
-   proprietary-derived.
-
-4. **(DONE — folded into Step 3 4d.)** Backtest free-tier
-   `stats[].trades` empty-arrays UX → locked teaser. Shipped.
-
-5. **(DONE — commit b033ce4.)** `.gitignore` data/ analysis files:
-   `data/*.csv` + `data/*.parquet` non-recursive globs landed; live
-   DB rules unchanged. Verified via `git check-ignore -v` on all 4
-   artefact paths.
-
+   52w-band flags are descriptive pass-through, kept visible for
+   non-elite. Re-audit if reclassified. **STILL OPEN.**
+4. ~~Backtest free-tier `stats[].trades` empty-arrays UX → locked
+   teaser.~~ DONE in Step 3 4d.
+5. ~~`.gitignore` data/ analysis files.~~ DONE in commit `b033ce4`.
 6. **Orphan `.spotlight.locked` CSS in `dashboard.html:286-298`.**
-   Dead after the macro migration. Cleanup commit when convenient.
-
+   Dead after macro migration. **STILL OPEN.**
 7. **Orphan `.nav-tier-starter` CSS in `_nav.html:21`.** Dead style
-   class (no `user.tier == 'starter'` exists post-Step-0). Cleanup
-   commit when convenient.
+   class. **STILL OPEN.**
+8. **Free-tier rejection test for `/api/watchlists`.** Coverage gap.
+   **STILL OPEN.**
 
-8. **Free-tier rejection test for `/api/watchlists`.** Coverage gap
-   noted in the watchlist-fixture-fix commit (`bdcf7dd`): smoke
-   covers over-cap rejection at `tier='pro'`, but no test asserts
-   that a `tier='free'` user gets 403 from `/api/watchlists` POST.
-   Add the test.
-
-## PROCESS LESSONS BANKED (Step 3)
+### Process lessons banked from Step 3
 
 - **Scope leak surface by DATA, not URL.** Phase 1 scoped "penny
   endpoints" and missed ~10 leaking routes. A second-pass grep of
-  every `@app.route` that selects proprietary score columns found
-  them. Future leak/gate scoping audits the data shape, not the URL
-  list you expected to carry it.
+  every `@app.route` selecting proprietary score columns found them.
 - **Run the FULL test suite before each commit.** Subsets hid 7
-  failures in `tests/test_watchlists.py` from Step 0 through 8 commits
-  (`api_user` fixture defaulted to free=floor, broke watchlist
-  creation). Standing rule: `pytest tests/` before every commit.
+  failures in `tests/test_watchlists.py` from Step 0 through 8
+  commits.
 - **The hook is the gate, not `--no-verify`.** Mark commits
-  interactively through the auth-adjacent pre-commit hook from his
-  own terminal so the hook prompts him `y/N`. CC never reaches for
-  `--no-verify`, even with explicit verbal approval — the approval is
-  the verdict surfaced AT the hook, not a bypass token. Memorialised
-  in `~/.claude/projects/-Users-markn/memory/feedback_p23_no_bypass_token.md`.
+  auth-adjacent through his own terminal; CC surfaces the trip but
+  never bypasses, even on verbal approval. Memorialised in
+  `~/.claude/projects/-Users-markn/memory/feedback_p23_no_bypass_token.md`.
 
 ---
 

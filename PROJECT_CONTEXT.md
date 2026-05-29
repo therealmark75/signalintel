@@ -922,31 +922,48 @@ Signal Vault is the parent brand. SignalIntel is the first product
 commodities, bonds, gilts, crypto, forex. Domain: thesignalvault.io.
 Privacy/Terms/Disclaimer already on website. Stripe account active.
 
-### NEXT MAJOR ARC: PATH A — PAYWALL / APPLICATION LAYER (resolved 25 May 2026)
+### PHASE 2 BASELINE: PAYWALL ENFORCEMENT + BILLING (complete 29 May 2026)
 
-The open strategic fork between "more engine" (FINRA short-interest
-composite, event-fade component, components 9-16) and "application
-layer" (paywall, trial, entitlement, gating) is RESOLVED — **next
-major arc is PATH A**, the paywall / application layer:
+Both halves of the application-layer arc are shipped and form the
+new permanent baseline. PATH A is no longer an active arc — it's
+state.
 
-- Stripe products configured for the locked Pro / Elite tiers, both
-  currencies, monthly + annual.
-- 7-day full-access trial flow → hard paywall transition.
-- Auth / entitlement enforcement of Pro vs Elite throughout the app
-  (decorators or middleware checking the user's tier; existing
-  `current_user()` already exposes a `tier` field, the wiring is
-  there for the read).
-- Penny-gate UX: lock the score / rating panel for non-Elite users on
-  $1-5 tickers, with an Elite-upgrade prompt; ticker stays visible in
-  every surface that lists it.
-- `/pricing` page on the marketing surface.
+- **Step 3 — Enforcement** (commits 8382004 → cafe6a3, 26-27 May
+  2026): tier model collapsed to two-tier + floor; trial overlay
+  resolver in `config/entitlements.py`; 10 ungated endpoints sealed;
+  locked-teaser UX across dashboard Panel 7, `/penny`,
+  `/penny/screener`, `/backtest`, `/ticker`; schema columns added
+  for the Stripe handoff.
+- **Phase 2 — Billing** (commits aa88847 → 41dd275, 27-29 May
+  2026): `subscription_events` idempotency table;
+  signature-verified `POST /webhooks/stripe` route; `GET /upgrade`
+  endpoint with geo-resolved currency; 2 Products + 8 Prices in
+  Stripe test mode via lookup_key scheme
+  `<tier>_<currency>_<interval>`. Real-card end-to-end tier flip
+  verified against the real Stripe test API. Full architecture in
+  the PAYWALL ENFORCEMENT + BILLING section below.
 
-**Rationale for the order**: the engine compounds passively (the track
-record accrues whether the paywall is up or not), and pricing being
-locked unblocked the paywall arc cleanly. The engine work — FINRA
-short-interest, event-fade, components 9-16, plus the graduating-bar
-checkpoint at ~6 months — stays queued behind the paywall arc and
-benefits from the longer history-accumulation window it sits inside.
+**Post-Phase-2 backlog (deferred, in order of likely pickup):**
+
+- `/pricing` marketing page — users currently have to construct the
+  `/upgrade?tier=&interval=` URL by hand; no UI affordance.
+- `tier_effective_until → free` downgrade sweep — ride-out
+  cancellation needs something to actually drop tier when the
+  period expires (scheduled-job vs entitlement-layer check both
+  viable; design call deferred).
+- Email confirmation on signup (lands with the SendGrid
+  integration already on the planned-integrations list).
+- Referral programme.
+
+**Next major arc candidate: PATH B — engine + data substrate.**
+FINRA short-interest composite, event-fade as its own component,
+components 9-16, the graduating-bar checkpoint at ~6 months, plus
+the Yahoo Finance pipeline broadening originally queued under
+Path B. The engine compounds passively whether or not it's the
+active arc; the graduating-bar checkpoint matures with calendar
+time regardless. PATH B picks back up when Mark chooses, or when
+one of the post-Phase-2 backlog items demands a parallel data
+dependency.
 
 ---
 
@@ -1923,13 +1940,14 @@ or both. Either way: hook trips on a P23 path go to Mark, not to
 
 ---
 
-## PAYWALL ENFORCEMENT LAYER (Step 3 — complete 26-27 May 2026)
+## PAYWALL ENFORCEMENT + BILLING (Step 3 + Phase 2 — complete 26-27 May & 29 May 2026)
 
-The paywall ENFORCEMENT layer is shipped end-to-end across commits
-8382004 → cafe6a3. Billing is NOT started — schema columns
-(`trial_started_at`, `stripe_customer_id`, `stripe_subscription_id`,
-`tier_effective_until`) exist but no Stripe code writes them yet. A
-user cannot pay to change tier today; that's the next arc (Part 34).
+Both halves shipped end-to-end. Enforcement (Step 3) across commits
+8382004 → cafe6a3. Billing (Phase 2) across commits aa88847 →
+41dd275. Real-card conversion verified live against the real Stripe
+test API: a real test-mode card flipped a real free user to pro
+with all four Stripe schema columns populated and
+`tier_effective_until` one month out.
 
 **Tier model (locked, two-tier + floor):**
   - `free` — UNPAID FLOOR. `watchlist_limit=0`. Sees no proprietary
@@ -1986,15 +2004,80 @@ variant), and the `/ticker` score panel. CSS partial is included
 per-page (dashboard does NOT include `_nav.html` — that was the
 Walk-F discovery; CSS in `_nav.html` would have missed dashboard).
 
-**Schema (added in commit 0d0b8ab, UNWIRED):** `users.trial_started_at
-TEXT`, `users.stripe_customer_id TEXT`, `users.stripe_subscription_id
-TEXT`, `users.tier_effective_until TEXT`. Indexes on the two Stripe
-columns. Migration single-owner in `initialise_user_schema`.
+**Schema (added in commit 0d0b8ab, wired by the Phase 2 webhook):**
+`users.trial_started_at TEXT`, `users.stripe_customer_id TEXT`,
+`users.stripe_subscription_id TEXT`, `users.tier_effective_until
+TEXT`. Indexes on the two Stripe columns. Migration single-owner in
+`initialise_user_schema`. `trial_started_at` is stamped at
+registration (Part 34 hotfix); the three Stripe columns are written
+by the `checkout.session.completed` handler;
+`tier_effective_until` is refreshed by both checkout and
+cancellation handlers.
 
-**`get_user_by_id` now filters `is_active=1`** (commit 72b55b8) —
-parity with `get_user_by_username`. Cancellation = deactivation
-path; a deactivated user with a live session loses access at the
-next session lookup.
+**`get_user_by_id` filters `is_active=1`** (commit 72b55b8) —
+parity with `get_user_by_username`. A deactivated user with a live
+session loses access at the next session lookup. Note: Phase 2
+cancellation does NOT deactivate (ride-out semantics — see Billing
+architecture below). The `is_active=1` filter remains the policy
+for any future explicit deactivation path (admin block, account
+delete, etc.).
+
+**Billing architecture (Phase 2, commits aa88847 → 41dd275):**
+
+- **`subscription_events` table:** idempotency log for inbound
+  Stripe events. `stripe_event_id` UNIQUE constraint is the
+  idempotency lock — duplicate Stripe deliveries fail INSERT and
+  short-circuit to 200 no-op. Three forensic indexes (user,
+  customer, time). Audit columns `tier_before` / `tier_after` /
+  `raw_payload` / `error_message` for post-hoc reconstruction of
+  any tier flip. Migration co-located with
+  `initialise_user_schema` in `database/db.py`.
+- **`POST /webhooks/stripe`:** HMAC signature verification via
+  `stripe.Webhook.construct_event` keyed by
+  `STRIPE_WEBHOOK_SECRET`. No `@login_required` — authenticated by
+  the signature, not Flask session. Fails soft to 200 on handler
+  exceptions (`status='failed'` audit row) to prevent Stripe retry
+  storms on deterministic bugs.
+- **Conversion handler (`checkout.session.completed`):** flips
+  `users.tier` to the resolved tier and writes
+  `stripe_customer_id`, `stripe_subscription_id`,
+  `tier_effective_until`. Load-bearing identity thread is
+  `event.data.object.client_reference_id`, set to
+  `str(session['user_id'])` at checkout creation. Tier resolved by
+  parsing `price.lookup_key` (`<tier>_<currency>_<interval>`) with
+  belt-and-braces validation against `price.metadata.tier`.
+- **Cancellation handler (`customer.subscription.deleted`):**
+  RIDE-OUT semantics. Sets `tier_effective_until` to the
+  subscription's period end. **Does NOT change `users.tier` or
+  `users.is_active`** — the user keeps paid access for the
+  ridden-out period. The downgrade-to-free sweep when the period
+  actually expires is **deferred** (separate design call;
+  scheduled-job vs entitlement-layer check both viable).
+- **`GET /upgrade?tier=&interval=`:** `@login_required` page route
+  that creates a Stripe Checkout Session and 303-redirects to the
+  Stripe-hosted URL. Currency precedence: explicit `?currency=`
+  query > `CF-IPCountry` header > `Accept-Language` containing
+  `en-GB` > USD default. UK → GBP, everything else → USD per
+  locked policy. Rate-limited 10/min.
+- **Stripe Products + Prices** (idempotent setup script
+  `scripts/setup_stripe_products.py`): 2 Products (SignalIntel Pro,
+  SignalIntel Elite) and 8 Prices (2 tiers × 2 currencies × 2
+  intervals) in Stripe test mode. Lookup-key scheme
+  `<tier>_<currency>_<interval>` ties price IDs back to (tier,
+  currency, interval) at webhook time. Live-mode guard: setup
+  script refuses to run unless `STRIPE_SECRET_KEY` starts with
+  `sk_test_`.
+- **Secrets:** `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` in
+  gitignored `config/settings.py`. Placeholders in tracked
+  `config/settings.example.py`. Both documented as SECRET in
+  `docs/config_variable_classification.md`. No `.env` file (locked
+  decision).
+- **API-version drift caught live:** Stripe API 2025-03-31 moved
+  `current_period_*` off the top-level Subscription onto each
+  SubscriptionItem. Both webhook handlers read from the new path
+  (`subscription.items.data[0].current_period_end`); test fixtures
+  mirror the production shape (P15 lesson: matching wrongness on
+  both sides of a test renders the test toothless).
 
 **PROCESS NOTE — scope leak surface by DATA, not by URL.** The
 original Step-3 Phase 1 scoped "penny endpoints" and missed ~10
