@@ -532,6 +532,94 @@ def stripe_webhook():
         conn.close()
 
 
+# ──────────────────────────────────────────────────────────────────────
+# Stripe Checkout creation (Phase 2 Commit 5)
+# ──────────────────────────────────────────────────────────────────────
+#
+# GET /upgrade?tier=<pro|elite>&interval=<monthly|annual> creates a
+# Stripe Checkout Session for the logged-in user and 303-redirects to
+# Stripe's hosted page. The conversion event lands on the webhook
+# (Commit 4); the thread tying it back is client_reference_id, which
+# is set to str(session["user_id"]) here.
+#
+# Currency resolution precedence (highest first):
+#   1. Explicit ?currency=gbp|usd query override (lets us force GBP
+#      for marketing experiments and lets tests cover both branches
+#      without infrastructure).
+#   2. Cloudflare CF-IPCountry header (free + accurate when the app
+#      sits behind Cloudflare; absent in dev).
+#   3. Accept-Language containing 'en-GB' (rough dev fallback when
+#      Cloudflare isn't terminating).
+#   4. Default 'usd'.
+# UK → GBP, everything else → USD per locked policy.
+
+_VALID_TIERS = ("pro", "elite")
+_VALID_INTERVALS = ("monthly", "annual")
+
+
+def _resolve_currency_from_request(req):
+    """Two-letter currency code 'gbp' or 'usd'. See precedence above."""
+    explicit = req.args.get("currency", "").lower()
+    if explicit in ("gbp", "usd"):
+        return explicit
+    cf_country = req.headers.get("CF-IPCountry", "").upper()
+    if cf_country == "GB":
+        return "gbp"
+    if cf_country:
+        return "usd"
+    accept_lang = req.headers.get("Accept-Language", "").lower()
+    if "en-gb" in accept_lang:
+        return "gbp"
+    return "usd"
+
+
+@app.route("/upgrade", methods=["GET"])
+@login_required
+@limiter.limit("10 per minute")
+def upgrade():
+    """Create a Stripe Checkout Session for the logged-in user.
+
+    Validates tier + interval, resolves currency, looks up the
+    matching Stripe Price by lookup_key, creates the session with
+    client_reference_id = session['user_id'] (the load-bearing
+    thread the webhook uses to identify the user), then redirects
+    303 to the Stripe-hosted checkout URL. Stripe handles all card
+    data; we never see it.
+    """
+    tier = request.args.get("tier", "").lower()
+    interval = request.args.get("interval", "").lower()
+
+    if tier not in _VALID_TIERS:
+        return jsonify({"error": f"invalid tier: {tier!r}"}), 400
+    if interval not in _VALID_INTERVALS:
+        return jsonify({"error": f"invalid interval: {interval!r}"}), 400
+
+    currency = _resolve_currency_from_request(request)
+    lookup_key = f"{tier}_{currency}_{interval}"
+
+    prices = stripe.Price.list(lookup_keys=[lookup_key], limit=1)
+    if not prices.data:
+        # The setup script (Commit 3) is meant to keep all 8 lookup_keys
+        # populated; a missing one means a config drift or that someone
+        # disabled the Price in Stripe Dashboard. Loud 500 so the
+        # operator notices.
+        return jsonify({"error": f"no Stripe price for lookup_key={lookup_key}"}), 500
+    price = prices.data[0]
+
+    user_id = session["user_id"]
+    dashboard_url = url_for("dashboard", _external=True)
+
+    checkout_session = stripe.checkout.Session.create(
+        mode="subscription",
+        line_items=[{"price": price.id, "quantity": 1}],
+        client_reference_id=str(user_id),
+        success_url=dashboard_url + "?upgrade=success",
+        cancel_url=dashboard_url + "?upgrade=cancel",
+    )
+
+    return redirect(checkout_session.url, code=303)
+
+
 # ── /dashboard ───────────────────────────────────────────────────────────────
 # Phase 2A (greenfield): 13-panel grid per docs/mockups/dashboard_restructure_v1.html.
 # 2A delivers the 6 above-the-fold panels (Daily Summary, Top 5 Strong,
