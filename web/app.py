@@ -302,8 +302,11 @@ def _resolve_tier_from_subscription(subscription):
             f"resolves to unknown tier {tier_from_lookup!r}"
         )
 
+    # As of API version 2025-03-31, current_period_end lives on each
+    # subscription item, not on the top-level Subscription. We have a
+    # single item per subscription so reading items.data[0] is correct.
     period_end_iso = datetime.utcfromtimestamp(
-        subscription["current_period_end"]
+        item["current_period_end"]
     ).isoformat()
     return tier_from_lookup, period_end_iso
 
@@ -392,8 +395,10 @@ def _handle_subscription_deleted(conn, event):
     except (KeyError, TypeError):
         pass
     if not end_unix:
+        # Fallback to the per-item current_period_end (new API shape:
+        # current_period_* moved off Subscription onto each item).
         try:
-            end_unix = sub["current_period_end"]
+            end_unix = sub["items"]["data"][0]["current_period_end"]
         except (KeyError, TypeError):
             pass
     if not end_unix:

@@ -104,13 +104,15 @@ def make_stripe_subscription_for_lookup(lookup_key, period_end_unix):
         {
             "id": "sub_test_xxx",
             "object": "subscription",
-            "current_period_end": period_end_unix,
             "items": {
                 "object": "list",
                 "data": [
                     {
                         "id": "si_test_xxx",
                         "object": "subscription_item",
+                        # Per the 2025-03-31 API shape, current_period_end
+                        # lives on the item, not the subscription.
+                        "current_period_end": period_end_unix,
                         "price": {
                             "id": "price_test_xxx",
                             "object": "price",
