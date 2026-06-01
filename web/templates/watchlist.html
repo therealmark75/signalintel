@@ -381,6 +381,12 @@ async function submitNew() {
     if (data.ok) {
         closeModals();
         window.location.href = '/watchlist?wl=' + data.id;
+    } else if (data.error === 'tier_limit') {
+        // Shared friendly formatter lives in _watchlist_picker.html and is
+        // exposed on window. Picker is included on every authed page via
+        // _nav.html, so the helper is always present when this modal opens.
+        document.getElementById('new-err').innerHTML =
+            window.formatWatchlistLimitError(data);
     } else {
         document.getElementById('new-err').textContent = data.error || 'Error';
     }

@@ -58,6 +58,19 @@
 </div>
 
 <script>
+// Shared formatter for tier_limit API errors from POST /api/watchlists.
+// Used by:
+//   - the picker's inline-create error pill (this file)
+//   - the /watchlist new-watchlist modal (web/templates/watchlist.html submitNew)
+// Returns an HTML string; callers MUST use .innerHTML, not .textContent,
+// so the /pricing anchor renders as a link.
+window.formatWatchlistLimitError = function(err) {
+    const to = err.upgrade_to
+        ? ` Upgrade to ${err.upgrade_to.charAt(0).toUpperCase()+err.upgrade_to.slice(1)} for more.`
+        : '';
+    return `Watchlist limit reached (${err.current}/${err.limit} · ${err.tier_name}).${to} <a href="/pricing" style="color:#00d4ff;text-decoration:none">View plans →</a>`;
+};
+
 window.WlPicker = (function(){
     let _ticker = null, _triggerEl = null;
     let _state  = {watchlists:[], limit:null, count:0, tier_name:''};
@@ -199,9 +212,8 @@ window.WlPicker = (function(){
             }
             if (isAuto) { if (window.showWlToast) showWlToast(_ticker, false, name); return; }
             if (cr.error === 'tier_limit') {
-                const to = cr.upgrade_to ? ` Upgrade to ${cr.upgrade_to.charAt(0).toUpperCase()+cr.upgrade_to.slice(1)} for more.` : '';
                 document.getElementById('wl-picker-err').innerHTML =
-                    `Watchlist limit reached (${cr.current}/${cr.limit} · ${cr.tier_name}).${to} <a href="/pricing" style="color:#00d4ff;text-decoration:none">View plans →</a>`;
+                    window.formatWatchlistLimitError(cr);
             } else {
                 document.getElementById('wl-picker-err').textContent = cr.error || 'Error creating watchlist';
             }
