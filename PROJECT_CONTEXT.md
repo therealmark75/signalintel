@@ -945,8 +945,7 @@ state.
 
 **Post-Phase-2 backlog (deferred, in order of likely pickup):**
 
-- `/pricing` marketing page — users currently have to construct the
-  `/upgrade?tier=&interval=` URL by hand; no UI affordance.
+- `/pricing` page: SHIPPED Part 36 (1 June 2026). Public marketing plus tier-comparison surface, browser-verified across logged-out, logged-in, and currency-switch walks; Stripe values reconciled. No longer backlog.
 - `tier_effective_until → free` downgrade sweep — ride-out
   cancellation needs something to actually drop tier when the
   period expires (scheduled-job vs entitlement-layer check both

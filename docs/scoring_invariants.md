@@ -412,3 +412,9 @@ Origin: 17 May 2026 economic_calendar staleness, surfaced by Phase 2C / Item 4 f
 ## P27 — Altman Z'' (1995 non-manufacturing) replaces classic Z (1968) for bankruptcy-risk penalty
 
 **P27 — Altman Z'' (1995 non-manufacturing) used for bankruptcy-risk penalty as of SCORING_ENGINE_VERSION 0.14.0 (18 May 2026).** Empirical justification: classic Altman Z (1968 manufacturing) penalised 62.9% of the SignalIntel ticker universe (2,285 of 3,631 computable tickers), a calibration failure for a tech-heavy non-manufacturing universe. Z'' reduces this to 47.8% (1,735 tickers) with thresholds calibrated for non-manufacturing companies. Healthcare sector concentration in distress bin dropped from 47% to 34.4%. Analysis: scripts/altman_distribution_analysis.py, run dated 2026-05-18, results in data/altman_distribution_2026-05-18.csv. Penalty magnitudes (-10 grey, -30 distress, -60 deep distress) preserved for backward-compatible composite-score scale. Four-tier penalty model preserved by splitting Z'' < 1.1 into Z'' [0.0, 1.1) = -30 and Z'' < 0.0 = -60.
+
+---
+
+## P28 - Verify tier-gating on a fixture whose effective_tier equals the tier under test
+
+A trialing account is `effective_tier`=elite for the trial window and shows every gated surface unlocked, so it cannot exercise locked-state gates. Use a stored-free, no-trial account (mark2) for free/locked verification, and a stored-pro account (marktest1) for Pro-band cells. Sibling to P3 (verify in browser): browser truth is only truth when the fixture's effective tier matches the cell under test.
