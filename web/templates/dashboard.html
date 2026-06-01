@@ -1,11 +1,11 @@
-{# Phase 2A — 6 above-fold panels (1-6). Phase 2B adds Elite Spotlight + panels 7-13. #}
+{# Phase 2A: 6 above-fold panels (1-6). Phase 2B adds Elite Spotlight + panels 7-13. #}
 {% from "_locked_teaser.html" import locked_teaser %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Dashboard — SignalIntel</title>
+<title>Dashboard - SignalIntel</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT@9..144,300..900,0..100&family=Inter+Tight:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -282,7 +282,7 @@
   .spot-cta { font-family: var(--font-mono); font-size: 12px; color: var(--gold-400); display: inline-flex; gap: 6px; transition: gap .18s; }
   .spot-cta:hover { gap: 10px; color: var(--gold-300); }
 
-  /* Locked teaser (non-Elite) — full overlay, blurred placeholder */
+  /* Locked teaser (non-Elite), full overlay, blurred placeholder */
   .spotlight.locked .spot-inner { filter: blur(3px) saturate(0.5); opacity: 0.4; pointer-events: none; }
   .spot-lock-overlay {
     position: absolute; inset: 0; display: flex;
@@ -413,10 +413,10 @@
       </h1>
     </div>
 
-    {# ─── ABOVE THE FOLD — 3×2 ────────────────────────────────────── #}
+    {# ─── ABOVE THE FOLD: 3×2 ────────────────────────────────────── #}
     <div class="grid-3">
 
-      {# PANEL 1 — DAILY SUMMARY #}
+      {# PANEL 1: DAILY SUMMARY #}
       <section class="panel">
         <div class="panel-head">
           <span class="panel-title"><span class="idx">01</span>Daily Summary</span>
@@ -434,7 +434,7 @@
             </a>
             <a href="{% if summary.top_mover %}/ticker/{{ summary.top_mover.ticker }}{% else %}/signals{% endif %}" class="stat-line">
               <span class="stat-label"><span class="stat-icn" style="background:var(--green-300)"></span>Top mover</span>
-              <span class="stat-value">{% if summary.top_mover %}{{ summary.top_mover.ticker }} {{ '%+.1f'|format(summary.top_mover.change_pct) }}%{% else %}—{% endif %}</span>
+              <span class="stat-value">{% if summary.top_mover %}{{ summary.top_mover.ticker }} {{ '%+.1f'|format(summary.top_mover.change_pct) }}%{% else %}-{% endif %}</span>
             </a>
             <a href="/earnings" class="stat-line">
               <span class="stat-label"><span class="stat-icn" style="background:var(--gold-400)"></span>Earnings today</span>
@@ -442,14 +442,14 @@
             </a>
             <a href="/markets/^VIX" class="stat-line">
               <span class="stat-label"><span class="stat-icn" style="background:var(--ink-400)"></span>VIX state</span>
-              <span class="stat-value">{% if summary.vix_val is not none %}{{ '%.1f'|format(summary.vix_val) }} {{ summary.vix_label }}{% else %}—{% endif %}</span>
+              <span class="stat-value">{% if summary.vix_val is not none %}{{ '%.1f'|format(summary.vix_val) }} {{ summary.vix_label }}{% else %}-{% endif %}</span>
             </a>
           </div>
         </div>
         <div class="panel-foot"><span class="panel-meta" style="color:var(--ink-500)">click any stat to drill in</span></div>
       </section>
 
-      {# PANEL 2 — TOP 5 STRONG #}
+      {# PANEL 2: TOP 5 STRONG #}
       <section class="panel">
         <div class="panel-head">
           <span class="panel-title"><span class="idx">02</span>Top 5 Strong Signals</span>
@@ -471,7 +471,7 @@
         <div class="panel-foot"><a class="panel-cta" href="/signals">View all signals →</a></div>
       </section>
 
-      {# PANEL 3 — TOP 5 BEARISH #}
+      {# PANEL 3: TOP 5 BEARISH #}
       <section class="panel">
         <div class="panel-head">
           <span class="panel-title"><span class="idx">03</span>Top 5 Bearish Signals</span>
@@ -493,7 +493,7 @@
         <div class="panel-foot"><a class="panel-cta" href="/signals?rating=SELL">View all bearish signals →</a></div>
       </section>
 
-      {# PANEL 4 — MARKET STATE #}
+      {# PANEL 4: MARKET STATE #}
       <section class="panel">
         <div class="panel-head">
           <span class="panel-title"><span class="idx">04</span>Market State</span>
@@ -504,9 +504,9 @@
             {% for t in market_tiles %}
             <a class="mkt-tile" href="/markets/{{ t.symbol }}">
               <div class="mkt-name">{{ t.name }}</div>
-              <div class="mkt-level">{% if t.level is not none %}{{ '{:,.0f}'.format(t.level) if t.level >= 100 else '%.2f'|format(t.level) }}{% else %}—{% endif %}</div>
+              <div class="mkt-level">{% if t.level is not none %}{{ '{:,.0f}'.format(t.level) if t.level >= 100 else '%.2f'|format(t.level) }}{% else %}-{% endif %}</div>
               <div class="mkt-chg {% if t.chg_pct is not none and t.chg_pct >= 0 %}up{% elif t.chg_pct is not none %}down{% endif %}">
-                {% if t.chg_pct is not none %}{{ '%+.2f'|format(t.chg_pct) }}%{% else %}—{% endif %}
+                {% if t.chg_pct is not none %}{{ '%+.2f'|format(t.chg_pct) }}%{% else %}-{% endif %}
               </div>
             </a>
             {% endfor %}
@@ -515,7 +515,7 @@
         <div class="panel-foot"><a class="panel-cta" href="/markets">Full markets view →</a></div>
       </section>
 
-      {# PANEL 5 — WATCHLIST PREVIEW #}
+      {# PANEL 5: WATCHLIST PREVIEW #}
       <section class="panel">
         <div class="panel-head">
           <span class="panel-title"><span class="idx">05</span>Watchlist Preview</span>
@@ -526,10 +526,10 @@
             {% for w in wl_preview %}
             <a class="wl-row" href="/ticker/{{ w.ticker }}">
               <span class="tk">{{ w.ticker }}</span>
-              {% if w.rating %}<span class="tier-badge {{ w.tier_class }}">{{ w.tier_short }}</span>{% else %}<span class="tier-badge" style="color:var(--ink-500);background:transparent">—</span>{% endif %}
-              <span class="score">{% if w.composite_score is not none %}{{ '%.0f'|format(w.composite_score) }}{% else %}—{% endif %}</span>
+              {% if w.rating %}<span class="tier-badge {{ w.tier_class }}">{{ w.tier_short }}</span>{% else %}<span class="tier-badge" style="color:var(--ink-500);background:transparent">-</span>{% endif %}
+              <span class="score">{% if w.composite_score is not none %}{{ '%.0f'|format(w.composite_score) }}{% else %}-{% endif %}</span>
               <span class="wl-chg {% if w.change_pct is not none and w.change_pct >= 0 %}up{% elif w.change_pct is not none %}down{% endif %}">
-                {% if w.change_pct is not none %}{{ '%+.1f'|format(w.change_pct) }}%{% else %}—{% endif %}
+                {% if w.change_pct is not none %}{{ '%+.1f'|format(w.change_pct) }}%{% else %}-{% endif %}
               </span>
             </a>
             {% endfor %}
@@ -540,7 +540,7 @@
         <div class="panel-foot"><a class="panel-cta" href="/watchlist">Full watchlist →</a></div>
       </section>
 
-      {# PANEL 6 — DISCOVERY THEMES #}
+      {# PANEL 6: DISCOVERY THEMES #}
       <section class="panel">
         <div class="panel-head">
           <span class="panel-title"><span class="idx">06</span>Discovery Themes</span>
@@ -562,17 +562,17 @@
     </div>
     {# ─── END ABOVE THE FOLD ──────────────────────────────────────── #}
 
-    {# ─── PANEL 7 — PENNY STOCK SPOTLIGHT (Elite-gated, full-width) ───── #}
+    {# ─── PANEL 7: PENNY STOCK SPOTLIGHT (Elite-gated, full-width) ───── #}
     {% if is_elite and spotlight %}
-      {# Elite-tier branch — real pick data flows to the client #}
+      {# Elite-tier branch: real pick data flows to the client #}
       <section class="spotlight" id="spotlight">
         <div class="spot-inner">
           <div class="spot-col">
             <div class="spot-eyebrow"><span class="lock">★</span>Penny Stock of the Day · Elite</div>
             <div class="spot-ticker">{{ spotlight.ticker }}</div>
-            <div class="spot-company">{{ spotlight.company or '—' }}{% if spotlight.sector %} · {{ spotlight.sector }}{% endif %}</div>
+            <div class="spot-company">{{ spotlight.company or '-' }}{% if spotlight.sector %} · {{ spotlight.sector }}{% endif %}</div>
             <div class="spot-price">
-              {% if spotlight.price is not none %}${{ '%.2f'|format(spotlight.price) }}{% else %}—{% endif %}
+              {% if spotlight.price is not none %}${{ '%.2f'|format(spotlight.price) }}{% else %}-{% endif %}
               {% if spotlight.change_pct is not none %}<span class="chg {% if spotlight.change_pct >= 0 %}up{% else %}down{% endif %}">{{ '%+.1f'|format(spotlight.change_pct) }}%</span>{% endif %}
             </div>
             {% set _legal_class = 'risk-major' if (spotlight.risk_label in ['SEC_ENFORCEMENT','SEC_INVESTIGATION','CRIMINAL','CLASS_ACTION']) else ('risk-minor' if spotlight.risk_label == 'MINOR' else '') %}
@@ -583,7 +583,7 @@
             {% for k, lbl in [('momentum_score','Momentum'), ('quality_score','Quality'), ('insider_score','Insider')] %}
               {% set v = spotlight[k] %}
               <div class="comp-bar-row">
-                <div class="comp-bar-label"><span>{{ lbl }}</span><span class="v">{% if v is not none %}{{ '%.0f'|format(v) }}{% else %}—{% endif %}</span></div>
+                <div class="comp-bar-label"><span>{{ lbl }}</span><span class="v">{% if v is not none %}{{ '%.0f'|format(v) }}{% else %}-{% endif %}</span></div>
                 <div class="comp-track"><div class="comp-fill" style="width:{% if v is not none %}{{ v|round(0) }}{% else %}0{% endif %}%"></div></div>
               </div>
             {% endfor %}
@@ -600,7 +600,7 @@
         </div>
       </section>
     {% else %}
-      {# Non-elite branch — migrated to shared locked_teaser macro (4d).
+      {# Non-elite branch, migrated to shared locked_teaser macro (4d).
          Visual parity with the pre-4d inline locked spotlight: placeholder
          content (spot-cols) renders behind the .lt-overlay (CSS handles
          the blur). NO real pick data reaches the HTML. #}
@@ -610,15 +610,15 @@
       ) %}
         <div class="spot-col">
           <div class="spot-eyebrow"><span class="lock">★</span>Penny Stock of the Day · Elite</div>
-          <div class="spot-ticker">— — — —</div>
+          <div class="spot-ticker">- - - -</div>
           <div class="spot-company">Locked preview</div>
-          <div class="spot-price">$—.—— <span class="chg up">+—.—%</span></div>
+          <div class="spot-price">$-.-- <span class="chg up">+-.-%</span></div>
         </div>
         <div class="spot-col">
           <div class="spot-breakdown-title">Composite breakdown</div>
           {% for lbl in ['Momentum','Quality','Insider'] %}
           <div class="comp-bar-row">
-            <div class="comp-bar-label"><span>{{ lbl }}</span><span class="v">—</span></div>
+            <div class="comp-bar-label"><span>{{ lbl }}</span><span class="v">-</span></div>
             <div class="comp-track"><div class="comp-fill" style="width:42%"></div></div>
           </div>
           {% endfor %}
@@ -635,10 +635,10 @@
 
     <div class="fold-divider">Below the fold · context &amp; flow</div>
 
-    {# ─── BELOW THE FOLD — 3×2 ──────────────────────────────────────── #}
+    {# ─── BELOW THE FOLD: 3×2 ──────────────────────────────────────── #}
     <div class="grid-3">
 
-      {# PANEL 8 — EARNINGS NEXT 7 DAYS #}
+      {# PANEL 8: EARNINGS NEXT 7 DAYS #}
       <section class="panel">
         <div class="panel-head">
           <span class="panel-title"><span class="idx">08</span>Earnings · next 7d</span>
@@ -659,7 +659,7 @@
         <div class="panel-foot"><a class="panel-cta" href="/earnings">Full earnings calendar →</a></div>
       </section>
 
-      {# PANEL 9 — DIVIDENDS THIS WEEK #}
+      {# PANEL 9: DIVIDENDS THIS WEEK #}
       <section class="panel">
         <div class="panel-head">
           <span class="panel-title"><span class="idx">09</span>Dividends · this week</span>
@@ -680,7 +680,7 @@
         <div class="panel-foot"><a class="panel-cta" href="/dividends">Full dividend calendar →</a></div>
       </section>
 
-      {# PANEL 10 — SECTOR PERFORMANCE #}
+      {# PANEL 10: SECTOR PERFORMANCE #}
       <section class="panel">
         <div class="panel-head">
           <span class="panel-title"><span class="idx">10</span>Sector Performance · 7d</span>
@@ -692,7 +692,7 @@
               {% set ret = s.return_7d or 0 %}
               {% set bar_w = ((ret | abs) / (max_abs if max_abs > 0 else 1)) * 100 %}
               <a class="sec-row" href="/screener?sector={{ s.sector|urlencode }}">
-                <span class="sec-rank">{{ s.rank_7d or '—' }}</span>
+                <span class="sec-rank">{{ s.rank_7d or '-' }}</span>
                 <span class="sec-name">{{ s.sector }}<span class="sec-bar" style="width:{{ bar_w|round(0) }}px;background:{% if ret >= 0 %}var(--green-400){% else %}var(--red-400){% endif %};max-width:90px;"></span></span>
                 <span class="sec-pct {% if ret >= 0 %}up{% else %}down{% endif %}">{{ '%+.2f'|format(ret) }}%</span>
               </a>
@@ -704,7 +704,7 @@
         <div class="panel-foot"><a class="panel-cta" href="/markets">Full markets view →</a></div>
       </section>
 
-      {# PANEL 11 — RECENT RATING CHANGES #}
+      {# PANEL 11: RECENT RATING CHANGES #}
       <section class="panel">
         <div class="panel-head">
           <span class="panel-title"><span class="idx">11</span>Recent Rating Changes</span>
@@ -726,7 +726,7 @@
         <div class="panel-foot"><a class="panel-cta" href="/ratings">All rating changes →</a></div>
       </section>
 
-      {# PANEL 12 — INSIDER ACTIVITY #}
+      {# PANEL 12: INSIDER ACTIVITY #}
       <section class="panel">
         <div class="panel-head">
           <span class="panel-title"><span class="idx">12</span>Insider Activity · 14d</span>
@@ -748,7 +748,7 @@
         <div class="panel-foot"><a class="panel-cta" href="/signals">Signals →</a></div>
       </section>
 
-      {# PANEL 13 — NEWS HEADLINES #}
+      {# PANEL 13: NEWS HEADLINES #}
       <section class="panel">
         <div class="panel-head">
           <span class="panel-title"><span class="idx">13</span>News Headlines · 24h</span>
@@ -762,7 +762,7 @@
                 {% if n.source %}<span>{{ n.source }}</span>{% endif %}
                 <span>{{ n.ago }}</span>
               </div>
-              <div class="news-head">{{ n.headline or '—' }}</div>
+              <div class="news-head">{{ n.headline or '-' }}</div>
             </a>
             {% endfor %}
           {% else %}
@@ -772,7 +772,7 @@
         <div class="panel-foot"><span class="panel-meta" style="color:var(--ink-500)">tap a headline to read</span></div>
       </section>
 
-      {# PANEL 14 — SHORT-SQUEEZE SETUPS (confluence: heavy SI + Very Strong/Strong) #}
+      {# PANEL 14: SHORT-SQUEEZE SETUPS (confluence: heavy SI + Very Strong/Strong) #}
       <section class="panel">
         <div class="panel-head">
           <span class="panel-title"><span class="idx">14</span>Short-Squeeze Setups</span>
