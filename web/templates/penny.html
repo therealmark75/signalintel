@@ -4,7 +4,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SignalIntel — Penny &amp; Small Cap</title>
+<title>SignalIntel - Penny &amp; Small Cap</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <style>
 :root{--bg:#080c14;--surface:#0d1520;--surface2:#111d2e;--border:#1a2d45;
@@ -135,7 +135,7 @@ main{padding:24px;max-width:1400px;margin:0 auto;}
     <div class="risk-banner">
         <span class="risk-icon">⚠️</span>
         <div class="risk-text">
-            <strong>High Risk Asset Class.</strong> Penny and small-cap stocks are significantly more volatile than large-cap equities. Prices can move 50–100% in a single session. Liquidity is often low. Capital is at risk — you may lose your entire investment.
+            <strong>High Risk Asset Class.</strong> Penny and small-cap stocks are significantly more volatile than large-cap equities. Prices can move 50-100% in a single session. Liquidity is often low. Capital is at risk: you may lose your entire investment.
         </div>
         <a href="/disclaimer" class="risk-link">Full disclaimer →</a>
     </div>
@@ -240,7 +240,7 @@ function fmtMktCap(v) {
 }
 
 function fmtChg(v) {
-    if (v == null) return '<span class="neu">—</span>';
+    if (v == null) return '<span class="neu">-</span>';
     const sign = v >= 0 ? '+' : '';
     const cls  = v > 0 ? 'up' : v < 0 ? 'dn' : 'neu';
     return `<span class="${cls}">${sign}${Number(v).toFixed(2)}%</span>`;
@@ -277,7 +277,7 @@ async function loadSOTD() {
     card.innerHTML = `
         <div class="sotd-header">
             <div>
-                <div class="sotd-label">★ Penny Stock of the Day — ${d.date}</div>
+                <div class="sotd-label">★ Penny Stock of the Day: ${d.date}</div>
                 <div class="sotd-ticker">${s.ticker}</div>
                 <div class="sotd-company">${s.company || ''} · ${s.sector || ''}</div>
             </div>
