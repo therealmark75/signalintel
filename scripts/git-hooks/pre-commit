@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Auth-adjacent pre-commit hook — P23 mechanical enforcement.
+# Auth-adjacent pre-commit hook - P23 mechanical enforcement.
 # Tracked source: scripts/git-hooks/pre-commit
 # Activated copy: .git/hooks/pre-commit (symlink, via scripts/install-hooks.sh)
 # See CLAUDE.md and PROJECT_CONTEXT.md P23 for the discipline this enforces.
@@ -45,6 +45,73 @@ done < <(git diff --cached --name-only --diff-filter=ACMR)
 
 if [[ ${#STAGED_PATHS[@]} -eq 0 ]]; then
     exit 0
+fi
+
+# --- Pass 0: dash check (additive, diff-based) ---
+# Reject if any ADDED line in the staged diff contains em-dash (U+2014)
+# or en-dash (U+2013). Pre-existing dashes are not policed; only newly
+# introduced ones block. See CLAUDE.md "Content and writing conventions".
+# Detection uses python3 with codepoint escape sequences, never the
+# literal glyph, so the hook source stays clean against its own rule.
+if ! command -v python3 >/dev/null 2>&1; then
+    echo "ERROR: python3 not on PATH; the dash-check Pass 0 requires it." >&2
+    exit 1
+fi
+
+DASH_FAIL=0
+DASH_REPORT=""
+
+dash_scan_path() {
+    local path="$1"
+    git diff --cached -U0 -- "$path" 2>/dev/null | python3 -c 'import sys, re
+EM = chr(0x2014)
+EN = chr(0x2013)
+hdr = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@")
+cur = None
+for line in sys.stdin:
+    line = line.rstrip("\n")
+    m = hdr.match(line)
+    if m:
+        cur = int(m.group(1))
+        continue
+    if line.startswith("+++ ") or line.startswith("--- "):
+        continue
+    if line.startswith("+"):
+        body = line[1:]
+        if EM in body or EN in body:
+            tags = []
+            if EM in body:
+                tags.append("U+2014")
+            if EN in body:
+                tags.append("U+2013")
+            excerpt = body[:120].replace("\t", " ")
+            print(str(cur) + "\t" + ",".join(tags) + "\t" + excerpt)
+        if cur is not None:
+            cur += 1'
+}
+
+for p in "${STAGED_PATHS[@]}"; do
+    rows=$(dash_scan_path "$p")
+    if [[ -n "$rows" ]]; then
+        DASH_FAIL=1
+        DASH_REPORT+="  $p:"$'\n'
+        while IFS=$'\t' read -r ln tags ex; do
+            DASH_REPORT+="    line $ln [$tags]: $ex"$'\n'
+        done <<< "$rows"
+    fi
+done
+
+if [[ $DASH_FAIL -eq 1 ]]; then
+    echo ""
+    echo "============================================"
+    echo "DASH-REJECTION: added lines contain em-dash (U+2014) or en-dash (U+2013)"
+    echo "============================================"
+    printf "%s" "$DASH_REPORT"
+    echo "============================================"
+    echo "Per CLAUDE.md content-and-writing-conventions (commit 158910b),"
+    echo "added lines must contain zero U+2014 and zero U+2013."
+    echo "Use commas, periods, semicolons, colons, brackets, or hyphen (U+002D)."
+    echo "============================================"
 fi
 
 MATCHED=()
@@ -99,6 +166,15 @@ for p in "${STAGED_PATHS[@]}"; do
         MATCHED+=("$p")
     fi
 done
+
+# --- DASH_FAIL is a hard reject; surface P23 too if it matched ---
+if [[ $DASH_FAIL -eq 1 ]]; then
+    if [[ ${#MATCHED[@]} -gt 0 ]]; then
+        echo ""
+        echo "(P23 also matched ${#MATCHED[@]} file(s); use --no-verify after fixing dashes)"
+    fi
+    exit 1
+fi
 
 # --- If still empty, non-auth-adjacent commit → silent pass ---
 if [[ ${#MATCHED[@]} -eq 0 ]]; then
