@@ -4,7 +4,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SignalIntel — Penny Screener</title>
+<title>SignalIntel - Penny Screener</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <style>
 :root{--bg:#080c14;--surface:#0d1520;--surface2:#111d2e;--border:#1a2d45;
@@ -168,7 +168,7 @@ tr:hover td{background:rgba(245,158,11,0.025);cursor:pointer;}
 <div class="risk-banner">
     <span style="font-size:16px;flex-shrink:0;">⚠️</span>
     <div class="risk-text">
-        <strong>High Risk.</strong> Penny stocks are highly volatile and speculative. Prices can move 50–100%+ in a single session. Capital is at risk.
+        <strong>High Risk.</strong> Penny stocks are highly volatile and speculative. Prices can move 50-100%+ in a single session. Capital is at risk.
     </div>
     <a href="/disclaimer" class="risk-link">Full disclaimer →</a>
 </div>
@@ -183,7 +183,7 @@ tr:hover td{background:rgba(245,158,11,0.025);cursor:pointer;}
 {% if locked %}
 {# Server-side locked teaser (4d). The data layer (/api/screener with
    penny rows) is already gated by strip_scores_for_non_elite at the
-   route, so the data wouldn't leak even if JS fired — but the locked
+   route, so the data wouldn't leak even if JS fired, but the locked
    teaser prevents the empty-table flash. #}
 {{ locked_teaser(
     title="Penny Screener",
@@ -195,7 +195,7 @@ tr:hover td{background:rgba(245,158,11,0.025);cursor:pointer;}
     <button class="tier-tab active" data-tier="all" onclick="setTier(this,'all')">All Penny (&lt;$5)</button>
     <button class="tier-tab" data-tier="sub1" onclick="setTier(this,'sub1')">Under $1</button>
     <button class="tier-tab" data-tier="sub025" onclick="setTier(this,'sub025')">Under $0.25</button>
-    <button class="tier-tab" data-tier="1to5" onclick="setTier(this,'1to5')">$1 – $5</button>
+    <button class="tier-tab" data-tier="1to5" onclick="setTier(this,'1to5')">$1 - $5</button>
 </div>
 
 <!-- Preset strip -->
@@ -249,7 +249,7 @@ tr:hover td{background:rgba(245,158,11,0.025);cursor:pointer;}
             <span class="filter-label">RSI (14)</span>
             <div class="range-row">
                 <input type="number" id="f-rsi-min" placeholder="0"   min="0" max="100" step="1">
-                <span class="range-sep">–</span>
+                <span class="range-sep">-</span>
                 <input type="number" id="f-rsi-max" placeholder="100" min="0" max="100" step="1">
             </div>
         </div>
@@ -568,9 +568,9 @@ function ratingClass(r) {
 const TIER_SHORT = {STRONG_BUY:'Very Strong',BUY:'Strong',STRONG_HOLD:'Stable',HOLD:'Neutral',WEAK_HOLD:'Soft',SELL:'Bearish',STRONG_SELL:'Very Bearish'};
 
 function fmtRelvol(v) {
-    if (v == null || v === '') return '<span class="neu">—</span>';
+    if (v == null || v === '') return '<span class="neu">-</span>';
     const n = parseFloat(v);
-    if (isNaN(n)) return '<span class="neu">—</span>';
+    if (isNaN(n)) return '<span class="neu">-</span>';
     let cls = 'relvol-norm';
     let tag = '';
     if (n > 5) {
@@ -584,7 +584,7 @@ function fmtRelvol(v) {
 }
 
 function fmtRsi(v) {
-    if (v == null) return '<span class="neu">—</span>';
+    if (v == null) return '<span class="neu">-</span>';
     const n = parseFloat(v);
     let cls = 'mono';
     if (n < 30) cls += ' rsi-os';
@@ -593,7 +593,7 @@ function fmtRsi(v) {
 }
 
 function scoreBar(v) {
-    if (v == null) return '<span class="neu">—</span>';
+    if (v == null) return '<span class="neu">-</span>';
     const n = Math.max(0, Math.min(100, parseFloat(v)));
     const colour = n >= 70 ? '#00ff88' : n >= 45 ? '#00d4ff' : n >= 25 ? '#f59e0b' : '#ff3b5c';
     return `<div class="score-bar-wrap">
@@ -603,7 +603,7 @@ function scoreBar(v) {
 }
 
 function fmtChange(v) {
-    if (v == null) return '<span class="neu">—</span>';
+    if (v == null) return '<span class="neu">-</span>';
     const n = parseFloat(v);
     const sign = n >= 0 ? '+' : '';
     const cls  = n > 0 ? 'up' : n < 0 ? 'dn' : 'neu';
@@ -611,22 +611,22 @@ function fmtChange(v) {
 }
 
 function fmtVol(v) {
-    if (v == null) return '<span class="neu">—</span>';
+    if (v == null) return '<span class="neu">-</span>';
     const n = parseInt(v);
-    if (isNaN(n)) return '<span class="neu">—</span>';
+    if (isNaN(n)) return '<span class="neu">-</span>';
     if (n >= 1e6) return `<span class="mono">${(n/1e6).toFixed(1)}M</span>`;
     if (n >= 1e3) return `<span class="mono">${(n/1e3).toFixed(0)}K</span>`;
     return `<span class="mono">${n}</span>`;
 }
 
 function fmtPrice(v) {
-    if (v == null) return '<span class="neu">—</span>';
+    if (v == null) return '<span class="neu">-</span>';
     const n = parseFloat(v);
     return `<span class="mono">$${n < 1 ? n.toFixed(4) : n.toFixed(2)}</span>`;
 }
 
 function fmtUpside(v) {
-    if (v == null) return '<span class="neu">—</span>';
+    if (v == null) return '<span class="neu">-</span>';
     const n = parseFloat(v);
     const cls = n > 0 ? 'up' : n < 0 ? 'dn' : 'neu';
     return `<span class="${cls} mono">${n > 0 ? '+' : ''}${n.toFixed(1)}%</span>`;
@@ -643,9 +643,9 @@ function renderTable(rows) {
         return `
         <tr onclick="window.location='/ticker/${r.ticker}?from=penny_screener'">
             <td class="tc-ticker">${r.ticker}</td>
-            <td class="tc-sector">${r.exchange || '—'}</td>
-            <td class="tc-company">${r.company || '—'}</td>
-            <td class="tc-sector">${r.sector || '—'}</td>
+            <td class="tc-sector">${r.exchange || '-'}</td>
+            <td class="tc-company">${r.company || '-'}</td>
+            <td class="tc-sector">${r.sector || '-'}</td>
             <td>${fmtPrice(r.price)}</td>
             <td>${fmtChange(r.change_pct)}</td>
             <td>${fmtVol(r.volume)}</td>
