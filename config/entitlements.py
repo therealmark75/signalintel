@@ -39,12 +39,18 @@ def _now():
     return datetime.utcnow()
 
 
-def _parse_trial_start(ts_str):
-    """Parse a stored trial_started_at TEXT value into naive UTC datetime.
+def _parse_utc_iso(ts_str):
+    """Parse a stored ISO TEXT timestamp into a naive UTC datetime.
+
+    Generic helper shared by trial_active (reads trial_started_at) and
+    effective_tier (reads tier_effective_until). Both columns are
+    written as naive UTC ISO strings by their respective producers;
+    parsing is uniform.
 
     Fail-closed: returns None on missing / non-string / empty /
     malformed input. An unparseable timestamp MUST NOT silently grant
-    access; the caller (trial_active) treats None as 'no trial'.
+    access; callers treat None as the absent-or-invalid case (no
+    trial active, no expiry pending).
     """
     if not ts_str or not isinstance(ts_str, str):
         return None
@@ -69,7 +75,7 @@ def trial_active(user):
     """
     if not isinstance(user, dict):
         return False
-    parsed = _parse_trial_start(user.get('trial_started_at'))
+    parsed = _parse_utc_iso(user.get('trial_started_at'))
     if parsed is None:
         return False
     return (_now() - parsed) < timedelta(days=TRIAL_DAYS)
@@ -86,24 +92,44 @@ def _tier_rank(tier_key):
 
 
 def effective_tier(user):
-    """Resolve the user's *effective* tier accounting for the trial overlay.
+    """Resolve the user's *effective* tier accounting for trial overlay
+    and lazy tier_effective_until expiry.
 
-    Logic:
-      stored      = user['tier'] coerced via get_tier semantics
-                    (unknown / missing / non-dict → 'free')
+    Logic, in order:
+      stored      = user['tier'] coerced via USER_TIERS membership
+                    (unknown / missing / non-dict -> 'free')
+      EXPIRY      if user['tier_effective_until'] parses to a past
+                  datetime, demote stored to 'free' (lazy expiry).
+                  Missing / None / unparseable: no demotion.
       trial_grant = 'elite' if trial_active(user) else None
       return        the HIGHER-RANK of (stored, trial_grant) by USER_TIERS order
 
-    During an active trial window the user always sees 'elite' (top rank).
-    Post-trial, falls back to stored — a paid Pro user falls to 'pro',
-    not 'free'; an unpaid trialist falls to 'free' (the hard paywall floor).
+    During an active trial window the user always sees 'elite' (top
+    rank) regardless of expiry. Post-trial, falls back to stored, with
+    expired paid subs collapsed to 'free' by the lazy check above.
 
-    user=None or non-dict → 'free' (fail closed).
+    user=None or non-dict -> 'free' (fail closed).
     """
     if not isinstance(user, dict):
         return 'free'
     raw = user.get('tier')
     stored = raw if raw in USER_TIERS else 'free'
+
+    # Lazy tier_effective_until expiry: if the stored paid floor has a
+    # PRESENT, PARSEABLE timestamp in the PAST, the floor collapses to
+    # 'free'. Applied to the stored floor BEFORE the trial overlay, so
+    # a trialist whose paid sub has elapsed still sees elite via the
+    # overlay; the same user post-trial falls to free.
+    #
+    # Fail-closed: missing / None / unparseable tier_effective_until
+    # does NOT expire. A null value means "no cancellation pending";
+    # only an explicit past timestamp demotes. A live paying user has
+    # a FUTURE timestamp (their next renewal) and must not be demoted.
+    expiry_iso = user.get('tier_effective_until')
+    if expiry_iso:
+        expiry = _parse_utc_iso(expiry_iso)
+        if expiry is not None and expiry < _now():
+            stored = 'free'
 
     trial_grant = 'elite' if trial_active(user) else None
     if trial_grant is None:

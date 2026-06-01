@@ -98,6 +98,92 @@ def test_effective_tier_elite_no_trial(now):
     assert effective_tier(user) == 'elite'
 
 
+# ── tier_effective_until lazy expiry ───────────────────────────────
+
+
+def _expiry_iso(now_dt, days_offset):
+    """Build an ISO tier_effective_until value at `days_offset` from now.
+
+    Positive = future (paying user, not yet expired).
+    Negative = past (cancelled-and-elapsed user, should demote).
+    """
+    return (now_dt + timedelta(days=days_offset)).isoformat()
+
+
+def test_effective_tier_pro_expiry_past_no_trial(now):
+    """Stored 'pro', tier_effective_until in the PAST, no active trial
+    -> 'free'. This is the leak close: a cancelled paid user whose
+    ride-out period has elapsed must drop to the free floor.
+
+    Catches: lazy expiry regression that would leave cancelled-and-
+             elapsed users at their stored paid tier indefinitely.
+    Ignores: the exact past-offset magnitude; one day past is enough.
+    """
+    user = {'tier': 'pro', 'tier_effective_until': _expiry_iso(now, -1)}
+    assert effective_tier(user) == 'free'
+
+
+def test_effective_tier_pro_expiry_future_no_trial(now):
+    """Stored 'pro', tier_effective_until in the FUTURE, no active trial
+    -> 'pro'. CRITICAL: a live paying user has a future timestamp
+    (their next renewal); they must NOT be demoted.
+
+    Catches: an inverted comparison or off-by-one that would demote
+             every paying subscriber on every request.
+    Ignores: the exact future-offset; one day ahead is enough.
+    """
+    user = {'tier': 'pro', 'tier_effective_until': _expiry_iso(now, +30)}
+    assert effective_tier(user) == 'pro'
+
+
+def test_effective_tier_pro_expiry_past_active_trial(now):
+    """Stored 'pro', tier_effective_until in the PAST, trial 3 days old
+    -> 'elite'. The trial overlay wins over the expired-floor demotion.
+    Order in the resolver: expiry-to-stored, THEN higher-rank-of
+    (stored, trial_grant).
+
+    Catches: the expiry check accidentally running AFTER the overlay,
+             which would demote a mid-trial user with a stale paid sub.
+    Ignores: whether the overlay reads stored or the demoted floor;
+             the overlay's grant is 'elite' regardless.
+    """
+    user = {
+        'tier': 'pro',
+        'tier_effective_until': _expiry_iso(now, -1),
+        'trial_started_at': _trial_ts(now, 3),
+    }
+    assert effective_tier(user) == 'elite'
+
+
+def test_effective_tier_free_no_expiry_unchanged(now):
+    """Stored 'free', tier_effective_until None, no trial -> 'free'.
+    Null tier_effective_until means 'no cancellation pending'; the
+    expiry branch must be a no-op for that case.
+
+    Catches: a None-handling bug that would crash or wrongly demote
+             users with no expiry set.
+    Ignores: the trial-active branch (covered by overlay tests above).
+    """
+    user = {'tier': 'free', 'tier_effective_until': None}
+    assert effective_tier(user) == 'free'
+
+
+def test_effective_tier_pro_expiry_unparseable_fail_closed(now):
+    """Stored 'pro', tier_effective_until is garbage -> 'pro'. Fail-
+    closed: an unparseable timestamp must NOT trigger demotion. The
+    user keeps their stored paid floor and the next webhook write
+    will overwrite the garbage with a valid ISO value.
+
+    Catches: a parse-failure path that defaults to 'demote on
+             uncertainty'. That would lock paying users out of their
+             paid surfaces whenever a write produced a malformed value.
+    Ignores: the specific malformed input shape; one garbage string
+             exercises the except branch in _parse_utc_iso.
+    """
+    user = {'tier': 'pro', 'tier_effective_until': 'not-an-iso-string'}
+    assert effective_tier(user) == 'pro'
+
+
 def test_effective_tier_elite_trial_day_3(now):
     """Stored 'elite', trial 3 days old → 'elite'.
 
