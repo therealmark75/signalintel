@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SignalIntel — Markets</title>
+<title>SignalIntel - Markets</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <!-- Lightweight Charts (tabs 1-3 only; crypto uses TradingView) -->
 <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
@@ -131,7 +131,7 @@ const TV_CFG = {
 
 // ── Lightweight Charts helpers ────────────────────────────────────────────
 function fmtPrice(v) {
-    if (v == null) return '—';
+    if (v == null) return '-';
     if (v >= 10000) return v.toLocaleString('en', {maximumFractionDigits: 0});
     if (v >= 100)   return v.toLocaleString('en', {minimumFractionDigits: 2, maximumFractionDigits: 2});
     if (v < 1)      return v.toFixed(4);
@@ -207,7 +207,7 @@ function initLcGrid(tabId) {
 
         const priceRow = document.createElement('div');
         priceRow.className = 'card-price-row';
-        priceRow.innerHTML = '<span class="card-price-val" style="color:var(--muted)">—</span>';
+        priceRow.innerHTML = '<span class="card-price-val" style="color:var(--muted)">-</span>';
 
         const chartDiv = document.createElement('div');
         chartDiv.className = 'card-chart';
