@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SignalIntel — Screener</title>
+<title>SignalIntel - Screener</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <style>
 :root{--bg:#080c14;--surface:#0d1520;--surface2:#111d2e;--border:#1a2d45;
@@ -161,7 +161,7 @@ tr:hover td{background:rgba(0,212,255,0.03);cursor:pointer;}
         <span class="filter-label">Composite Score</span>
         <div class="range-row">
             <input type="number" id="f-score-min" value="0" min="0" max="100" step="1" placeholder="0">
-            <span class="range-sep">–</span>
+            <span class="range-sep">-</span>
             <input type="number" id="f-score-max" value="100" min="0" max="100" step="1" placeholder="100">
         </div>
     </div>
@@ -181,7 +181,7 @@ tr:hover td{background:rgba(0,212,255,0.03);cursor:pointer;}
         <span class="filter-label">P/E Ratio</span>
         <div class="range-row">
             <input type="number" id="f-pe-min" min="0" placeholder="Min">
-            <span class="range-sep">–</span>
+            <span class="range-sep">-</span>
             <input type="number" id="f-pe-max" placeholder="Max">
         </div>
     </div>
@@ -190,7 +190,7 @@ tr:hover td{background:rgba(0,212,255,0.03);cursor:pointer;}
         <span class="filter-label">RSI (14)</span>
         <div class="range-row">
             <input type="number" id="f-rsi-min" min="0" max="100" placeholder="0">
-            <span class="range-sep">–</span>
+            <span class="range-sep">-</span>
             <input type="number" id="f-rsi-max" min="0" max="100" placeholder="100">
         </div>
     </div>
@@ -220,7 +220,7 @@ tr:hover td{background:rgba(0,212,255,0.03);cursor:pointer;}
         <button class="preset-btn" data-theme="legally_clean" onclick="applyTheme('legally_clean')"
             data-tip="Risk label None or Minor in SEC EDGAR. No active enforcement actions, investigations or class actions.">⚖️ Legally Clean</button>
         <button class="preset-btn" data-theme="insider_buying_surge" onclick="applyTheme('insider_buying_surge')"
-            data-tip="Insider score ≥70 with Strong Signal or better. Directors and officers are net buyers — follow the smart money.">👤 Insider Accumulation</button>
+            data-tip="Insider score ≥70 with Strong Signal or better. Directors and officers are net buyers: follow the smart money.">👤 Insider Accumulation</button>
         <button class="preset-btn" data-theme="undervalued" onclick="applyTheme('undervalued')"
             data-tip="Trading 20%+ below 52-week high with Buy+ rating. Potential recovery candidates.">💎 Undervalued</button>
     </div>
@@ -242,7 +242,7 @@ tr:hover td{background:rgba(0,212,255,0.03);cursor:pointer;}
                     <th data-tip="Market sector classification" onclick="setSort('sector')">SECTOR<span class="sort-arrow" id="sa-sector"></span></th>
                     <th data-tip="Total market capitalisation. Micro <$300M, Small $300M-$2B, Mid $2-10B, Large >$10B" onclick="setSort('market_cap')">MKT CAP<span class="sort-arrow" id="sa-market_cap"></span></th>
                     <th data-tip="SignalIntel 7-tier signal strength" onclick="setSort('rating')">SIGNAL<span class="sort-arrow" id="sa-rating"></span></th>
-                    <th data-tip="Composite score 0–100 combining Momentum, Quality, Insider, Reversion and Legal signals" onclick="setSort('composite_score')">SCORE<span class="sort-arrow" id="sa-composite_score"></span></th>
+                    <th data-tip="Composite score 0-100 combining Momentum, Quality, Insider, Reversion and Legal signals" onclick="setSort('composite_score')">SCORE<span class="sort-arrow" id="sa-composite_score"></span></th>
                     <th data-tip="Sector relative strength score 0-100 based on the ticker's sector ETF 7-day performance." onclick="setSort('sector_strength_score')">SECT SS<span class="sort-arrow" id="sa-sector_strength_score"></span></th>
                     <th data-tip="12-month price target: DCF (40%) + analyst consensus (35%) + technical projection (15%) + quality/legal (10%). Re-calculated daily." onclick="setSort('target_price')">12M TARGET<span class="sort-arrow" id="sa-target_price"></span></th>
                     <th data-tip="% upside/downside to 12-month target. Positive = upside, negative = downside." onclick="setSort('target_upside')">UPSIDE<span class="sort-arrow" id="sa-target_upside"></span></th>
@@ -520,7 +520,7 @@ function resetFilters() {
 
 const ALL_RATINGS = ['STRONG_BUY','BUY','STRONG_HOLD','HOLD','WEAK_HOLD','SELL','STRONG_SELL'];
 
-// Canonical theme definitions — must match config/themes.py
+// Canonical theme definitions: must match config/themes.py
 const THEMES = {
     strong_buy_momentum: {
         ratings: ['STRONG_BUY'],
@@ -600,7 +600,7 @@ function resetToAll() {
     load();
 }
 
-// Legacy preset alias — redirects old ?preset= params to the matching theme
+// Legacy preset alias: redirects old ?preset= params to the matching theme
 function applyPreset(name) {
     const alias = {
         strong_buys: 'strong_buy_momentum',
@@ -673,7 +673,7 @@ document.querySelectorAll('#f-exchange .mcap-btn').forEach(btn => {
         th.addEventListener('mouseleave', () => { box.style.display = 'none'; });
     });
 
-    // Preset button tooltips — pinned below the button
+    // Preset button tooltips: pinned below the button
     document.querySelectorAll('.preset-btn[data-tip]').forEach(btn => {
         btn.addEventListener('mouseenter', () => {
             box.textContent = btn.dataset.tip;
