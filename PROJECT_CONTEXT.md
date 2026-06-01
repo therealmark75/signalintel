@@ -946,10 +946,21 @@ state.
 **Post-Phase-2 backlog (deferred, in order of likely pickup):**
 
 - `/pricing` page: SHIPPED Part 36 (1 June 2026). Public marketing plus tier-comparison surface, browser-verified across logged-out, logged-in, and currency-switch walks; Stripe values reconciled. No longer backlog.
-- `tier_effective_until → free` downgrade sweep — ride-out
-  cancellation needs something to actually drop tier when the
-  period expires (scheduled-job vs entitlement-layer check both
-  viable; design call deferred).
+- - ~~`tier_effective_until → free` downgrade sweep~~ **DONE (Part 37,
+  commit c21f225).** Resolved as a LAZY access-time check inside
+  config/entitlements.py:effective_tier, NOT a scheduled sweep job.
+  When tier_effective_until parses to a past datetime, the stored
+  tier floor collapses to free at resolution time, same no-cron
+  pattern as the trial overlay. Chosen over a cron sweep because
+  Part 37 first routed all five stored-tier bypass surfaces through
+  effective_tier (commit c9d1975), making the resolver the universal
+  entitlement chokepoint; with that in place the lazy check closes the
+  leak everywhere at once. A tier-read guard test
+  (tests/test_tier_read_guard.py) mechanically prevents future
+  surfaces from bypassing the resolver. Trade accepted: no audit-trail
+  row at the moment of demotion (a sweep would have written one); add
+  a lightweight subscription_events write inside the resolver later if
+  demotion analytics are wanted.
 - Email confirmation on signup (lands with the SendGrid
   integration already on the planned-integrations list).
 - Referral programme.
