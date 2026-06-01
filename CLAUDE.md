@@ -225,6 +225,10 @@ Very Strong  Strong  Stable  Neutral  Soft  Bearish  Very Bearish
 - **Surfaces with WL column:** Screener, Penny Screener, Dashboard (All Signals, Sector drilldown, Insiders, Today's Top 10). Ticker detail page has its own dedicated WL button.
 - **Surfaces without WL:** Search results (navigational dropdown, not a data table), Events/Earnings/Dividends (read-only `wl-dot` indicator only), Watchlist page itself (recursive), News, System.
 
+## Content and writing conventions
+
+No em-dashes or en-dashes. Do not use the em-dash character (Unicode U+2014) or the en-dash character (Unicode U+2013) in any file you create or edit: code, HTML and templates, user-facing copy, comments, commit messages, and documentation. Use commas, periods, semicolons, or brackets instead. This is a hard rule with no exceptions, and it applies to all generated content, not only prose addressed to the user. Before committing any file you created or edited, grep it for U+2014 and U+2013 and remove any occurrences.
+
 ## Scope Discipline
 
 CC must not modify code outside the explicit scope of the prompt. If you discover something during the work that seems like it should be fixed, surface it as a finding in your audit table or response. Do not silently include it in the diff.
