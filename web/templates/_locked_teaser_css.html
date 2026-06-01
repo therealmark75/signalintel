@@ -1,7 +1,7 @@
 {# Shared CSS for the locked-teaser component (paywall arc Step 4d).
    Single source of truth. Include once per page that uses the
    locked_teaser macro (dashboard.html does NOT include _nav.html,
-   so CSS placed in _nav.html doesn't reach it — hence this dedicated
+   so CSS placed in _nav.html doesn't reach it. Hence this dedicated
    partial). Pages with the macro:
      dashboard.html · penny.html · penny_screener.html
      backtest.html  · ticker.html
@@ -30,7 +30,7 @@
   background:rgba(8,12,20,0.55);backdrop-filter:blur(2px);
   display:flex;flex-direction:column;align-items:center;justify-content:center;
   gap:10px;}
-/* Inline variant — compact, used in table cells / small surfaces
+/* Inline variant: compact, used in table cells / small surfaces
    like the backtest per-tier "no trades" replacement. */
 .lt-inline{display:flex;flex-direction:column;align-items:center;gap:6px;
   padding:12px;}
