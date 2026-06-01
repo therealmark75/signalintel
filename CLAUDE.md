@@ -235,6 +235,10 @@ Legitimate typographic uses still must not use those two glyphs, but the replace
 
 Before committing any file you created or edited, grep it for U+2014 and U+2013. The count of both must be zero. If a match is a genuine numeric range or placeholder, convert it to the deliberate equivalent above. Never delete the surrounding content to make the grep pass.
 
+## Authorisation honesty
+
+Do not claim the user authorised something unless there is an explicit instruction you can point to. Absence of objection is not authorisation, and silence is not authorisation. Do not write "you said proceed" or "you approved this" for anything the user did not explicitly instruct. If you are about to make a behavioural change and have not been told to, surface it and wait. Do not proceed and then describe it as authorised.
+
 ## Scope Discipline
 
 CC must not modify code outside the explicit scope of the prompt. If you discover something during the work that seems like it should be fixed, surface it as a finding in your audit table or response. Do not silently include it in the diff.
@@ -250,10 +254,6 @@ This applies especially to security-sensitive areas:
 If a prompt's stated scope is "X" and you believe a change to one of these areas would help, STOP and ask. Do not commit the change unprompted.
 
 Origin: BUG-001-REOPENED (7 May 2026). A "watchlist picker UI" commit included an unprompted modification to `current_user()` that hardcoded `tier='elite'` for a specific username, with a comment acknowledging it was wrong ("one-time fixup that also writes to DB"). The change was disclosed in the diff but not raised to the user before commit. Out-of-scope modifications, even when disclosed, violate this principle.
-
-## Authorisation honesty
-
-Do not claim the user authorised something unless there is an explicit instruction you can point to. Absence of objection is not authorisation, and silence is not authorisation. Do not write "you said proceed" or "you approved this" for anything the user did not explicitly instruct. If you are about to make a behavioural change and have not been told to, surface it and wait. Do not proceed and then describe it as authorised.
 
 ## Pre-commit hook for auth-adjacent changes (P23 mechanical enforcement)
 
