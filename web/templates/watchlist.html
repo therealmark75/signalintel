@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SignalIntel — Watchlist</title>
+    <title>SignalIntel - Watchlist</title>
     <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
     <style>
         :root {
@@ -115,7 +115,7 @@
             {% for wl in watchlists %}
             <button class="wl-tab{% if wl.id == active_watchlist_id %} active{% endif %}"
                     data-id="{{ wl.id }}" onclick="switchWatchlist({{ wl.id }})">
-                {{ wl.name }}{% if wl.is_default %} <span class="wl-default-lock" data-tip="Default watchlist — cannot be deleted, but can be renamed.">🔒</span>{% endif %}{% if wl.ticker_count %} <span style="color:var(--muted);font-size:9px">({{ wl.ticker_count }})</span>{% endif %}
+                {{ wl.name }}{% if wl.is_default %} <span class="wl-default-lock" data-tip="Default watchlist: cannot be deleted, but can be renamed.">🔒</span>{% endif %}{% if wl.ticker_count %} <span style="color:var(--muted);font-size:9px">({{ wl.ticker_count }})</span>{% endif %}
                 <span class="bell-btn {% if wl.alerts_enabled %}on{% endif %}"
                       id="bell-{{ wl.id }}"
                       data-tip="{% if wl.alerts_enabled %}Alerts on: Telegram notifications fire for signal changes on tickers in this watchlist.{% else %}Alerts off: this watchlist is muted. Tickers remain tracked.{% endif %}"
@@ -154,11 +154,11 @@
             <thead><tr>
                 <th data-tip="Stock symbol">Ticker</th>
                 <th data-tip="SignalIntel 7-tier signal strength">Signal</th>
-                <th data-tip="Composite score 0–100 combining Momentum, Quality, Insider, Reversion and Legal signals">Score</th>
+                <th data-tip="Composite score 0-100 combining Momentum, Quality, Insider, Reversion and Legal signals">Score</th>
                 <th data-tip="Sector relative strength score 0-100 based on the ticker's sector ETF 7-day performance.">Sector</th>
-                <th data-tip="Momentum score — measures price trend strength and direction">Mom</th>
-                <th data-tip="Quality score — fundamentals including P/E, EPS growth and return on equity">Qual</th>
-                <th data-tip="Insider score — based on recent insider buying and selling activity">Insider</th>
+                <th data-tip="Momentum score: measures price trend strength and direction">Mom</th>
+                <th data-tip="Quality score: fundamentals including P/E, EPS growth and return on equity">Qual</th>
+                <th data-tip="Insider score: based on recent insider buying and selling activity">Insider</th>
                 <th data-tip="Current market price">Price</th>
                 <th data-tip="12-month price target: DCF (40%) + analyst consensus (35%) + technical projection (15%) + quality/legal (10%). Re-calculated daily.">12M Target</th>
                 <th data-tip="% upside/downside to 12-month target. Positive = upside, negative = downside.">Upside</th>
