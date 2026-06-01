@@ -30,6 +30,7 @@ from database.db import (
     get_top_signals_of_day, generate_top_signals_of_day,
 )
 from config.tiers import can_create_watchlist, watchlist_limit, get_tier, next_tier
+from config.pricing import LAUNCH_PRICING, ANNUAL_DISCOUNT_PCT, TIER_FEATURES
 from config.entitlements import (
     effective_tier, can_view_penny_signals, can_view_score_for_ticker,
     strip_scores_for_non_elite, filter_proprietary_flags_for_non_elite,
@@ -3164,6 +3165,50 @@ def api_ticker_tape():
 
 
 # ── Static / public pages ─────────────────────────────
+
+@app.route("/pricing")
+def pricing():
+    """Public pricing discovery surface.
+
+    Posture A (beta-free) is locked: the page shows the real launch
+    numbers but every CTA routes to /register (trial signup), NOT to
+    Stripe checkout. Logged-in visitors see a single neutral beta
+    banner instead of per-column CTAs. No DB lookup, no tier check —
+    only "user_id" in session is read. Currency resolved via the
+    existing precedence helper.
+    """
+    currency = _resolve_currency_from_request(request)
+    symbol = "£" if currency == "gbp" else "$"
+
+    def _fmt(minor_units):
+        whole, frac = divmod(int(minor_units), 100)
+        if frac == 0:
+            return f"{symbol}{whole}"
+        return f"{symbol}{whole}.{frac:02d}"
+
+    paid_tiers = ("pro", "elite")
+    prices = {
+        tier: {
+            "monthly": _fmt(LAUNCH_PRICING[tier][currency]["monthly"]),
+            "annual":  _fmt(LAUNCH_PRICING[tier][currency]["annual"]),
+        }
+        for tier in paid_tiers
+    }
+
+    display_names = {key: get_tier(key)["display_name"] for key in ("free", "pro", "elite")}
+
+    logged_in = "user_id" in session
+
+    return render_template(
+        "pricing.html",
+        currency=currency,
+        prices=prices,
+        annual_discount_pct=ANNUAL_DISCOUNT_PCT,
+        features=TIER_FEATURES,
+        display_names=display_names,
+        logged_in=logged_in,
+    )
+
 
 @app.route("/about")
 def about():

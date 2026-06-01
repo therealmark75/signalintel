@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SignalIntel — Pricing</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300..700&family=Inter+Tight:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --navy-950: #060f1c;
+    --navy-900: #0a1729;
+    --navy-800: #0f2540;
+    --navy-700: #163356;
+    --navy-600: #1f4570;
+    --green-500: #2ea850;
+    --green-400: #3ec762;
+    --green-300: #5dd97e;
+    --gold-500: #c9a04a;
+    --gold-400: #d4b06a;
+    --ink-50:   #f6f7f9;
+    --ink-100:  #e8ebf0;
+    --ink-200:  #cfd5e0;
+    --ink-400:  #8a93a6;
+    --ink-600:  #4a5366;
+
+    --font-display: 'Fraunces', 'Cormorant Garamond', Georgia, serif;
+    --font-body: 'Inter Tight', system-ui, sans-serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    background: var(--navy-950);
+    color: var(--ink-50);
+    font-family: var(--font-body);
+    font-feature-settings: "ss01", "cv11";
+    -webkit-font-smoothing: antialiased;
+  }
+
+  a { color: inherit; text-decoration: none; }
+
+  /* ── Header ────────────────────────────────────── */
+  header.site {
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    background: var(--navy-950);
+  }
+  .site-inner {
+    max-width: 1240px;
+    margin: 0 auto;
+    padding: 22px 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+  }
+  .wordmark {
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-size: 22px;
+    letter-spacing: 0.01em;
+    color: var(--ink-50);
+  }
+  .wordmark em {
+    font-style: italic;
+    color: var(--green-400);
+    font-weight: 400;
+  }
+  .header-actions { display: flex; gap: 14px; align-items: center; }
+  .nav-link {
+    font-size: 14px; color: var(--ink-200);
+    padding: 8px 4px;
+    transition: color .15s;
+  }
+  .nav-link:hover { color: var(--ink-50); }
+  .btn-cta {
+    display: inline-block;
+    background: var(--green-500);
+    color: var(--navy-950);
+    font-weight: 600;
+    font-size: 14px;
+    padding: 10px 18px;
+    border-radius: 6px;
+    transition: background .15s, transform .05s;
+  }
+  .btn-cta:hover { background: var(--green-400); }
+  .btn-cta:active { transform: translateY(1px); }
+  .btn-ghost {
+    display: inline-block;
+    font-size: 14px;
+    color: var(--ink-100);
+    border: 1px solid rgba(255,255,255,0.18);
+    padding: 9px 16px;
+    border-radius: 6px;
+    transition: border-color .15s, color .15s;
+  }
+  .btn-ghost:hover { border-color: var(--green-400); color: var(--ink-50); }
+
+  /* ── Hero ──────────────────────────────────────── */
+  .hero {
+    padding: 96px 32px 56px;
+    text-align: center;
+    background:
+      radial-gradient(ellipse at 50% 0%, rgba(46,168,80,0.07), transparent 60%),
+      var(--navy-950);
+  }
+  .hero-eyebrow {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    color: var(--green-400);
+    margin-bottom: 18px;
+  }
+  .hero h1 {
+    font-family: var(--font-display);
+    font-weight: 400;
+    font-size: clamp(48px, 6vw, 76px);
+    line-height: 1.02;
+    letter-spacing: -0.015em;
+    color: var(--ink-50);
+  }
+  .hero h1 em { font-style: italic; color: var(--gold-500); }
+  .hero-sub {
+    max-width: 640px;
+    margin: 22px auto 0;
+    font-size: 18px;
+    line-height: 1.55;
+    color: var(--ink-200);
+  }
+
+  /* ── Beta banner (logged-in) ───────────────────── */
+  .beta-banner {
+    max-width: 920px;
+    margin: 36px auto 0;
+    padding: 18px 24px;
+    border: 1px solid rgba(201,160,74,0.35);
+    background: rgba(201,160,74,0.08);
+    border-radius: 10px;
+    text-align: center;
+    font-size: 15px;
+    color: var(--ink-100);
+  }
+  .beta-banner strong { color: var(--gold-400); font-weight: 600; }
+
+  /* ── Pricing grid ──────────────────────────────── */
+  .pricing {
+    padding: 64px 32px 32px;
+  }
+  .pricing-inner {
+    max-width: 1180px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 22px;
+  }
+  .card {
+    background: var(--navy-900);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 14px;
+    padding: 36px 30px 32px;
+    display: flex;
+    flex-direction: column;
+  }
+  .card.featured {
+    border-color: rgba(62,199,98,0.45);
+    background:
+      linear-gradient(180deg, rgba(46,168,80,0.06), transparent 40%),
+      var(--navy-900);
+    position: relative;
+  }
+  .card.featured::before {
+    content: "Most popular";
+    position: absolute;
+    top: -11px; left: 28px;
+    background: var(--green-500);
+    color: var(--navy-950);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    padding: 4px 10px;
+    border-radius: 4px;
+  }
+  .tier-name {
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-size: 26px;
+    color: var(--ink-50);
+    margin-bottom: 6px;
+  }
+  .tier-tagline {
+    font-size: 13px;
+    color: var(--ink-400);
+    margin-bottom: 22px;
+    min-height: 18px;
+  }
+
+  .price-block { margin-bottom: 20px; }
+  .price-line {
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-size: 42px;
+    line-height: 1.05;
+    color: var(--ink-50);
+  }
+  .price-line .interval {
+    font-family: var(--font-body);
+    font-weight: 400;
+    font-size: 16px;
+    color: var(--ink-400);
+    margin-left: 4px;
+  }
+  .price-annual {
+    margin-top: 6px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--ink-200);
+    letter-spacing: 0.02em;
+  }
+  .price-annual .save {
+    color: var(--green-400);
+    margin-left: 6px;
+  }
+  .beta-annot {
+    margin-top: 12px;
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--gold-400);
+    padding: 4px 10px;
+    border: 1px solid rgba(201,160,74,0.4);
+    border-radius: 4px;
+  }
+  .price-free {
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-size: 42px;
+    color: var(--ink-50);
+  }
+
+  .feature-list {
+    list-style: none;
+    margin: 8px 0 28px;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    flex-grow: 1;
+  }
+  .feature-list li {
+    font-size: 14px;
+    color: var(--ink-200);
+    padding-left: 22px;
+    position: relative;
+    line-height: 1.45;
+  }
+  .feature-list li::before {
+    content: "✓";
+    position: absolute;
+    left: 0; top: 0;
+    color: var(--green-400);
+    font-weight: 700;
+  }
+
+  .card-cta {
+    display: block;
+    text-align: center;
+    background: var(--green-500);
+    color: var(--navy-950);
+    font-weight: 600;
+    font-size: 15px;
+    padding: 13px 18px;
+    border-radius: 8px;
+    transition: background .15s, transform .05s;
+  }
+  .card-cta:hover { background: var(--green-400); }
+  .card-cta:active { transform: translateY(1px); }
+  .card-cta.ghost {
+    background: transparent;
+    color: var(--ink-100);
+    border: 1px solid rgba(255,255,255,0.18);
+  }
+  .card-cta.ghost:hover { border-color: var(--green-400); color: var(--ink-50); }
+
+  /* ── Bottom-line copy ──────────────────────────── */
+  .bottom-line {
+    max-width: 760px;
+    margin: 24px auto 0;
+    padding: 24px 32px 80px;
+    text-align: center;
+    font-size: 15px;
+    color: var(--ink-400);
+    line-height: 1.6;
+  }
+  .bottom-line strong { color: var(--gold-400); font-weight: 500; }
+
+  /* ── Footer ────────────────────────────────────── */
+  footer.site {
+    border-top: 1px solid rgba(255,255,255,0.06);
+    padding: 22px 32px;
+    text-align: center;
+    font-size: 12px;
+    color: var(--ink-400);
+  }
+  footer.site a { color: var(--ink-200); margin: 0 10px; }
+  footer.site a:hover { color: var(--ink-50); }
+
+  @media (max-width: 880px) {
+    .pricing-inner { grid-template-columns: 1fr; }
+    .card.featured::before { left: 22px; }
+    .hero { padding-top: 64px; }
+  }
+</style>
+</head>
+<body>
+
+<header class="site">
+  <div class="site-inner">
+    <a href="/" class="wordmark">Signal<em>Intel</em></a>
+    <div class="header-actions">
+      {% if logged_in %}
+        <a href="/" class="btn-ghost">Back to dashboard</a>
+      {% else %}
+        <a href="/login" class="nav-link">Sign in</a>
+        <a href="/register" class="btn-cta">Start free trial</a>
+      {% endif %}
+    </div>
+  </div>
+</header>
+
+<section class="hero">
+  <div class="hero-eyebrow">Pricing · Free during beta</div>
+  <h1>Pay for the <em>signals</em>,<br>not the dashboard.</h1>
+  <p class="hero-sub">
+    Two paid tiers at launch, plus a free floor. Every paid tier is free during the beta —
+    full pricing rolls out at general launch.
+  </p>
+
+  {% if logged_in %}
+  <div class="beta-banner">
+    <strong>You're signed in.</strong> All tiers are free during beta. Full pricing rolls out at general launch.
+  </div>
+  {% endif %}
+</section>
+
+<section class="pricing">
+  <div class="pricing-inner">
+
+    {# ── FREE ── #}
+    <div class="card">
+      <div class="tier-name">{{ display_names['free'] }}</div>
+      <div class="tier-tagline">The unpaid floor. Browse, don't trade.</div>
+      <div class="price-block">
+        <div class="price-free">Free</div>
+      </div>
+      <ul class="feature-list">
+        {% for feature in features['free'] %}
+        <li>{{ feature }}</li>
+        {% endfor %}
+      </ul>
+      {% if not logged_in %}
+      <a href="/register" class="card-cta ghost">Start free trial</a>
+      {% endif %}
+    </div>
+
+    {# ── PRO (featured) ── #}
+    <div class="card featured">
+      <div class="tier-name">{{ display_names['pro'] }}</div>
+      <div class="tier-tagline">Full signals, alerts, tournaments.</div>
+      <div class="price-block">
+        <div class="price-line">{{ prices['pro']['monthly'] }}<span class="interval">/mo</span></div>
+        <div class="price-annual">
+          {{ prices['pro']['annual'] }} /yr<span class="save">· save {{ annual_discount_pct }}%</span>
+        </div>
+        <div class="beta-annot">Free during beta</div>
+      </div>
+      <ul class="feature-list">
+        {% for feature in features['pro'] %}
+        <li>{{ feature }}</li>
+        {% endfor %}
+      </ul>
+      {% if not logged_in %}
+      <a href="/register" class="card-cta">Start free trial</a>
+      {% endif %}
+    </div>
+
+    {# ── ELITE ── #}
+    <div class="card">
+      <div class="tier-name">{{ display_names['elite'] }}</div>
+      <div class="tier-tagline">Pro plus API, unlimited watchlists, penny signals.</div>
+      <div class="price-block">
+        <div class="price-line">{{ prices['elite']['monthly'] }}<span class="interval">/mo</span></div>
+        <div class="price-annual">
+          {{ prices['elite']['annual'] }} /yr<span class="save">· save {{ annual_discount_pct }}%</span>
+        </div>
+        <div class="beta-annot">Free during beta</div>
+      </div>
+      <ul class="feature-list">
+        {% for feature in features['elite'] %}
+        <li>{{ feature }}</li>
+        {% endfor %}
+      </ul>
+      {% if not logged_in %}
+      <a href="/register" class="card-cta">Start free trial</a>
+      {% endif %}
+    </div>
+
+  </div>
+
+  <div class="bottom-line">
+    <strong>All paid tiers free during beta. Pricing announced before general launch.</strong>
+  </div>
+</section>
+
+<footer class="site">
+  <a href="/about">About</a>
+  <a href="/contact">Contact</a>
+  <a href="/privacy">Privacy</a>
+  <a href="/terms">Terms</a>
+  <a href="/disclaimer">Disclaimer</a>
+</footer>
+
+</body>
+</html>
