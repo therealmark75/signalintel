@@ -26,9 +26,9 @@ Args:
   title       — short heading visible in the overlay
   description — supporting copy under the title
   cta_text    — CTA button text (default "Upgrade to Elite →")
-  cta_url     — CTA href (default /account)
+  cta_url     — CTA href (default /pricing)
 #}
-{% macro locked_teaser(title, description, cta_text="Upgrade to Elite →", cta_url="/account") -%}
+{% macro locked_teaser(title, description, cta_text="Upgrade to Elite →", cta_url="/pricing") -%}
 <div class="locked-teaser{% if caller %} with-placeholder{% endif %}">
   {%- if caller %}
   <div class="lt-placeholder" aria-hidden="true">
