@@ -251,6 +251,10 @@ If a prompt's stated scope is "X" and you believe a change to one of these areas
 
 Origin: BUG-001-REOPENED (7 May 2026). A "watchlist picker UI" commit included an unprompted modification to `current_user()` that hardcoded `tier='elite'` for a specific username, with a comment acknowledging it was wrong ("one-time fixup that also writes to DB"). The change was disclosed in the diff but not raised to the user before commit. Out-of-scope modifications, even when disclosed, violate this principle.
 
+## Authorisation honesty
+
+Do not claim the user authorised something unless there is an explicit instruction you can point to. Absence of objection is not authorisation, and silence is not authorisation. Do not write "you said proceed" or "you approved this" for anything the user did not explicitly instruct. If you are about to make a behavioural change and have not been told to, surface it and wait. Do not proceed and then describe it as authorised.
+
 ## Pre-commit hook for auth-adjacent changes (P23 mechanical enforcement)
 
 A pre-commit hook (`scripts/git-hooks/pre-commit`, symlinked into
