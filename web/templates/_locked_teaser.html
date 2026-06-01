@@ -4,29 +4,29 @@ Single source of truth for the "Upgrade to Elite" lock UX across:
   - dashboard.html Panel 7 (canonical caller, migrated from inline)
   - penny.html
   - penny_screener.html
-  - backtest.html (per-tier trades, inline variant — uses .lt-inline CSS)
+  - backtest.html (per-tier trades, inline variant, uses .lt-inline CSS)
   - ticker.html (score panel reveal)
 
 CSS lives in _nav.html (universally included on authenticated pages).
 Adding a new surface: import this macro and call it. Single style
 source means future copy/spacing changes happen in one place.
 
-Usage — plain banner:
+Usage (plain banner):
     {% from "_locked_teaser.html" import locked_teaser %}
     {{ locked_teaser("Penny Stock of the Day",
-                     "Daily curated penny pick — Elite tier.") }}
+                     "Daily curated penny pick. Elite tier.") }}
 
-Usage — with blurred placeholder behind (dashboard Panel 7 parity
-shape — pass placeholder HTML via {% call %}):
+Usage (with blurred placeholder behind, dashboard Panel 7 parity
+shape, pass placeholder HTML via {% call %}):
     {% call locked_teaser("Penny Stock of the Day", "...") %}
       <div class="spot-col">...fake placeholder content...</div>
     {% endcall %}
 
 Args:
-  title       — short heading visible in the overlay
-  description — supporting copy under the title
-  cta_text    — CTA button text (default "Upgrade to Elite →")
-  cta_url     — CTA href (default /pricing)
+  title:       short heading visible in the overlay
+  description: supporting copy under the title
+  cta_text:    CTA button text (default "Upgrade to Elite →")
+  cta_url:     CTA href (default /pricing)
 #}
 {% macro locked_teaser(title, description, cta_text="Upgrade to Elite →", cta_url="/pricing") -%}
 <div class="locked-teaser{% if caller %} with-placeholder{% endif %}">

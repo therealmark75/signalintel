@@ -160,7 +160,7 @@ def db_query(sql, params=()):
 def index():
     # Phase 2A: logged-in users go straight to the new /dashboard. The historical
     # index() body below is preserved per the Phase 2A spec ("add the redirect
-    # branch only — do not remove or rewrite the existing / route logic") and is
+    # branch only. Do not remove or rewrite the existing / route logic") and is
     # unreachable while this redirect is in place.
     return redirect(url_for("dashboard"))
 
@@ -250,7 +250,7 @@ def logout():
 #
 # Authenticated by Stripe-Signature header (HMAC-SHA256 over
 # `{timestamp}.{payload}` keyed by STRIPE_WEBHOOK_SECRET). NOT by Flask
-# session — the webhook is called by Stripe's servers, not by a browser.
+# session. The webhook is called by Stripe's servers, not by a browser.
 #
 # Idempotency: subscription_events.stripe_event_id has a UNIQUE
 # constraint. The first action of every webhook is to INSERT that row
@@ -262,7 +262,7 @@ def logout():
 # customer.subscription.deleted we set tier_effective_until to the
 # subscription's end date and do NOT change users.tier or users.is_active.
 # The downgrade-to-free sweep when the period actually expires is its own
-# concern (deferred — see docs/stripe_billing_phase1.md § 8).
+# concern (deferred, see docs/stripe_billing_phase1.md § 8).
 
 def _resolve_tier_from_subscription(subscription):
     """Resolve (tier, tier_effective_until_iso) from a Stripe Subscription.
@@ -270,7 +270,7 @@ def _resolve_tier_from_subscription(subscription):
     Reads lookup_key from the subscription's first item's price.
     lookup_key format is '<tier>_<currency>_<interval>' so tier is
     lookup_key.split('_')[0]. Validates against price.metadata.tier
-    as belt-and-braces — catches Stripe-side fat-fingers where a price
+    as belt-and-braces, catches Stripe-side fat-fingers where a price
     was created with the wrong lookup_key.
     """
     item = subscription["items"]["data"][0]
@@ -281,7 +281,7 @@ def _resolve_tier_from_subscription(subscription):
         lookup_key = None
     if not lookup_key:
         raise ValueError(
-            f"subscription {subscription['id']} price has no lookup_key — "
+            f"subscription {subscription['id']} price has no lookup_key: "
             f"webhook cannot resolve tier without it"
         )
     tier_from_lookup = lookup_key.split("_")[0]
@@ -377,14 +377,14 @@ def _handle_checkout_completed(conn, event):
 
 
 def _handle_subscription_deleted(conn, event):
-    """Subscription ended/canceled — RIDE OUT semantics.
+    """Subscription ended/canceled. RIDE OUT semantics.
 
     Set tier_effective_until to the actual subscription end (ended_at
     if present, else current_period_end). Do NOT change users.tier.
     Do NOT change users.is_active. The downgrade-to-free sweep is a
     separate concern.
 
-    Returns (tier_before, tier_after) — tier_after == tier_before
+    Returns (tier_before, tier_after). tier_after == tier_before
     because tier is deliberately unchanged.
     """
     sub = event["data"]["object"]
@@ -440,7 +440,7 @@ def stripe_webhook():
     Returns:
       400 if signature is missing/invalid.
       500 if STRIPE_WEBHOOK_SECRET is empty (misconfiguration).
-      200 in every other case — including handler failures (logged
+      200 in every other case, including handler failures (logged
           to subscription_events.status='failed' for forensics).
           Returning 200 on handler failure prevents Stripe from
           retrying a deterministic bug; the failed row in our audit
@@ -639,7 +639,7 @@ def dashboard():
     tier_key    = user.get("tier", "free") if user else "free"
     # is_elite reads the trial-aware resolver so a day-3 trialist (stored
     # tier='free', trial active) correctly sees the Elite penny panel.
-    # tier_key stays as the RAW stored column — BUG-001 contract requires
+    # tier_key stays as the RAW stored column. BUG-001 contract requires
     # the nav badge to reflect DB state, not the overlay.
     is_elite    = (effective_tier(user) == 'elite')
 
@@ -653,7 +653,7 @@ def dashboard():
     last_scored  = meta_row[0]["last_scored"]  if meta_row else None
     ticker_count = meta_row[0]["ticker_count"] if meta_row else 0
 
-    # ── Panel 1 — Daily Summary ──────────────────────────────────────────────
+    # ── Panel 1: Daily Summary ──────────────────────────────────────────────
     UP_SET   = {"STRONG_BUY", "BUY", "STRONG_HOLD"}
     DOWN_SET = {"SELL", "STRONG_SELL", "WEAK_HOLD"}
     rc_rows = db_query("""
@@ -701,7 +701,7 @@ def dashboard():
         "vix_label":      vix_label,
     }
 
-    # ── Panels 2 / 3 — Top 5 Strong + Top 5 Bearish ──────────────────────────
+    # ── Panels 2 / 3: Top 5 Strong + Top 5 Bearish ──────────────────────────
     TIER_CLASS = {
         "STRONG_BUY":  "tb-vs",
         "BUY":         "tb-s",
@@ -717,7 +717,7 @@ def dashboard():
             "reversion": row.get("reversion_score"),
         }
         # Phase 2B: for bearish, treat 0-valued components as missing (same
-        # rationale as the composite>0 guard on the panel query — a 0 here is
+        # rationale as the composite>0 guard on the panel query. A 0 here is
         # typically a penalty-floored / unscored value, not a real bearish
         # driver; surfacing it produced "weak X 0" artefacts in 2A).
         if direction == "strong":
@@ -725,7 +725,7 @@ def dashboard():
         else:
             comps = {k: v for k, v in comps.items() if v is not None and v > 0}
         if not comps:
-            return "—"
+            return "-"
         if direction == "strong":
             k = max(comps, key=lambda x: comps[x])
             return f"{k} {comps[k]:.0f}"
@@ -751,7 +751,7 @@ def dashboard():
         ORDER BY composite_score DESC LIMIT 5
     """), "strong")
 
-    # Panel 3 fix (Phase 2B): exclude composite_score = 0 — those rows are the
+    # Panel 3 fix (Phase 2B): exclude composite_score = 0. Those rows are the
     # penalty-floored set (761 SELL/STRONG_SELL rows pinned at 0 by _clamp on
     # the latest run); they're not genuine bearish conviction, they're tickers
     # whose composite went negative and got floored. Real bearish names start
@@ -766,7 +766,7 @@ def dashboard():
         ORDER BY composite_score ASC LIMIT 5
     """), "bearish")
 
-    # ── Panel 4 — Market State (Hang Seng dropped — Phase 1 flagged ^HSI empty) ─
+    # ── Panel 4: Market State (Hang Seng dropped, Phase 1 flagged ^HSI empty) ─
     INDICES = [
         ("^GSPC", "S&P 500"),
         ("^IXIC", "NASDAQ"),
@@ -790,7 +790,7 @@ def dashboard():
             "chg_pct": chg_pct,
         })
 
-    # ── Panel 5 — Watchlist Preview ──────────────────────────────────────────
+    # ── Panel 5: Watchlist Preview ──────────────────────────────────────────
     default_wl_id = get_or_create_default_watchlist(DATABASE_PATH, user["id"])
     wl_full   = get_watchlist(DATABASE_PATH, user["id"], default_wl_id)
     wl_preview = []
@@ -803,7 +803,7 @@ def dashboard():
     wl_meta = next((m for m in metas if m.get("id") == default_wl_id), None)
     wl_name = (wl_meta or {}).get("name", "Watchlist")
 
-    # ── Panel 6 — Discovery Themes (live counts via shared helper) ───────────
+    # ── Panel 6: Discovery Themes (live counts via shared helper) ───────────
     counts = _compute_theme_counts(DATABASE_PATH)
     from config.themes import THEMES
     themes_panel = []
@@ -815,9 +815,9 @@ def dashboard():
             "count": counts.get(th["id"], 0),
         })
 
-    # ── Panel 7 — Penny Stock Spotlight (ELITE-GATED, server-side only) ──────
+    # ── Panel 7: Penny Stock Spotlight (ELITE-GATED, server-side only) ──────
     # Phase 1 lesson: free clients must never receive real pick data. Non-Elite
-    # users get spotlight=None — the template renders the locked teaser with
+    # users get spotlight=None, the template renders the locked teaser with
     # placeholder copy only, no ticker/price/breakdown leaks into the HTML.
     spotlight = _get_penny_pick_full(DATABASE_PATH) if is_elite else None
 
@@ -826,7 +826,7 @@ def dashboard():
     _now = _dt.utcnow()
     def _ago(ts):
         if not ts:
-            return "—"
+            return "-"
         try:
             s = ts.replace("Z", "").replace("T", " ")
             t = _dt.fromisoformat(s.split(".")[0])
@@ -842,7 +842,7 @@ def dashboard():
             return f"{secs // 3600}h ago"
         return f"{secs // 86400}d ago"
 
-    # ── Panel 8 — Earnings Next 7 Days ───────────────────────────────────────
+    # ── Panel 8: Earnings Next 7 Days ───────────────────────────────────────
     # Sparse-state: 4 rows live in 7-day window per Phase 1.
     earnings_upcoming = db_query("""
         SELECT ec.ticker, ec.earnings_date, ec.eps_estimate,
@@ -863,7 +863,7 @@ def dashboard():
         for r in earnings_upcoming
     ]
 
-    # ── Panel 9 — Dividends This Week ────────────────────────────────────────
+    # ── Panel 9: Dividends This Week ────────────────────────────────────────
     # Sparse-state: 2 rows live this week per Phase 1.
     divs_week = db_query("""
         SELECT dv.ticker, dv.ex_dividend_date, dv.dividend_yield,
@@ -884,10 +884,10 @@ def dashboard():
         for r in divs_week
     ]
 
-    # ── Panel 10 — Sector Performance (7d ranking via shared helper) ─────────
+    # ── Panel 10: Sector Performance (7d ranking via shared helper) ─────────
     sectors_panel = _get_sector_performance(DATABASE_PATH)
 
-    # ── Panel 11 — Recent Rating Changes ─────────────────────────────────────
+    # ── Panel 11: Recent Rating Changes ─────────────────────────────────────
     rating_change_rows = db_query("""
         SELECT ticker, old_rating, new_rating, composite_score, change_date
         FROM rating_changes
@@ -898,13 +898,13 @@ def dashboard():
     rating_changes_panel = []
     for r in rating_change_rows:
         d = dict(r)
-        d["old_short"] = tier_short(d.get("old_rating") or "") or "—"
-        d["new_short"] = tier_short(d.get("new_rating") or "") or "—"
+        d["old_short"] = tier_short(d.get("old_rating") or "") or "-"
+        d["new_short"] = tier_short(d.get("new_rating") or "") or "-"
         d["new_class"] = TIER_CLASS.get(d.get("new_rating") or "", "")
         d["ago"]       = _ago(d.get("change_date"))
         rating_changes_panel.append(d)
 
-    # ── Panel 12 — Insider Activity (cluster signals, 14d) ───────────────────
+    # ── Panel 12: Insider Activity (cluster signals, 14d) ───────────────────
     insider_panel = db_query("""
         SELECT ticker, signal_type,
                MAX(insider_count) AS insider_count,
@@ -920,7 +920,7 @@ def dashboard():
         {**dict(r), "ago": _ago(r.get("detected_at"))} for r in insider_panel
     ]
 
-    # ── Panel 13 — News Headlines (latest 24h) ───────────────────────────────
+    # ── Panel 13: News Headlines (latest 24h) ───────────────────────────────
     news_panel = db_query("""
         SELECT ticker, headline, source, published, scraped_at, url
         FROM news_sentiment
@@ -933,7 +933,7 @@ def dashboard():
         for r in news_panel
     ]
 
-    # ── Panel 14 — Short-Squeeze Setups (confluence: heavy SI + Very Strong/Strong) ─
+    # ── Panel 14: Short-Squeeze Setups (confluence: heavy SI + Very Strong/Strong) ─
     squeeze_panel = [
         {**r, "tier_short": tier_short(r["rating"])}
         for r in _get_squeeze_candidates(DATABASE_PATH)
@@ -1390,7 +1390,7 @@ def api_sectors():
 def _get_sector_performance(db_path: str) -> list:
     """Latest sector relative strength ranking (all 11 sectors).
 
-    Canonical query — extracted from api_sector_performance so the dashboard
+    Canonical query, extracted from api_sector_performance so the dashboard
     route can reuse the same data without duplicating SQL.
     """
     conn = get_connection(db_path)
@@ -1412,7 +1412,7 @@ def _get_squeeze_candidates(db_path: str) -> list:
     a Very Strong / Strong composite rating.
 
     Display-only (not a scoring component). FinViz `short_interest_pct` is
-    the only data source — ~49.5% universe coverage is accepted (the tile
+    the only data source. ~49.5% universe coverage is accepted (the tile
     is inherently selective and fires on the heavily-shorted tail where
     FinViz coverage is strongest).
 
@@ -1422,7 +1422,7 @@ def _get_squeeze_candidates(db_path: str) -> list:
       - short_interest_pct <= 100                 (implausibility guard,
                                                    mirrors inst_own >100)
       - julianday('now') - julianday(scraped_at) <= 14
-                                                  (staleness suppression —
+                                                  (staleness suppression,
                                                    half a bi-monthly cycle)
 
     Elevated band: short_interest_pct >= 20 → caller renders a gold chip.
@@ -1767,7 +1767,7 @@ def api_high_impact_banner():
 def _compute_theme_counts(db_path: str) -> dict:
     """Return stock counts for all 7 discovery theme cards.
 
-    Canonical query logic — identical to /api/screener?theme=<id>.
+    Canonical query logic, identical to /api/screener?theme=<id>.
     Extracted from api_theme_counts so the dashboard route can call the same
     underlying computation without duplicating SQL.
     """
@@ -2126,7 +2126,7 @@ def api_screener():
     _sig_cols = {"rating","composite_score","target_price","target_upside",
                  "momentum_score","quality_score","insider_score","reversion_score",
                  "sector_strength_score"}
-    # Columns stored as TEXT but containing numeric values — must cast for correct sort order
+    # Columns stored as TEXT but containing numeric values, must cast for correct sort order
     _numeric_text_cols = {"market_cap"}
     if sort_col in _ss_cols:
         if sort_col in _numeric_text_cols:
@@ -2185,13 +2185,13 @@ def api_screener():
     target_count = sum(1 for r in rows if r.get("target_price") is not None)
     target_banner = None
     if rows and target_count < len(rows) * 0.5:
-        target_banner = "Target prices are being recalculated — check back shortly."
+        target_banner = "Target prices are being recalculated. Check back shortly."
 
-    # Price-aware score gate. Per-row strip via the shared helper —
-    # penny rows ($1-5) lose composite + sub-scores + rating + targets
+    # Price-aware score gate. Per-row strip via the shared helper.
+    # Penny rows ($1-5) lose composite + sub-scores + rating + targets
     # for non-elite. The $5 boundary lives in can_view_score_for_ticker;
     # no parallel price logic here. target_banner is computed BEFORE the
-    # strip on purpose — it reflects backend data freshness, not the
+    # strip on purpose, it reflects backend data freshness, not the
     # caller's tier view.
     tier = effective_tier(current_user())
     rows = strip_scores_for_non_elite(rows, tier, price_key='price')
@@ -2373,8 +2373,8 @@ def api_ticker(ticker):
 
     # Score-panel gate (price-aware). For non-elite + penny band ($1-5),
     # strip signal/history/technical/fair_value to teaser values; surface
-    # "locked": True. The $5 boundary lives in can_view_score_for_ticker
-    # — do NOT reimplement it inline. price=None fails closed (elite-only).
+    # "locked": True. The $5 boundary lives in can_view_score_for_ticker.
+    # Do NOT reimplement it inline. price=None fails closed (elite-only).
     tier = effective_tier(user)
     price = sc.get('price')
     score_visible = can_view_score_for_ticker(tier, price)
@@ -2410,7 +2410,7 @@ def api_ticker_events(ticker):
 
     # Score-panel gate: rating events embed composite_score in their detail
     # string. For non-elite + penny band, skip the rating_changes query
-    # entirely (gate-before-fetch). Insider/legal/earnings still emit —
+    # entirely (gate-before-fetch). Insider/legal/earnings still emit,
     # factual record, not proprietary score output.
     tier = effective_tier(current_user())
     price_row = db_query(
@@ -2736,7 +2736,7 @@ def api_backtest_stats():
     except Exception as e:
         logger.error(f"[Backtest] stats endpoint error: {e}", exc_info=True)
         return jsonify({"stats": [], "recent": [], "sector_comparison": {"note": f"Data temporarily unavailable: {e}"},
-                        "message": "Backtest data temporarily unavailable — check server logs."})
+                        "message": "Backtest data temporarily unavailable. Check server logs."})
 
 def _api_backtest_stats_inner():
     from collections import defaultdict
@@ -2868,15 +2868,15 @@ def _api_backtest_stats_inner():
         sector_comparison["note"] = f"Sector comparison unavailable: {e}"
 
     # Price-aware score gate on the two leak surfaces of this endpoint:
-    #   (1) `recent` carries per-trade composite + new_rating + old_rating
-    #       — direct strip via the helper, price_key='price_at_change'.
+    #   (1) `recent` carries per-trade composite + new_rating + old_rating,
+    #       direct strip via the helper, price_key='price_at_change'.
     #   (2) `stats[].trades` carries no rating field per-trade, but the
     #       parent dict's 'rating' tier name + the trade's ticker would
     #       let a non-elite caller infer rating-by-penny-ticker. Helper
     #       can't null fields that don't exist; structural filter drops
     #       penny-band trades from each tier's list. Aggregate stats
     #       (avg_return, win_rate, samples) computed BEFORE this filter
-    #       — those are cohort-level, not per-ticker, so they stay.
+    #       those are cohort-level, not per-ticker, so they stay.
     tier = effective_tier(current_user())
     strip_scores_for_non_elite(recent, tier, price_key='price_at_change')
     if tier != 'elite':
@@ -2925,19 +2925,19 @@ def _penny_why(stock):
     cs  = stock.get("composite_score") or 0
 
     if ms >= 75:
-        reasons.append(f"Strong price momentum (score {ms:.0f}/100) — trending above key moving averages with sustained upward pressure.")
+        reasons.append(f"Strong price momentum (score {ms:.0f}/100). Trending above key moving averages with sustained upward pressure.")
     elif ms >= 55:
-        reasons.append(f"Building momentum (score {ms:.0f}/100) — early signs of upward trend emerging.")
+        reasons.append(f"Building momentum (score {ms:.0f}/100). Early signs of upward trend emerging.")
     if ins >= 70:
-        reasons.append(f"Significant insider buying activity (score {ins:.0f}/100) — company insiders actively increasing their stake, the strongest conviction signal available.")
+        reasons.append(f"Significant insider buying activity (score {ins:.0f}/100). Company insiders actively increasing their stake, the strongest conviction signal available.")
     if qs >= 65:
-        reasons.append(f"Solid fundamentals for a penny stock (quality score {qs:.0f}/100) — above-average business metrics relative to its peer group.")
+        reasons.append(f"Solid fundamentals for a penny stock (quality score {qs:.0f}/100). Above-average business metrics relative to its peer group.")
     if rsi and rsi < 33:
-        reasons.append(f"Oversold RSI at {rsi:.0f} — potential mean reversion bounce back toward the mean.")
+        reasons.append(f"Oversold RSI at {rsi:.0f}. Potential mean reversion bounce back toward the mean.")
     if upside and upside > 25:
         reasons.append(f"Model target price implies {upside:.0f}% potential upside from current levels.")
     if not reasons:
-        reasons.append(f"Highest composite signal score ({cs:.0f}/100) among penny stocks in today's scan — no single dominant driver but the strongest overall reading in this universe.")
+        reasons.append(f"Highest composite signal score ({cs:.0f}/100) among penny stocks in today's scan. No single dominant driver but the strongest overall reading in this universe.")
     return reasons
 
 
@@ -2953,7 +2953,7 @@ def _select_penny_stock_of_day():
         conn.close()
         return row[0]
 
-    # Select best penny stock — prefer STRONG_BUY/BUY, then highest composite
+    # Select best penny stock. Prefer STRONG_BUY/BUY, then highest composite
     cur.execute("""
         SELECT ss.ticker, sig.composite_score, sig.rating
         FROM screener_snapshots ss
@@ -2992,7 +2992,7 @@ def penny():
     user = current_user()
     # Server-driven locked decision (4d). Template renders the
     # locked-teaser when locked=True and does NOT fire the /api/penny/*
-    # XHRs — avoids the empty-loading flash on a known-gated state.
+    # XHRs, avoids the empty-loading flash on a known-gated state.
     tier = effective_tier(user)
     locked = not can_view_penny_signals(tier)
     return render_template("penny.html", user=user, locked=locked)
@@ -3012,7 +3012,7 @@ def _get_penny_pick_full(db_path: str) -> "dict | None":
 
     Returns None if no pick exists yet. Used by /api/penny/stock-of-day
     (JSON endpoint) and by the Elite branch of the /dashboard route.
-    Real penny-pick data must NEVER reach a non-Elite client — callers gate.
+    Real penny-pick data must NEVER reach a non-Elite client. Callers gate.
     """
     ticker = _select_penny_stock_of_day()
     if not ticker:
@@ -3048,7 +3048,7 @@ def _get_penny_pick_full(db_path: str) -> "dict | None":
 @app.route("/api/penny/stock-of-day")
 @login_required
 def api_penny_stock_of_day():
-    # Penny signals are Elite-only. Gate BEFORE the fetch — _get_penny_pick_full
+    # Penny signals are Elite-only. Gate BEFORE the fetch. _get_penny_pick_full
     # must not run for a non-elite caller. "locked": True distinguishes this
     # response from the existing no-pick-today branch below ({"stock": None}).
     tier = effective_tier(current_user())
@@ -3063,7 +3063,7 @@ def api_penny_stock_of_day():
 @app.route("/api/penny/hot")
 @login_required
 def api_penny_hot():
-    # Penny signals are Elite-only. Gate BEFORE the exchange loop — no
+    # Penny signals are Elite-only. Gate BEFORE the exchange loop. No
     # query fires for a non-elite caller. Empty per-exchange arrays plus
     # "locked": True so the client can distinguish a gated response from
     # a genuinely empty result.
@@ -3158,7 +3158,7 @@ def api_ticker_tape():
     ]
     # Price-aware score gate. Tape carries 'rating' on every row;
     # penny rows lose rating for non-elite (the only proprietary field
-    # on this endpoint — composite/sub-scores are not exposed here).
+    # on this endpoint, composite/sub-scores are not exposed here).
     tier = effective_tier(current_user())
     strip_scores_for_non_elite(tape, tier, price_key='price')
     return jsonify(tape)
@@ -3173,7 +3173,7 @@ def pricing():
     Posture A (beta-free) is locked: the page shows the real launch
     numbers but every CTA routes to /register (trial signup), NOT to
     Stripe checkout. Logged-in visitors see a single neutral beta
-    banner instead of per-column CTAs. No DB lookup, no tier check —
+    banner instead of per-column CTAs. No DB lookup, no tier check,
     only "user_id" in session is read. Currency resolved via the
     existing precedence helper.
     """

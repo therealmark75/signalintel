@@ -1,4 +1,4 @@
-"""Launch pricing — single Python source of truth, mirrored from Stripe.
+"""Launch pricing. Single Python source of truth, mirrored from Stripe.
 
 Amounts are integer minor units (USD cents / GBP pence), mirrored EXACTLY
 from the Stripe Price unit_amount for lookup_key
@@ -6,7 +6,7 @@ from the Stripe Price unit_amount for lookup_key
 scripts/verify_pricing.py. Must stay in lockstep with Stripe; re-run
 verify_pricing.py before any live-charge flip.
 
-PROJECT_CONTEXT.md is documentation only — this module is the source.
+PROJECT_CONTEXT.md is documentation only. This module is the source.
 Display names live in config/tiers.py (display_name); do not duplicate.
 """
 
