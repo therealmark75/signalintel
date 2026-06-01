@@ -227,7 +227,13 @@ Very Strong  Strong  Stable  Neutral  Soft  Bearish  Very Bearish
 
 ## Content and writing conventions
 
-No em-dashes or en-dashes. Do not use the em-dash character (Unicode U+2014) or the en-dash character (Unicode U+2013) in any file you create or edit: code, HTML and templates, user-facing copy, comments, commit messages, and documentation. Use commas, periods, semicolons, or brackets instead. This is a hard rule with no exceptions, and it applies to all generated content, not only prose addressed to the user. Before committing any file you created or edited, grep it for U+2014 and U+2013 and remove any occurrences.
+No em-dashes or en-dashes in prose. The em-dash character (Unicode U+2014) and the en-dash character (Unicode U+2013) must not appear in any prose you write: copy, page titles, headings, comments, docstrings, commit messages, and documentation. In prose use commas, periods, semicolons, colons, or brackets. This is the AI-tell to eliminate and it has no exceptions.
+
+Legitimate typographic uses still must not use those two glyphs, but the replacement must be a deliberate equivalent, never a blank and never a mangled sentence:
+- Numeric ranges: use the word 'to' or a hyphen (U+002D), for example '1 to 5' or '0-100'.
+- 'No data' cell placeholders: use a hyphen (U+002D) or 'n/a'.
+
+Before committing any file you created or edited, grep it for U+2014 and U+2013. The count of both must be zero. If a match is a genuine numeric range or placeholder, convert it to the deliberate equivalent above. Never delete the surrounding content to make the grep pass.
 
 ## Scope Discipline
 
