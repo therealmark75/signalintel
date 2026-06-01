@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SignalIntel — Economic Events</title>
+<title>SignalIntel - Economic Events</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <style>
 :root{--bg:#080c14;--surface:#0d1520;--surface2:#111d2e;--border:#1a2d45;
@@ -192,8 +192,8 @@ async function loadEvents() {
 
     container.innerHTML = Object.entries(groups).map(([date, events]) => {
         let label = date;
-        if (date === today)    label = `Today — ${date}`;
-        if (date === tomorrow) label = `Tomorrow — ${date}`;
+        if (date === today)    label = `Today: ${date}`;
+        if (date === tomorrow) label = `Tomorrow: ${date}`;
         const rows = events.map(ev => {
             const imp = ev.impact || 'Low';
             const unit = ev.unit ? ` ${ev.unit}` : '';
