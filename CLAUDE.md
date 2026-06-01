@@ -107,8 +107,12 @@ Rating changes are detected and logged immediately after every signal generation
 - **SEC EDGAR** — legal risk scoring (scraper built, wiring in progress)
 
 ## Business Model (Roadmap)
-- Free 7-day trial → Starter / Pro / Elite tiers
-- Annual billing at 20% discount
+- 7-day full-access trial → hard paywall. No permanent free tier.
+- Two tiers at launch (locked 25 May 2026): **Pro** and **Elite**. Starter is dropped; B2B / white-label deferred to Phase 3.
+  - **Pro**: $29 / £24.99 per month — full signals, alerts, tournaments, 5 watchlists (capped)
+  - **Elite**: $79 / £74.99 per month — Pro + API access + unlimited watchlists + penny-stock signals
+- Geo-based dual currency (UK = GBP, rest = USD). Explicit per-currency prices, not live FX conversion.
+- Annual billing at 25% discount
 - Monthly paper trading tournaments with prize pool (% of subscription revenue)
 - Referral programme (1 month free per referral)
 - React Native mobile app post-web launch
