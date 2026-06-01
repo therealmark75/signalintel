@@ -2412,6 +2412,34 @@ NEW (21 May 2026, post-dashboard ship):
   weighting as the proprietary layer. Decide consciously pre-launch;
   flagged now so it's a choice.
 
+NEW (1 June 2026, Part 35 diagnostic):
+
+- [UX] **Screener empty-state misrepresents staleness as filter-empty** —
+  when the latest `signal_scores.scored_at` is older than today (or
+  older than expected for the time of day), the screener renders
+  "No results match the current filters" rather than disclosing the
+  data is stale. Surfaced live 1 June 2026 Monday morning between the
+  08:00 Screener snapshot and the 08:58 Signals scoring run: page
+  filtered to today, returned Friday's data, empty-state read as a
+  filter problem. Fix: detect staleness on the latest `scored_at`,
+  fall back to most recent scoring date rather than literally today,
+  and show a "Latest scores from <date>" indicator instead of the
+  filter-empty message. Pre-existing UX gap exposed by Monday timing,
+  not introduced by Phase 2.
+
+- [SCHEDULING] **Monday-morning job ordering: Screener snapshot
+  precedes Signals scoring** — `main.py` registers 08:00 Screener
+  snapshot before 08:58 Signals scoring. Tue–Fri this is benign
+  because the prior-day Signals run from the previous afternoon is
+  the freshest reference. Monday means the 08:00 snapshot points at
+  Friday's 17:28 Signals run — stale by ~63 hours until 08:58 closes
+  the gap. Fix: either reorder so Signals runs before Screener, or
+  make the Screener job dependency-aware (refuse to snapshot if
+  Signals hasn't run today). Lower priority than the empty-state
+  item above — data isn't wrong, only its freshness is misrepresented
+  by the UX gap. Pre-existing scheduling shape, surfaced by Part 35
+  diagnostic.
+
 ### NEXT-COMPONENT + VALIDATION PRINCIPLES (25 May 2026)
 
 Surfaced from `docs/data_source_map.md` (data-source research) and
