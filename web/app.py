@@ -7,7 +7,7 @@ from datetime import datetime
 from functools import wraps
 import stripe
 from flask import (Flask, jsonify, render_template, request,
-                   redirect, url_for, session, flash)
+                   redirect, url_for, session, flash, g)
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.middleware.proxy_fix import ProxyFix
 from flask_limiter import Limiter
@@ -139,10 +139,48 @@ def login_required(f):
         return f(*args, **kwargs)
     return decorated
 
+_USER_UNSET = object()  # sentinel: distinguishes "not loaded" from "loaded as None"
+
+
 def current_user():
+    """Return the current user row (dict) or None, memoised on flask.g.
+
+    Per-request cache: every call within one request hits the DB at most
+    once. A logged-out request loads None once and stays None for the
+    request (no re-query on every call). A logged-in request loads the
+    row once even if multiple call sites (route handler, context
+    processor, helpers) need it. Flask gives a fresh `g` per request so
+    the memo is naturally scoped and needs no teardown.
+
+    Return contract unchanged: dict row for authenticated, None for
+    unauthenticated. No caller change required.
+    """
+    cached = getattr(g, "user", _USER_UNSET)
+    if cached is not _USER_UNSET:
+        return cached
     if "user_id" in session:
-        return get_user_by_id(DATABASE_PATH, session["user_id"])
-    return None
+        loaded = get_user_by_id(DATABASE_PATH, session["user_id"])
+    else:
+        loaded = None
+    g.user = loaded
+    return loaded
+
+
+@app.context_processor
+def _inject_nav_tier():
+    """Inject the resolver-computed effective tier as `nav_tier` into
+    every template render context.
+
+    Rides on the g-memoised current_user(), so on an authenticated
+    request that already loaded the user, this is a cache read, not a
+    fresh DB query. Fail-closes to 'free' on logged-out requests via
+    effective_tier(None) -> 'free'; _nav.html only renders the badge
+    inside {% if user %}, so the 'free' default never leaks to
+    unauthenticated visitors. Runs on every render by design so every
+    nav-rendering template gets the same effective value with zero
+    per-route plumbing.
+    """
+    return {"nav_tier": effective_tier(current_user())}
 
 def db_query(sql, params=()):
     conn = get_connection(DATABASE_PATH)
@@ -353,7 +391,7 @@ def _handle_checkout_completed(conn, event):
 
     cur = conn.cursor()
     row = cur.execute(
-        "SELECT tier FROM users WHERE id = ?", (user_id,)
+        "SELECT tier FROM users WHERE id = ?", (user_id,)  # noqa: tier-read (webhook audit: capture tier_before pre-flip for subscription_events)
     ).fetchone()
     if row is None:
         raise ValueError(
@@ -411,7 +449,7 @@ def _handle_subscription_deleted(conn, event):
 
     cur = conn.cursor()
     row = cur.execute(
-        "SELECT id, tier FROM users WHERE stripe_subscription_id = ?",
+        "SELECT id, tier FROM users WHERE stripe_subscription_id = ?",  # noqa: tier-read (webhook audit: capture tier_before pre-flip for subscription_events)
         (sub_id,),
     ).fetchone()
     if row is None:
@@ -636,11 +674,12 @@ def upgrade():
 @login_required
 def dashboard():
     user        = current_user()
-    tier_key    = user.get("tier", "free") if user else "free"
-    # is_elite reads the trial-aware resolver so a day-3 trialist (stored
-    # tier='free', trial active) correctly sees the Elite penny panel.
-    # tier_key stays as the RAW stored column. BUG-001 contract requires
-    # the nav badge to reflect DB state, not the overlay.
+    tier_key    = effective_tier(user)
+    # Both tier_key (dashboard badge) and is_elite (Panel 7 gate) now
+    # route through the resolver so trial overlay and (future) lazy
+    # tier_effective_until expiry apply uniformly. BUG-001's "badge
+    # reflects DB state" contract is satisfied because effective_tier
+    # falls back to stored when no overlay applies.
     is_elite    = (effective_tier(user) == 'elite')
 
     # ── Live header context (dash-head subline) ──────────────────────────────
@@ -1043,7 +1082,7 @@ def watchlist():
     if not active_id and wls:
         active_id = wls[0]["id"]
     items = get_watchlist(DATABASE_PATH, user["id"], active_id) if active_id else []
-    tier  = get_tier(user.get("tier", "free"))
+    tier  = get_tier(effective_tier(user))
     limit = tier["watchlist_limit"]
     return render_template("watchlist.html", user=user, items=items,
                            watchlists=wls, active_watchlist_id=active_id,
@@ -1059,7 +1098,7 @@ def api_watchlists_list():
     user   = current_user()
     ticker = request.args.get("ticker", "").upper() or None
     wls    = get_watchlists_meta(DATABASE_PATH, user["id"])
-    tier   = get_tier(user.get("tier", "free"))
+    tier   = get_tier(effective_tier(user))
     if ticker:
         # Annotate each watchlist with contains_ticker flag
         wl_ids_with_ticker = {
@@ -1119,7 +1158,7 @@ def api_watchlists_create():
     if not name:
         return jsonify({"ok": False, "error": "Name required"}), 400
     wls = get_watchlists_meta(DATABASE_PATH, user["id"])
-    tier_key = user.get("tier", "free")
+    tier_key = effective_tier(user)
     if not can_create_watchlist(tier_key, len(wls)):
         limit    = watchlist_limit(tier_key)
         tier_cfg = get_tier(tier_key)

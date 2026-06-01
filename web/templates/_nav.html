@@ -29,7 +29,7 @@ header{position:sticky;top:0;z-index:100;background:rgba(8,12,20,0.95);backdrop-
         <div class="live-dot">LIVE</div>
         <span class="nav-ts" id="last-updated"></span>
         <span class="nav-user">{{ user.username if user else '' }}</span>
-        {% if user %}<span class="nav-tier nav-tier-{{ user.tier or 'free' }}">{{ (user.tier or 'free')|upper }}</span>{% endif %}
+        {% if user %}<span class="nav-tier nav-tier-{{ nav_tier }}">{{ nav_tier|upper }}</span>{% endif %}
         <div class="nav-sep"></div>
         <a href="/" class="nav-link{{ ' active' if request.path == '/' else '' }}">Dashboard</a>
         <a href="/ratings" class="nav-link{{ ' active' if request.path == '/ratings' else '' }}">Signal Tiers</a>
