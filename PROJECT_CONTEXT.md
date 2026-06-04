@@ -2474,6 +2474,17 @@ NEW (1 June 2026, Part 35 diagnostic):
   by the UX gap. Pre-existing scheduling shape, surfaced by Part 35
   diagnostic.
 
+- [OPS/LATENT] **initialise_schema gap on fresh-DB init.**
+  `initialise_schema` in `database/db.py` does not provision
+  `volume_score` or `scoring_version` columns on a fresh
+  `signal_scores` table. Production acquired both via historical ALTER
+  migration (volume_score in v0.10.0, 8 May 2026; scoring_version
+  earlier). Currently dormant: no fresh-DB callers in test
+  (tests/conftest.py does not exercise insert_signal_scores) or in
+  production (Mac Mini runs against the long-lived trading_system.db).
+  Surfaced by Phase 3 Step 2 smoke harness on 4 June 2026. P19-class
+  fix when prioritised, requires its own CRUD-path inventory pass.
+
 ### NEXT-COMPONENT + VALIDATION PRINCIPLES (25 May 2026)
 
 Surfaced from `docs/data_source_map.md` (data-source research) and
