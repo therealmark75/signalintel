@@ -446,6 +446,27 @@ def insert_insider_signal(db_path: str, signal: dict) -> None:
     conn.close()
 
 
+def signal_scores_projection(prefix: str = '', extras: tuple = ()) -> str:
+    """
+    Canonical SELECT column list for signal_scores per the component registry.
+
+    prefix: optional table alias (e.g. 'sig.' for joined queries).
+    extras: non-component columns to include FIRST in the SELECT list
+        (e.g. ('ticker', 'scored_at', 'composite_score', 'rating')).
+
+    Returns a comma-separated SQL fragment. Used by every SELECT FROM signal_scores
+    to eliminate hand-listed projections and the silent pass-through of SELECT *.
+
+    Example:
+        f"SELECT {signal_scores_projection(extras=('ticker','composite_score'))} "
+        "FROM signal_scores WHERE ticker = ?"
+    """
+    from signals.components import all_db_columns
+    extras_with_prefix = tuple(f"{prefix}{col}" for col in extras)
+    components_with_prefix = tuple(f"{prefix}{col}" for col in all_db_columns())
+    return ', '.join(extras_with_prefix + components_with_prefix)
+
+
 def insert_signal_scores(db_path: str, rows: list[dict]) -> int:
     """Insert signal score rows. Returns count inserted.
 
@@ -459,46 +480,45 @@ def insert_signal_scores(db_path: str, rows: list[dict]) -> int:
     subcommand). Bare-except ALTERs on a scoring table are exactly the
     P19 silent-swallow shape; a single owner removes that risk.
 
-    v0.17.0 persistence: writes the five component sub-scores
-    (earnings_score, piotroski_score, inst_own_score, analyst_mom_score,
-    altman_penalty) on every row. They default to NULL via
-    row.setdefault() so any caller that omits a sub-score key writes
-    NULL rather than KeyError. Pre-0.17 rows on disk stay NULL by
-    design (no backfill).
+    Component-column persistence: the component half of the INSERT column
+    list is sourced from signals.components.all_db_columns() (the canonical
+    registry), so every component column is written on every row. Each
+    component column defaults to NULL via row.setdefault() so any caller that
+    omits a component key writes NULL rather than KeyError. Pre-0.17 rows on
+    disk stay NULL by design (no backfill). Adding a new component is
+    zero-touch on this function.
     """
     if not rows:
         return 0
+    from signals.components import all_db_columns
+    component_cols = all_db_columns()
     conn = get_connection(db_path)
     cur  = conn.cursor()
-    # Default any of the five sub-score keys missing from a row to NULL so
-    # any caller that doesn't compute every component writes NULL, not
-    # KeyError, on insert.
+    # Default any component column missing from a row to NULL so any caller
+    # that doesn't compute every component writes NULL, not KeyError, on
+    # insert. The component set is sourced from the registry, so adding a new
+    # component is zero-touch here.
     for r in rows:
-        r.setdefault("earnings_score",    None)
-        r.setdefault("piotroski_score",   None)
-        r.setdefault("inst_own_score",    None)
-        r.setdefault("analyst_mom_score", None)
-        r.setdefault("altman_penalty",    None)
+        for col in component_cols:
+            r.setdefault(col, None)
     # Delete today's existing scores before inserting fresh ones
     cur.execute(
         "DELETE FROM signal_scores WHERE DATE(scored_at) = DATE('now')"
     )
-    cur.executemany("""
-        INSERT INTO signal_scores
-            (scored_at, ticker, composite_score, composite_score_raw,
-             momentum_score, quality_score, insider_score, reversion_score,
-             volume_score, rating, flags, sector_strength_score,
-             sector_modifier_applied, scoring_version,
-             earnings_score, piotroski_score, inst_own_score,
-             analyst_mom_score, altman_penalty)
-        VALUES
-            (:scored_at, :ticker, :composite_score, :composite_score_raw,
-             :momentum_score, :quality_score, :insider_score, :reversion_score,
-             :volume_score, :rating, :flags, :sector_strength_score,
-             :sector_modifier_applied, :scoring_version,
-             :earnings_score, :piotroski_score, :inst_own_score,
-             :analyst_mom_score, :altman_penalty)
-    """, rows)
+    # INSERT column list: explicit non-component columns first, then the
+    # registry's component columns. Column order is behaviour-irrelevant here
+    # because binding is by NAME (:col) via executemany over dict rows, not
+    # positional; sourcing the component half from the registry makes a new
+    # component zero-touch on this function.
+    non_components = ('scored_at', 'ticker', 'composite_score', 'composite_score_raw',
+                      'rating', 'flags', 'sector_modifier_applied', 'scoring_version')
+    insert_cols = non_components + component_cols
+    col_sql = ', '.join(insert_cols)
+    val_sql = ', '.join(f":{c}" for c in insert_cols)
+    cur.executemany(
+        f"INSERT INTO signal_scores ({col_sql}) VALUES ({val_sql})",
+        rows,
+    )
     conn.commit()
     inserted = cur.rowcount
     conn.close()
