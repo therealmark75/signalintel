@@ -264,7 +264,7 @@ def register():
         else:
             pw_hash = generate_password_hash(password, method='pbkdf2:sha256')
             # Naive UTC ISO matches _now() in config/entitlements.py so
-            # _parse_trial_start round-trips and the 7-day overlay starts here.
+            # _parse_utc_iso round-trips and the 7-day overlay starts here.
             trial_started_at = datetime.utcnow().isoformat()
             user_id = create_user(DATABASE_PATH, username, email, pw_hash,
                                   trial_started_at=trial_started_at)

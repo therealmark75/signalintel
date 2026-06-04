@@ -4,7 +4,7 @@ Regression test for the inert-trial bug (Step 3 hotfix, 2026-05-27).
 Pre-fix state: register() called create_user() without stamping
 trial_started_at, so the column was NULL for every fresh registrant.
 The 7-day trial overlay in config/entitlements.py keys off
-trial_started_at — when NULL, _parse_trial_start returns None,
+trial_started_at — when NULL, _parse_utc_iso returns None,
 trial_active() returns False, and effective_tier(user) falls through
 to the stored 'free' floor instead of the 'elite' overlay grant. Net
 effect: every fresh registrant skipped the 7-day trial and saw the
@@ -12,7 +12,7 @@ free paywall on day 0.
 
 This file pins the fix: create_user() now accepts trial_started_at
 and writes it; register() now stamps it with naive UTC ISO; the row
-round-trips through _parse_trial_start and effective_tier resolves
+round-trips through _parse_utc_iso and effective_tier resolves
 to 'elite' on day 0.
 """
 import pytest
@@ -42,7 +42,7 @@ def test_fresh_registrant_resolves_to_elite_via_trial_overlay(initialised_db_pat
 
     Catches: regression where create_user() stops writing
              trial_started_at, register() stops passing it, the
-             stamp format drifts to one _parse_trial_start can't
+             stamp format drifts to one _parse_utc_iso can't
              round-trip, or effective_tier loses the overlay branch.
     Ignores: the exact reported elapsed seconds — only the
              overlay-active verdict is asserted. Sub-second clock
@@ -66,7 +66,7 @@ def test_fresh_registrant_resolves_to_elite_via_trial_overlay(initialised_db_pat
         f"trial_started_at must be ISO string, got {type(user['trial_started_at']).__name__}"
     )
     assert trial_active(user) is True, (
-        "trial overlay must be active on day 0 — _parse_trial_start must round-trip the stamp"
+        "trial overlay must be active on day 0 — _parse_utc_iso must round-trip the stamp"
     )
     assert effective_tier(user) == "elite", (
         f"day-0 registrant must resolve to 'elite' overlay, got {effective_tier(user)!r}"

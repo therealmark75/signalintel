@@ -922,7 +922,7 @@ def _migrate_watchlists_to_multi(conn: sqlite3.Connection) -> None:
 def create_user(db_path: str, username: str, email: str, password_hash: str,
                 trial_started_at=None) -> int:
     # trial_started_at is the caller's responsibility — register() stamps a
-    # naive UTC ISO so _parse_trial_start round-trips it; test fixtures that
+    # naive UTC ISO so _parse_utc_iso round-trips it; test fixtures that
     # don't exercise trial state pass None and land at the 'free' floor.
     conn = get_connection(db_path)
     cur  = conn.cursor()
