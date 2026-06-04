@@ -517,6 +517,7 @@ ID when relevant.
 | P29 | Scoring-substrate methodology changes are gated by empirical distribution evidence on the production universe, not theoretical reasoning. The 18 May 2026 Altman Z → Altman Z'' switch (v0.13.0 → v0.14.0) was authorised only after a read-only distribution analysis (scripts/altman_distribution_analysis.py) computed Z and Z'' for 3,631 tickers and showed classic Z penalised 62.9% of the universe vs Z'' at 47.8%. Decision shape was locked before script ran: three outcomes (calibration holds / grey-zone cluster / bimodal) with sub-decisions for each, all framed in version-bump-policy (P18) terms. The empirical step is non-negotiable for any future scoring substrate change (Piotroski tier recalibration, Sector strength magnitude tuning, new component weight integration). Pattern: Phase 1 inventory → Phase 2a helper extraction (behaviour-preserving) → Phase 2b analysis script → Phase 2c decision lock with empirical evidence → Phase 2d implementation with version bump. Six gates, zero rework. |
 | P30 | Tests ship with the behaviour they describe (21 May 2026). A commit that changes scoring output OR a route's response contract MUST update its tests in the SAME commit. Twice on 21 May a behaviour change shipped with stale tests left red: inst_own v0.15.0 recalibration (175bbf7) shipped without updating its unit tests or regenerating the scorer snapshot; the dashboard redirect (db38c56) shipped without updating the smoke tests' PAGE_ROUTES 200-expectation. Both pushed before the staleness was noticed (caught only when an unrelated task happened to run pytest). A red suite masks the next regression. Verification gates that check live output do NOT substitute for updating the unit/snapshot tests that assert intended behaviour. |
 | P31 | Long-running DB writers must tolerate lock contention (21 May 2026). SQLite serialises writers; the scheduler is a near-constant background writer (screener scrapes are ~54-min DB writers, plus signal_generation, insider, Yahoo jobs). Any long-running manual or bulk writer that overlaps a scheduled job WILL eventually hit "database is locked". On 21 May the analyst bulk job crashed on exactly this — a single unhandled OperationalError killed a ~90-min run at 1,545/~6,000 tickers. Lock errors are transient (the other writer finishes in seconds), so bulk writers must retry-with-backoff on OperationalError rather than dying. This applies to any job registered on the scheduler too: `job_yahoo_analyst_bulk` (Wed 04:00) needs this before it can be trusted unattended. |
+| P32 | Live-DB browser fixtures: stage via canonical helper, walk, remove same session. For irreversible-money verifications, test-client coverage is not sufficient; eyes-on against the live app + live DB is required. (4 June 2026 cancelled-and-elapsed walk for the Stripe production-key flip.) |
 
 ---
 
@@ -1941,6 +1942,29 @@ even when the diff looks obviously clean. CC's job at the hook trip
 is to surface the trip and the staged diff and wait for clearance,
 not to self-clear. "The diff is clean" is the verdict the human is
 supposed to render, not the premise CC uses to bypass.
+
+### Live-DB browser fixtures: stage, walk, remove (4 June 2026)
+
+For irreversible-money verifications (Stripe key flip, billing
+webhooks, downgrade resolvers), test-client coverage is necessary
+but not sufficient. The eyes-on confirmation must run against the
+live DB and live gunicorn worker, not just the test client. The
+pattern that worked Part 38 Item 2:
+
+1. Phase 1 read-only inventory of the live DB to check whether any
+   existing user already matches the target fixture shape.
+2. If not, stage a new user via the canonical create_user helper
+   (so the password hash matches the live login path), then UPDATE
+   the row to the precise fixture shape (tier, tier_effective_until,
+   trial_started_at).
+3. Test-client sanity check first (effective_tier resolves through
+   the real path), so the browser walk doesn't go in blind.
+4. Real browser walk against the live app, raw observations
+   reported.
+5. DELETE the fixture row at session close. Live DB returns to
+   baseline; nothing weird left for next session to wonder about.
+
+End-to-end ~5 minutes. Codified as P32.
 
 Codification: the equivalent rule lives in CLAUDE.md's auth-adjacent-
 commit section. Future CC sessions discover the rule via either

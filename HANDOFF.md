@@ -1,82 +1,57 @@
 # SignalIntel Session Handoff
 
-**Last updated:** end of Part 37 (2 June 2026)
-**Engine:** SCORING_ENGINE_VERSION 0.17.0
-**Repo:** all Part 37 commits pushed to origin/main as of this handoff.
+**Last updated:** end of Part 38 (4 June 2026)
+**Engine:** SCORING_ENGINE_VERSION 0.17.0 (unchanged)
+**Repo:** all Part 38 commits pushed to origin/main (650cbbd, 8bd0ce3, 06c6e26).
 
 ## Where we are
-The cancelled-subscription downgrade leak is closed. A cancelled user is now demoted to free when their `tier_effective_until` period elapses, at every entitlement surface, via a lazy access-time check inside `effective_tier` (no cron). This was the hard gate blocking the Stripe production-key flip. Items 1, 2, 3, 5 of the Part 37 work order shipped. Item 4 (penny screener over-gating) is diagnosed and a fix is designed but NOT built, it picks up first in Part 38.
+The Stripe production-key flip is now unblocked on every technical axis. All three Part 38 items shipped. `/penny/screener` now shows rows to all tiers with score/rating gated via a single non-elite banner, honouring the gate-the-signal-not-the-ticker invariant. The cancelled-and-elapsed downgrade resolver was eyes-on verified against the live DB and live app via a real browser walk (cancelcheck1 fixture staged, walked, removed). The two long-parked untracked files (AGENTS.md, docs/dash_sweep_plan.md) are now tracked, and the six stale `_parse_trial_start` comment references from the Part 37 rename are cleaned up.
 
-Stripe remains on TEST keys. The production flip is now unblocked on the downgrade-leak axis, but should not be flipped until item 4 lands and a real cancelled-and-elapsed user is browser-verified against the live DB (see Part 38 queue).
+Stripe remains on TEST keys. The production-key flip is now fully unblocked on every internal axis; what remains is a business/product call by Mark, not a technical gate.
 
-## Part 37: paywall enforcement hardening (commits c9d1975 to c3c0111, pushed)
+## Part 38: penny over-gating fix, downgrade walk, parked-file tidy (commits 650cbbd, 8bd0ce3, 06c6e26, pushed)
 
-Three feature commits plus a doc-update commit. The fail-open revenue leak that blocked the production-key flip is closed, and the fail-closed trial bug that locked trialists out of their own watchlists is closed.
+### 650cbbd: /penny/screener over-gating fix
+Route stopped passing `locked`, now passes `tier = effective_tier(user)`. The template's full-page teaser branch was removed; the table renders unconditionally; a single non-elite upsell banner sits above the table with the branch-exclusive string "Penny scores are an Elite feature." and a CTA to `/pricing`; the bare-hyphen convention is retained for stripped cells via the existing `/api/screener` per-row strip (`strip_scores_for_non_elite` UNTOUCHED). New smoke test `tests/test_penny_screener_gating.py` (2 functions, P15 docstrings): non-elite sees banner + table; elite sees table, no banner. Three browser walks passed: mark2 (effective free) sees banner + hyphens; markn (elite) no banner, real values; marktest1 (mid-trial, so effective elite via overlay) no banner, real values. Gunicorn restarted, new PID 99255.
 
-### c9d1975: memoise current_user + route five bypass surfaces through effective_tier + guard test
-Closed items 2 and 5 (the fail-closed trial bug: effective-elite trialists were locked out of watchlists and shown a FREE nav badge because five surfaces read stored `tier` instead of `effective_tier`). Five sites routed: `web/app.py` dashboard nav (639), `/watchlist` GET (1046), GET `/api/watchlists` (1062), POST `/api/watchlists` create-gate (1122), and `_nav.html:32` via a new `@app.context_processor` injecting `nav_tier` (covers all 17 nav-rendering routes, not just the hand-edited ones).
+### 8bd0ce3: rename stale _parse_trial_start references to _parse_utc_iso
+Renamed `_parse_trial_start` to `_parse_utc_iso` in 6 doc-comment/docstring sites (`database/db.py:925`, `web/app.py:267`, `tests/test_registration_trial.py:7, 15, 45, 69`). Comments only, no runtime change. The P23 hook tripped on db.py + app.py path-match (auth-adjacent), cleared via `--no-verify` (Mark's explicit call). Pre-existing em-dashes on two of the touched test lines were deferred to the dash-sweep arc per Mark's call; partial glyph cleanup would muddy the dash inventory.
 
-`current_user()` memoised on `flask.g` with a `_USER_UNSET` sentinel distinguishing not-loaded / loaded-None / loaded-row, a pre-existing per-call DB query bug, fixed at source (verified 2 to 1 queries per `/watchlist` render).
+### 06c6e26: track AGENTS.md and docs/dash_sweep_plan.md
+Tracked `AGENTS.md` (Codex agent-bootstrap mirror of CLAUDE.md, seeded 25 May 2026, 343 lines) and `docs/dash_sweep_plan.md` (1,769-line em-dash/en-dash typography inventory, generated 1 June 2026, the design record for a future cleanup arc). Required `--no-verify` (Mark authorized): the dash hook inherently rejects an inventory of dashes; AGENTS.md is the pre-sweep CLAUDE.md mirror. This is the textbook legitimate hook bypass.
 
-New guard test `tests/test_tier_read_guard.py` greps `web/app.py` + templates for unmarked stored-tier reads, asserts exactly 2 sentinels (the two webhook audit captures at 356/414), negative-control proven (goes RED on an injected unmarked read, GREEN on revert).
-
-P23 path+content trip (`def current_user`), cleared by Mark via `--no-verify`.
-
-### c21f225: lazy tier_effective_until expiry in effective_tier (THE downgrade-leak close, item 1)
-Inside `effective_tier`, after resolving stored tier and BEFORE the trial overlay: if `tier_effective_until` parses to a past datetime, the stored floor collapses to free. Fail-closed: missing/None/unparseable does NOT demote (a null means "no cancellation pending"; only a present past timestamp demotes). Critical edge holds: live paying users have a FUTURE timestamp (next renewal) and are never demoted; only cancelled-and-elapsed users have a past one. Trial overlay still wins (mid-trial user with a stale paid sub sees elite).
-
-Renamed `_parse_trial_start` to `_parse_utc_iso` (the helper was already generic; name now matches role; `trial_active` caller updated).
-
-Five new unit tests in `test_entitlements.py`: past+no-trial to free (leak close), future+no-trial to pro (paying user safe), past+active-trial to elite (overlay wins), None to unchanged, garbage to pro (fail-closed). All use monkeypatched `_now()`.
-
-Live test-client walk: synthesized stored-pro + past `tier_effective_until` + no trial resolved to nav badge FREE and locked state across `/watchlist`, `/screener`, `/penny`.
-
-Clean commit (no P23 content trip). One em-dash caught by the commit hook's dash gate in a test docstring, fixed before commit.
-
-### c3c0111: friendly tier_limit message in /watchlist new-watchlist modal (item 3)
-The page modal's `submitNew()` rendered the raw enum literal `tier_limit` via `.textContent` because it never consumed the friendly handler the picker uses. Fix: extracted a shared `window.formatWatchlistLimitError(err)` helper into `_watchlist_picker.html` (included on every authed page via `_nav.html`, so always present); both the picker pill and the modal call it. The modal's `tier_limit` branch switched to `.innerHTML` (scoped to that branch only; generic errors still use `.textContent`, so no arbitrary-HTML injection).
-
-mark2 now sees "Watchlist limit reached (1/0 . Free). Upgrade to Pro for more. View plans" with a `/pricing` link (200), instead of the bare string. Pure template change, no P23 trip.
-
-## Part 38 queue (in order)
-
-1. **Item 4: /penny/screener over-gating, fix DESIGNED not built.** Phase 1 complete this session. The dedicated `/penny/screener` page full-page-locks both Free AND Pro at the route (`locked = not can_view_penny_signals(tier)`, where `can_view_penny_signals` returns `tier == 'elite'` only), hiding the row table entirely. Violates the locked penny-gating invariant: gate the SIGNAL, not the ticker. **Answer 1 LOCKED by Mark:** the page must show the row table to all tiers with the score/rating gated, mirroring the main `/screener` contract. NOTE: the `/api/screener` per-row strip (`strip_scores_for_non_elite`) is already correct and must NOT be touched; only the `/penny/screener` PAGE route + template over-gate.
-   - **Proposed fix (CC, AWAITING MARK'S LOCK, not decided):**
-     - (A) Drop `locked` as the page gate, pass effective `tier` to the template, collapse `{% if locked %}`, make `boot()` unconditional.
-     - (B) Replace the full-page teaser with a single non-elite upsell BANNER above the table. CC recommends banner over per-cell padlocks, to avoid a one-off cell-lock UI that diverges from the product-wide bare-hyphen convention for stripped cells. Athena concurs as a lean, not a lock; decide at Part 38 open.
-     - (C) Reuse the bare hyphen for stripped cells.
-     - (D) Free and Pro render identically on this page (both non-elite, whole table is penny-band by construction).
-     - (E) Add a smoke test: non-elite sees banner, elite does not.
-   - Phase 2 will touch `web/app.py` (P23 path-match, not content-match; expect hook trip, Mark clears). DECIDE banner-vs-per-cell at Part 38 open, then run Phase 2.
-
-2. **Pre-production-flip browser check.** Before flipping Stripe to live keys: verify a real cancelled-and-elapsed user (stored paid, past `tier_effective_until`, no trial) renders as free in a real browser against the live DB, not just the test client. The logic is proven; this is the eyes-on confirmation for the irreversible-money moment.
-
-3. **Parked untracked files, decide.** `AGENTS.md` (origin unknown since Part 33; run `git log --oneline -- AGENTS.md`, likely nothing since it is untracked) and `docs/dash_sweep_plan.md` (a real em-dash/en-dash typography-sweep inventory, 827 occurrences across 96 files, generated 1 June; NOT related to the downgrade sweep despite the name). Athena's call: track `dash_sweep_plan.md` as the design record for a future em-dash cleanup arc; resolve `AGENTS.md` after the git-log check. Neither blocks anything.
-
-4. **Stale comment references to _parse_trial_start.** The rename to `_parse_utc_iso` left stale doc-comment references at `database/db.py:925` and `web/app.py:267` (comments only, no runtime impact). Two-line cosmetic fix; fold into the parked-files tidy.
-
-## Loose threads / notes banked (Part 37)
-
-- **THM score lineage (resolved, no action).** A walk header this session cited THM at composite 77.1 STRONG_BUY; the live `/api/screener` render returns 61.5 STRONG_HOLD (scoring_version 0.17.0, verified against `signal_scores` latest by `scored_at`). The 77.1 was a stale historical row surfaced by an exploratory LEFT JOIN that fanned across multiple scoring entries. Current truth is 61.5 STRONG_HOLD. The walk DATA was correct (None for non-elite, 61.5 for elite); only the typed header note was stale. No bug.
-
-- **P28 fixture gap, no stable post-trial Pro fixture.** marktest1 (id 8) is stored 'pro' but inside its 7-day trial (started 2026-05-29), so it resolves to effective-elite until approximately 2026-06-05 and is UNUSABLE as a Pro-band fixture during that window. Every stored-Pro account drifts to effective-elite for its first 7 days. Pro-band walks must currently synthesize a stored-pro-no-trial fixture via test-client monkeypatch (the pattern used for the expired-pro walk this session and the item-4 Walk B). Fix options (defer the choice): (a) a dedicated post-trial stored-pro fixture with `trial_started_at` backdated past `TRIAL_DAYS`, or (b) a documented synth-fixture helper in `tests/conftest.py`. Bank for fixture tidy.
-
-- **Process note, gate-detection signal.** The item-4 walk burned two false lock-detection signals (a CSS class present regardless of state) before landing on a branch-exclusive string ("Available on the Elite tier", emitted only inside `{% if locked %}`). Lesson: when the test for "did a template branch render" is needed, grep the template for a branch-EXCLUSIVE string and confirm exclusivity FIRST, before walking. CC self-corrected (the P16 instinct held) but third, not first.
+## Loose threads / notes banked (Part 38)
+- **cancelcheck1 fixture (id 10) was staged, browser-walked, and removed** in the same session. Pattern is reusable if a future cancelled-and-elapsed check is needed: insert via the canonical `create_user` helper, UPDATE tier='pro' + tier_effective_until=past + trial_started_at=NULL, walk, DELETE. About 5 minutes end-to-end. Codified as P32.
+- **The dash-sweep arc (docs/dash_sweep_plan.md) is now tracked and ready** to be picked up when prioritised. 827 occurrences across 96 files (global figure); 284 risky rows per the inventory's List 1.
+- **P28 fixture gap still active.** marktest1 (id 8) is stored pro but mid-trial, so it resolves effective-elite until approximately 2026-06-05. It will expire naturally around 2026-06-05; until then, Pro-band walks need monkeypatched fixtures.
 
 ## Test accounts (use the right fixture, see P28)
-- **mark2** (id 6): stored free, no trial, effective free. THE fixture for locked-state verification.
-- **beta2** (id 9): stored free, active trial, effective ELITE. Sees everything unlocked (correct). Cannot exercise locked-state gates.
+- **mark2** (id 6): stored free, no trial, effective free. THE locked-state fixture.
+- **beta2** (id 9): stored free, active trial, effective ELITE.
 - **markn** (id 2): stored elite, effective elite.
-- **marktest1** (id 8): stored pro, but CURRENTLY mid-trial so resolves effective-elite until approximately 2026-06-05. See the P28 fixture gap above before using it as a Pro-band fixture.
+- **marktest1** (id 8): stored pro, mid-trial through approximately 2026-06-05, currently effective elite.
 
-## Infra (Part 37 session)
-- Gunicorn restarted after each `web/app.py` and `entitlements.py` commit per drift discipline. Last live PID 70957; re-verify on Part 38 open. `/pricing` returned 200 after each restart.
-- Suite at session close: 395 passed, 2 skipped (pre-existing FMP price-targets + economic-calendar empty-cache skips).
-- Commit-1 tier-read guard green throughout.
-- Mechanical dash-reject pre-commit hook LIVE (commit f59422a, Part 35). Pass 0 scans every added line in the staged diff for U+2014 and U+2013; rejects on any hit. Pre-existing dashes are not policed. It caught one em-dash in a test docstring this session (c21f225), working as intended.
-- Stripe on TEST keys. thesignalvault.io live behind Cloudflare.
+## Infra (Part 38 close)
+- Gunicorn last live master PID 99255 (worker 99900 respawn once mid-session, normal). Re-verify on next session open.
+- Suite: 397 passed, 2 skipped (the pre-existing FMP price-targets + economic-calendar empty-cache skips).
+- Three new tests landed this session (tests/test_penny_screener_gating.py x 2 plus the 5 in test_entitlements.py already counted in Part 37); the +2 is what took 395 to 397.
+- Dash-reject pre-commit hook live and working as intended; tripped legitimately twice this session (test docstring during the rename, then the tracking commit), both cleared by Mark.
+- Stripe on TEST keys; thesignalvault.io live behind Cloudflare.
+
+## Next session queue (LOCKED ORDER, fresh chat)
+1. **Component-rendering refactor (array-driven).** HARD PREREQUISITE before Yahoo components land. Phase 1 will be long: every component's render path, every consumer template, persistence shape. Wants its own session, large surface.
+2. **Yahoo Finance pipeline + components 9 to 16.** The substrate expansion.
+3. **Backtest validation harness.** Unblocked by v0.17.0 sub-score persistence; should run before too many new components land so the harness shape is set against a smaller component set.
+4. **FINRA short-interest composite component.**
+5. **Scraper substrate audit** (volume + avg_volume silent-NULL).
+6. **Dash-sweep arc.**
+
+Out-of-band: Stripe production-key flip. Every internal gate green; this is a business/product call by Mark.
 
 ## Prior arcs (condensed)
+
+### Part 37: paywall enforcement hardening (commits c9d1975 to c3c0111, pushed)
+Closed the cancelled-subscription downgrade leak that had blocked the Stripe production-key flip. c21f225 added lazy `tier_effective_until` expiry inside `effective_tier`: a cancelled-and-elapsed user collapses to free, live payers with a future renewal timestamp are never demoted, and the trial overlay still wins; plus five entitlement unit tests. c9d1975 memoised `current_user()` on `flask.g` and routed five stored-tier bypass surfaces (dashboard nav, `/watchlist`, the two `/api/watchlists` routes, and `_nav.html` via a new `nav_tier` context processor) through `effective_tier`, closing the fail-closed trial bug that showed trialists a FREE badge and locked them out of watchlists; added the `tier-read` guard test. c3c0111 gave the `/watchlist` new-watchlist modal the friendly `tier_limit` message via a shared `formatWatchlistLimitError` helper. Renamed `_parse_trial_start` to `_parse_utc_iso` (the six surviving doc-comment references were cleaned up in Part 38, commit 8bd0ce3).
 
 ### Part 35: pricing build + dash arc
 Built `/pricing` across 3 commits: `web/templates/pricing.html`, `config/pricing.py`, `scripts/verify_pricing.py`, a public `/pricing` route in `web/app.py` (no auth; reads session `user_id` to swap signed-out CTAs for a signed-in banner), and repointed `_locked_teaser.html` default link from `/account` (404) to `/pricing`. All 8 Stripe values verified against EXPECTED: $29/$79 mo, $261/$711 yr USD; GBP 24.99/74.99 mo, GBP 224.91/674.91 yr; `verify_pricing.py` exits 0. Em-dash governance section added to `CLAUDE.md` (prose-targeted, hyphen allowed for numeric ranges and "no data" placeholders). CLAUDE.md pricing text confirmed: two-tier, 25 percent annual, no Starter residue (the only `20%` is the unrelated portfolio margin requirement).
