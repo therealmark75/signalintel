@@ -3042,8 +3042,10 @@ def penny():
 def penny_screener():
     user = current_user()
     tier = effective_tier(user)
-    locked = not can_view_penny_signals(tier)
-    return render_template("penny_screener.html", user=user, locked=locked)
+    # Page renders for all tiers. Per-row score cells are gated server-side by
+    # strip_scores_for_non_elite in /api/screener; non-elite callers see a
+    # single upsell banner above the table (rendered when tier != 'elite').
+    return render_template("penny_screener.html", user=user, tier=tier)
 
 
 def _get_penny_pick_full(db_path: str) -> "dict | None":
