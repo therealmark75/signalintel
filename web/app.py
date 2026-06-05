@@ -28,6 +28,7 @@ from database.db import (
     toggle_watchlist_alerts,
     create_default_watchlist, is_default_watchlist,
     get_top_signals_of_day, generate_top_signals_of_day,
+    signal_scores_projection,
 )
 from config.tiers import can_create_watchlist, watchlist_limit, get_tier, next_tier
 from config.pricing import LAUNCH_PRICING, ANNUAL_DISCOUNT_PCT, TIER_FEATURES
@@ -2197,10 +2198,12 @@ def api_screener():
         order_sql = f"sig.composite_score DESC NULLS LAST"
     offset    = (page - 1) * per_page
 
-    sig_subq = """
-        SELECT ticker, rating, composite_score, target_price, target_upside,
-               momentum_score, quality_score, insider_score, reversion_score,
-               sector_strength_score,
+    _subq_proj = signal_scores_projection(
+        surface='screener',
+        extras=('ticker', 'rating', 'composite_score', 'target_price', 'target_upside'),
+    )
+    sig_subq = f"""
+        SELECT {_subq_proj},
                MAX(scored_at) as scored_at
         FROM signal_scores
         WHERE DATE(scored_at) = DATE((SELECT MAX(scored_at) FROM signal_scores))
@@ -2217,6 +2220,11 @@ def api_screener():
     """, params)
     total = count_rows[0]["total"] if count_rows else 0
 
+    _sig_proj = signal_scores_projection(
+        prefix='sig.',
+        surface='screener',
+        extras=('rating', 'composite_score', 'target_price', 'target_upside'),
+    )
     rows = db_query(f"""
         SELECT ss.ticker, ss.company, ss.sector,
                ss.market_cap, ss.price, ss.change_pct, ss.volume,
@@ -2225,10 +2233,7 @@ def api_screener():
                ss.eps_growth_this_yr, ss.eps_growth_next_yr,
                ss.short_interest_pct, ss.insider_transactions, ss.beta,
                ss.rel_volume, ss.avg_volume, tm.exchange,
-               sig.rating, sig.composite_score,
-               sig.momentum_score, sig.quality_score, sig.insider_score,
-               sig.reversion_score, sig.target_price, sig.target_upside,
-               sig.sector_strength_score
+               {_sig_proj}
         FROM ({latest_ss}) ss
         LEFT JOIN ({sig_subq}) sig ON ss.ticker = sig.ticker
         LEFT JOIN ticker_metadata tm ON ss.ticker = tm.ticker
