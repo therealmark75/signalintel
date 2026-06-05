@@ -612,6 +612,27 @@ Mitigation in place:
   init, table-create-if-missing patterns). AND every CRUD path against
   the dropped column or table (P19).
 
+### Orphan-gunicorn lesson (Part 40, 5 June 2026)
+
+A pre-Part-39 gunicorn (PID 99255 master + 99900 worker, started 4 June 12:01 via
+manual nohup, then reparented to launchd PID 1 when its terminal closed) was holding
+port 5001 across the entire Part 39 arc. Symptom: `launchctl kickstart` on the
+LaunchAgent succeeded with exit 0 but the service entered a crash-respawn loop
+because it couldn't bind 5001. Diagnosis path: `lsof -nP -iTCP:5001 -sTCP:LISTEN` to
+identify the squatter, `ps -o pid,ppid,lstart,command -p <pid>` to confirm PPID 1
+and pre-arc start time, `launchctl print gui/$(id -u)/io.thesignalvault.gunicorn` to
+confirm the LaunchAgent was the intended manager and was looping. Resolution: SIGTERM
+the orphan pair; LaunchAgent rebinds within seconds. Codification: session-open
+gunicorn baseline check should assert "exactly one master with launchd-managed PPID
+chain bound to 5001" rather than the weaker "at least one gunicorn process". Stronger
+invariant would catch a stale squatter before the first restart attempt.
+
+The `launchctl last exit code` field is a historical record, not a current-health
+signal. The Part 40 restart left the field reading `1` (the last crash-loop
+casualty's exit code) even after the new master bound cleanly. Acceptance criteria
+for restart gates: master stable across two pgrep samples 3-5s apart AND no new
+err.log entries since the restart timestamp. Do not gate on the exit-code field.
+
 ---
 
 ## THE VERIFICATION GATE: NON-NEGOTIABLE
@@ -1971,6 +1992,31 @@ commit section. Future CC sessions discover the rule via either
 PROJECT_CONTEXT (this lesson) or CLAUDE.md (the enforcement clause)
 or both. Either way: hook trips on a P23 path go to Mark, not to
 `--no-verify`.
+
+### Phase 2 amendments banked in Part 40
+
+**Amendment A (Step 4.5, commit 6d32096):** `signal_scores_projection()` accepts an
+opt-in keyword-only `surface=` argument. Default behaviour (surface=None) is byte-
+identical to the Step 2 contract (all 11 db_columns + prefixed extras). With surface
+set, filters via `components_for_surface(surface)`. Invalid surface raises ValueError.
+The helper is the single source of truth for surface-specific SELECT projections;
+Steps 5-9 use it directly. `insert_signal_scores` continues calling it with no
+surface argument and gets all 11.
+
+**Amendment B (Step 5.5, commit acf12b6, audit lens):** When the registry's
+`surfaces=` field is questioned against consumer reality, the canonical test is "does
+the API response for this surface carry this column" not "does the consumer render
+it as a visible cell". Server-side sort and filter inputs count as carries because
+the response must include the column. Ticker's 5 sub-scores count as carries because
+/api/ticker is SELECT *. The Step 5.5 audit applied this lens and corrected one
+discrepancy (signals surface, sector_strength_score removed). Ticker and screener
+were inspected under both lenses and left unchanged because the response-carries
+semantic justified their surfaces declarations.
+
+The audit method itself is now banked as a tool: if any future component or surface
+change creates uncertainty about registry-vs-reality alignment, run the per-surface
+empirical audit (consumer grep + response-shape inspection) before editing the
+registry. The Step 5.5 prompt body is the template.
 
 ---
 
