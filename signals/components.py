@@ -120,7 +120,7 @@ COMPONENTS: tuple = (
         key='sector', db_column='sector_strength_score', label='Sector',
         tooltip='Sector relative strength based on 7-day performance of the sector ETF (XLK for Technology, XLF for Financial, etc). Top-performing sectors boost composite score; lagging sectors apply a drag. Weight: ±7.5% max.',
         weight=0.0, is_modifier=True,
-        surfaces=('ticker', 'screener', 'watchlist', 'signals'),
+        surfaces=('ticker', 'screener', 'watchlist'),
         dot_color='#fbbf24', radar_index=6, sortable=True, in_strip=False,
         null_overlay=False, introduced_version='0.9.0',
     ),
