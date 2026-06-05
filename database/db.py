@@ -446,24 +446,35 @@ def insert_insider_signal(db_path: str, signal: dict) -> None:
     conn.close()
 
 
-def signal_scores_projection(prefix: str = '', extras: tuple = ()) -> str:
-    """
-    Canonical SELECT column list for signal_scores per the component registry.
+def signal_scores_projection(prefix: str = '', extras: tuple = (), *, surface: str = None) -> str:
+    """Build a comma-joined SELECT projection string for signal_scores columns.
+
+    extras (prefixed) come first, then the component db_columns (prefixed).
 
     prefix: optional table alias (e.g. 'sig.' for joined queries).
     extras: non-component columns to include FIRST in the SELECT list
         (e.g. ('ticker', 'scored_at', 'composite_score', 'rating')).
 
-    Returns a comma-separated SQL fragment. Used by every SELECT FROM signal_scores
-    to eliminate hand-listed projections and the silent pass-through of SELECT *.
+    surface=None (default): emits every db_column from all_db_columns() in
+    canonical registry order. Use this for write paths (insert_signal_scores)
+    and any consumer that needs the full set.
+
+    surface=<name>: emits only the db_columns of components visible on that
+    surface (per components_for_surface()), in canonical registry order.
+    Use this for surface-specific SELECT projections (Steps 5-9). Raises
+    ValueError on an invalid surface name (matches components_for_surface()).
 
     Example:
         f"SELECT {signal_scores_projection(extras=('ticker','composite_score'))} "
         "FROM signal_scores WHERE ticker = ?"
     """
-    from signals.components import all_db_columns
+    from signals.components import all_db_columns, components_for_surface
     extras_with_prefix = tuple(f"{prefix}{col}" for col in extras)
-    components_with_prefix = tuple(f"{prefix}{col}" for col in all_db_columns())
+    if surface is None:
+        cols = all_db_columns()
+    else:
+        cols = tuple(c.db_column for c in components_for_surface(surface) if c.db_column)
+    components_with_prefix = tuple(f"{prefix}{col}" for col in cols)
     return ', '.join(extras_with_prefix + components_with_prefix)
 
 

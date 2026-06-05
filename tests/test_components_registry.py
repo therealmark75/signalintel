@@ -63,3 +63,74 @@ def test_registry_consistency_catches_drift():
     with pytest.raises(AssertionError):
         missing = _columns_missing_fields(synthetic, field_names)
         assert not missing, f"missing: {missing}"
+
+
+def test_projection_default_matches_step_2_contract():
+    """signal_scores_projection() with no surface emits all 11 db_columns in
+    canonical order, extras prefixed first (the Step 2 contract).
+
+    Catches: a regression that drops, reorders, or surface-filters the
+    default (write-path) projection. The default feeds insert_signal_scores'
+    equivalent column set, so silent shrinkage would lose persisted columns.
+    Ignores: prefix/extras formatting beyond order (covered by the explicit
+    extras assertion below); SQL validity (this is a string-shape lock).
+    """
+    from database.db import signal_scores_projection
+    from signals.components import all_db_columns
+
+    # Bare call: exactly the 11 db_columns, comma-joined, in registry order.
+    assert signal_scores_projection() == ", ".join(all_db_columns())
+
+    # extras come FIRST, then the full component set, order preserved.
+    with_extras = signal_scores_projection(extras=("ticker", "composite_score"))
+    assert with_extras == ", ".join(("ticker", "composite_score") + all_db_columns())
+
+
+def test_projection_with_surface_filters_components():
+    """signal_scores_projection(surface=<name>) emits exactly the db_columns
+    of components_for_surface(<name>), no more, no less, in registry order.
+
+    Catches: a surface projection leaking columns not on that surface (e.g.
+    the v0.17.0 sub-scores onto the screener, which the locked Phase 2 Q3
+    design hides) or dropping a column the surface should carry.
+    Ignores: prefix handling and non-component extras; those are not surface
+    filtered.
+    """
+    from database.db import signal_scores_projection
+    from signals.components import (
+        components_for_surface, VALID_SURFACES,
+    )
+
+    # Every canonical surface, read dynamically (never hardcoded).
+    for surface in VALID_SURFACES:
+        expected = [c.db_column for c in components_for_surface(surface) if c.db_column]
+        assert signal_scores_projection(surface=surface) == ", ".join(expected), surface
+
+    # Explicit screener lock: 5 present, 6 sub-scores absent.
+    screener_proj = signal_scores_projection(surface="screener")
+    for col in ("momentum_score", "quality_score", "insider_score",
+                "reversion_score", "sector_strength_score"):
+        assert col in screener_proj, f"screener missing {col}"
+    for col in ("volume_score", "earnings_score", "piotroski_score",
+                "inst_own_score", "analyst_mom_score", "altman_penalty"):
+        assert col not in screener_proj, f"screener leaked {col}"
+
+    # Explicit ticker lock: every component column present (ticker shows all).
+    from signals.components import all_db_columns
+    ticker_proj = signal_scores_projection(surface="ticker")
+    for col in all_db_columns():
+        assert col in ticker_proj, f"ticker missing {col}"
+
+
+def test_projection_invalid_surface_raises():
+    """An unknown surface name raises ValueError (no silent fallback),
+    matching components_for_surface()'s contract.
+
+    Catches: a regression that swallows a typo'd surface name and returns an
+    unfiltered or empty projection instead of failing loud.
+    Ignores: the exact message text.
+    """
+    from database.db import signal_scores_projection
+
+    with pytest.raises(ValueError):
+        signal_scores_projection(surface="nonexistent_surface_xyz")
