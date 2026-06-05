@@ -37,6 +37,7 @@ from config.entitlements import (
 )
 from config.settings import FLASK_SECRET_KEY, STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET
 from signals.signal_labels import tier_short
+from signals.components import COMPONENTS, to_json_dict
 
 app = Flask(__name__, template_folder="templates", static_folder="static")
 app.secret_key = FLASK_SECRET_KEY
@@ -181,6 +182,22 @@ def _inject_nav_tier():
     per-route plumbing.
     """
     return {"nav_tier": effective_tier(current_user())}
+
+
+@app.context_processor
+def inject_component_registry():
+    """Inject the canonical component registry into every template render.
+
+    `components` is the registry tuple (Steps 11-15 templates iterate it);
+    `components_json` is the same data pre-serialised as a JSON string for
+    the Step 10 ticker.html JS shim (assigned to window.COMPONENTS_DATA).
+    Single source: signals.components. No try/except: a registry that
+    fails to serialise should fail loud at render, not silently.
+    """
+    return {
+        "components": COMPONENTS,
+        "components_json": json.dumps(to_json_dict()),
+    }
 
 def db_query(sql, params=()):
     conn = get_connection(DATABASE_PATH)
