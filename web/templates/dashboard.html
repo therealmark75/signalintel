@@ -580,10 +580,10 @@
           </div>
           <div class="spot-col">
             <div class="spot-breakdown-title">Composite breakdown</div>
-            {% for k, lbl in [('momentum_score','Momentum'), ('quality_score','Quality'), ('insider_score','Insider')] %}
-              {% set v = spotlight[k] %}
+            {% for c in components if c.key in ['momentum', 'quality', 'insider'] %}
+              {% set v = spotlight[c.db_column] %}
               <div class="comp-bar-row">
-                <div class="comp-bar-label"><span>{{ lbl }}</span><span class="v">{% if v is not none %}{{ '%.0f'|format(v) }}{% else %}-{% endif %}</span></div>
+                <div class="comp-bar-label"><span>{{ c.label }}</span><span class="v">{% if v is not none %}{{ '%.0f'|format(v) }}{% else %}-{% endif %}</span></div>
                 <div class="comp-track"><div class="comp-fill" style="width:{% if v is not none %}{{ v|round(0) }}{% else %}0{% endif %}%"></div></div>
               </div>
             {% endfor %}
@@ -616,9 +616,9 @@
         </div>
         <div class="spot-col">
           <div class="spot-breakdown-title">Composite breakdown</div>
-          {% for lbl in ['Momentum','Quality','Insider'] %}
+          {% for c in components if c.key in ['momentum', 'quality', 'insider'] %}
           <div class="comp-bar-row">
-            <div class="comp-bar-label"><span>{{ lbl }}</span><span class="v">-</span></div>
+            <div class="comp-bar-label"><span>{{ c.label }}</span><span class="v">-</span></div>
             <div class="comp-track"><div class="comp-fill" style="width:42%"></div></div>
           </div>
           {% endfor %}
