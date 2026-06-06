@@ -1320,10 +1320,9 @@ def api_overview():
 @app.route("/api/signals")
 @login_required
 def api_signals():
-    rows = db_query("""
+    rows = db_query(f"""
         SELECT ss.ticker, ss.rating, MAX(ss.composite_score) as composite_score,
-        ss.momentum_score, ss.quality_score, ss.insider_score,
-        ss.reversion_score, ss.flags, MAX(ss.scored_at) as scored_at,
+        {signal_scores_projection(prefix='ss.', surface='signals')}, ss.flags, MAX(ss.scored_at) as scored_at,
         sc.sector, sc.industry, sc.price
 FROM signal_scores ss
 LEFT JOIN (
@@ -1351,10 +1350,9 @@ LEFT JOIN (
 @app.route("/api/signals/sector/<sector>")
 @login_required
 def api_signals_by_sector(sector):
-    rows = db_query("""
+    rows = db_query(f"""
         SELECT ss.ticker, ss.rating, MAX(ss.composite_score) as composite_score,
-               ss.momentum_score, ss.quality_score, ss.insider_score,
-               ss.reversion_score, ss.flags, MAX(ss.scored_at) as scored_at,
+               {signal_scores_projection(prefix='ss.', surface='signals')}, ss.flags, MAX(ss.scored_at) as scored_at,
                sc.sector, sc.industry, sc.price
         FROM signal_scores ss
         LEFT JOIN (
@@ -1384,10 +1382,9 @@ def api_signals_by_sector(sector):
 @app.route("/api/signals/<rating>")
 @login_required
 def api_signals_by_rating(rating):
-    rows = db_query("""
+    rows = db_query(f"""
         SELECT sig.ticker, sig.rating, MAX(sig.composite_score) as composite_score,
-               sig.momentum_score, sig.quality_score, sig.insider_score,
-               sig.reversion_score, sig.flags, MAX(sig.scored_at) as scored_at,
+               {signal_scores_projection(prefix='sig.', surface='signals')}, sig.flags, MAX(sig.scored_at) as scored_at,
                sc.price
         FROM signal_scores sig
         LEFT JOIN (
