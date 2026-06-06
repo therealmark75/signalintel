@@ -107,3 +107,33 @@ def test_api_screener_exchange_filter_unknown_value(client):
     assert data["rows"] == [], (
         f"Expected empty rows for exchange=BOGUS, got {len(data['rows'])} rows"
     )
+
+
+def test_api_screener_excludes_hidden_subscores(client):
+    """An elite caller's /api/screener rows carry the 5 screener components
+    but NONE of the 6 v0.17.0 sub-scores (the locked Phase 2 Q3 surface rule).
+
+    The `client` fixture is user_id=2 (markn, elite), so scores are not
+    stripped and every present key is real. This is the response-shape lock
+    the Step 5 projection switch introduced: a regression that widened the
+    screener projection to all 11 components (or reverted the surface filter)
+    would leak the sub-scores here.
+
+    Catches: sub-score leakage onto the screener surface, or a screener
+             component silently dropped from the projection.
+    Ignores: row values (only key presence/absence), tier-stripping behaviour
+             for non-elite (a separate concern), pagination.
+    """
+    data = _get(client, "per_page=5")
+    rows = data["rows"]
+    if not rows:
+        pytest.skip("screener returned no rows on the live DB this run")
+    forbidden = ("volume_score", "earnings_score", "piotroski_score",
+                 "inst_own_score", "analyst_mom_score", "altman_penalty")
+    required = ("momentum_score", "quality_score", "insider_score",
+                "reversion_score", "sector_strength_score")
+    for row in rows:
+        leaked = [k for k in forbidden if k in row]
+        assert not leaked, f"{row.get('ticker')} leaked hidden sub-scores: {leaked}"
+        missing = [k for k in required if k not in row]
+        assert not missing, f"{row.get('ticker')} missing screener components: {missing}"

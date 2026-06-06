@@ -28,6 +28,7 @@ from database.db import (
     toggle_watchlist_alerts,
     create_default_watchlist, is_default_watchlist,
     get_top_signals_of_day, generate_top_signals_of_day,
+    signal_scores_projection,
 )
 from config.tiers import can_create_watchlist, watchlist_limit, get_tier, next_tier
 from config.pricing import LAUNCH_PRICING, ANNUAL_DISCOUNT_PCT, TIER_FEATURES
@@ -37,6 +38,7 @@ from config.entitlements import (
 )
 from config.settings import FLASK_SECRET_KEY, STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET
 from signals.signal_labels import tier_short
+from signals.components import COMPONENTS, to_json_dict, sortable_columns
 
 app = Flask(__name__, template_folder="templates", static_folder="static")
 app.secret_key = FLASK_SECRET_KEY
@@ -181,6 +183,22 @@ def _inject_nav_tier():
     per-route plumbing.
     """
     return {"nav_tier": effective_tier(current_user())}
+
+
+@app.context_processor
+def inject_component_registry():
+    """Inject the canonical component registry into every template render.
+
+    `components` is the registry tuple (Steps 11-15 templates iterate it);
+    `components_json` is the same data pre-serialised as a JSON string for
+    the Step 10 ticker.html JS shim (assigned to window.COMPONENTS_DATA).
+    Single source: signals.components. No try/except: a registry that
+    fails to serialise should fail loud at render, not silently.
+    """
+    return {
+        "components": COMPONENTS,
+        "components_json": json.dumps(to_json_dict()),
+    }
 
 def db_query(sql, params=()):
     conn = get_connection(DATABASE_PATH)
@@ -781,9 +799,8 @@ def dashboard():
             out.append(d)
         return out
 
-    top_strong = _annotate(db_query("""
-        SELECT ticker, rating, composite_score, momentum_score,
-               quality_score, insider_score, reversion_score
+    top_strong = _annotate(db_query(f"""
+        SELECT ticker, rating, composite_score, {signal_scores_projection(surface='dashboard')}
         FROM signal_scores
         WHERE DATE(scored_at) = DATE((SELECT MAX(scored_at) FROM signal_scores))
           AND rating IN ('STRONG_BUY','BUY')
@@ -795,9 +812,8 @@ def dashboard():
     # the latest run); they're not genuine bearish conviction, they're tickers
     # whose composite went negative and got floored. Real bearish names start
     # at composite ~0.1 (LVO) under the current methodology.
-    top_bearish = _annotate(db_query("""
-        SELECT ticker, rating, composite_score, momentum_score,
-               quality_score, insider_score, reversion_score
+    top_bearish = _annotate(db_query(f"""
+        SELECT ticker, rating, composite_score, {signal_scores_projection(surface='dashboard')}
         FROM signal_scores
         WHERE DATE(scored_at) = DATE((SELECT MAX(scored_at) FROM signal_scores))
           AND rating IN ('SELL','STRONG_SELL')
@@ -1046,12 +1062,11 @@ def industry_page(industry_name):
 @app.route("/api/industry/<path:industry_name>")
 @login_required  
 def api_industry(industry_name):
-    rows = db_query("""
+    rows = db_query(f"""
         SELECT ss.ticker, ss.company, ss.price, ss.change_pct,
                ss.market_cap, ss.sector, ss.industry,
                sc.rating, sc.composite_score,
-               sc.momentum_score, sc.quality_score,
-               sc.insider_score, sc.reversion_score,
+               {signal_scores_projection(prefix='sc.', surface='industry')},
                ss.analyst_recom
         FROM screener_snapshots ss
         LEFT JOIN signal_scores sc ON ss.ticker = sc.ticker
@@ -1302,10 +1317,9 @@ def api_overview():
 @app.route("/api/signals")
 @login_required
 def api_signals():
-    rows = db_query("""
+    rows = db_query(f"""
         SELECT ss.ticker, ss.rating, MAX(ss.composite_score) as composite_score,
-        ss.momentum_score, ss.quality_score, ss.insider_score,
-        ss.reversion_score, ss.flags, MAX(ss.scored_at) as scored_at,
+        {signal_scores_projection(prefix='ss.', surface='signals')}, ss.flags, MAX(ss.scored_at) as scored_at,
         sc.sector, sc.industry, sc.price
 FROM signal_scores ss
 LEFT JOIN (
@@ -1333,10 +1347,9 @@ LEFT JOIN (
 @app.route("/api/signals/sector/<sector>")
 @login_required
 def api_signals_by_sector(sector):
-    rows = db_query("""
+    rows = db_query(f"""
         SELECT ss.ticker, ss.rating, MAX(ss.composite_score) as composite_score,
-               ss.momentum_score, ss.quality_score, ss.insider_score,
-               ss.reversion_score, ss.flags, MAX(ss.scored_at) as scored_at,
+               {signal_scores_projection(prefix='ss.', surface='signals')}, ss.flags, MAX(ss.scored_at) as scored_at,
                sc.sector, sc.industry, sc.price
         FROM signal_scores ss
         LEFT JOIN (
@@ -1366,10 +1379,9 @@ def api_signals_by_sector(sector):
 @app.route("/api/signals/<rating>")
 @login_required
 def api_signals_by_rating(rating):
-    rows = db_query("""
+    rows = db_query(f"""
         SELECT sig.ticker, sig.rating, MAX(sig.composite_score) as composite_score,
-               sig.momentum_score, sig.quality_score, sig.insider_score,
-               sig.reversion_score, sig.flags, MAX(sig.scored_at) as scored_at,
+               {signal_scores_projection(prefix='sig.', surface='signals')}, sig.flags, MAX(sig.scored_at) as scored_at,
                sc.price
         FROM signal_scores sig
         LEFT JOIN (
@@ -2041,14 +2053,18 @@ def api_screener():
     page      = max(1, request.args.get("page", type=int, default=1))
     per_page  = min(200, request.args.get("per_page", type=int, default=50))
 
-    allowed_sorts = {
+    # Registry-derived: component sort columns come from sortable_columns();
+    # screener_extras holds only the non-component screener columns. The two
+    # unioned reproduce the prior 25-element set exactly (screener is already
+    # a superset of the sortable component columns).
+    screener_extras = {
         "ticker", "company", "sector", "market_cap", "composite_score",
         "target_price", "target_upside", "price", "change_pct", "volume",
         "pe_ratio", "rsi_14", "rating", "high_52w_pct", "low_52w_pct",
-        "momentum_score", "quality_score", "insider_score",
         "short_interest_pct", "insider_transactions", "beta",
-        "rel_volume", "avg_volume", "sector_strength_score", "exchange",
+        "rel_volume", "avg_volume", "exchange",
     }
+    allowed_sorts = set(sortable_columns()) | screener_extras
     if sort_col not in allowed_sorts:
         sort_col = "composite_score"
     if sort_dir not in ("asc", "desc"):
@@ -2180,10 +2196,12 @@ def api_screener():
         order_sql = f"sig.composite_score DESC NULLS LAST"
     offset    = (page - 1) * per_page
 
-    sig_subq = """
-        SELECT ticker, rating, composite_score, target_price, target_upside,
-               momentum_score, quality_score, insider_score, reversion_score,
-               sector_strength_score,
+    _subq_proj = signal_scores_projection(
+        surface='screener',
+        extras=('ticker', 'rating', 'composite_score', 'target_price', 'target_upside'),
+    )
+    sig_subq = f"""
+        SELECT {_subq_proj},
                MAX(scored_at) as scored_at
         FROM signal_scores
         WHERE DATE(scored_at) = DATE((SELECT MAX(scored_at) FROM signal_scores))
@@ -2200,6 +2218,11 @@ def api_screener():
     """, params)
     total = count_rows[0]["total"] if count_rows else 0
 
+    _sig_proj = signal_scores_projection(
+        prefix='sig.',
+        surface='screener',
+        extras=('rating', 'composite_score', 'target_price', 'target_upside'),
+    )
     rows = db_query(f"""
         SELECT ss.ticker, ss.company, ss.sector,
                ss.market_cap, ss.price, ss.change_pct, ss.volume,
@@ -2208,10 +2231,7 @@ def api_screener():
                ss.eps_growth_this_yr, ss.eps_growth_next_yr,
                ss.short_interest_pct, ss.insider_transactions, ss.beta,
                ss.rel_volume, ss.avg_volume, tm.exchange,
-               sig.rating, sig.composite_score,
-               sig.momentum_score, sig.quality_score, sig.insider_score,
-               sig.reversion_score, sig.target_price, sig.target_upside,
-               sig.sector_strength_score
+               {_sig_proj}
         FROM ({latest_ss}) ss
         LEFT JOIN ({sig_subq}) sig ON ss.ticker = sig.ticker
         LEFT JOIN ticker_metadata tm ON ss.ticker = tm.ticker
@@ -2260,8 +2280,13 @@ def api_ticker(ticker):
         "SELECT * FROM ticker_metadata WHERE ticker = ?", (ticker,)
     )
 
-    signal = db_query("""
-        SELECT * FROM signal_scores WHERE ticker = ?
+    _signal_proj = signal_scores_projection(
+        surface='ticker',
+        extras=('rating', 'composite_score', 'target_price',
+                'target_upside', 'sector_modifier_applied'),
+    )
+    signal = db_query(f"""
+        SELECT {_signal_proj} FROM signal_scores WHERE ticker = ?
         ORDER BY scored_at DESC LIMIT 1
     """, (ticker,))
 
@@ -3059,14 +3084,13 @@ def _get_penny_pick_full(db_path: str) -> "dict | None":
     if not ticker:
         return None
 
-    rows = db_query("""
+    rows = db_query(f"""
         SELECT ss.ticker, ss.company, ss.sector, ss.industry,
                ss.price, ss.change_pct, ss.volume, ss.rsi_14,
                ss.high_52w_pct, ss.low_52w_pct, ss.rel_volume, ss.avg_volume,
                ss.market_cap, ss.beta,
                sig.rating, sig.composite_score,
-               sig.momentum_score, sig.quality_score,
-               sig.insider_score, sig.reversion_score,
+               {signal_scores_projection(prefix='sig.', surface='signals')},
                sig.target_price, sig.target_upside,
                lr.risk_label, lr.risk_color, lr.penalty
         FROM screener_snapshots ss

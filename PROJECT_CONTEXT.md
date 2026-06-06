@@ -612,6 +612,27 @@ Mitigation in place:
   init, table-create-if-missing patterns). AND every CRUD path against
   the dropped column or table (P19).
 
+### Orphan-gunicorn lesson (Part 40, 5 June 2026)
+
+A pre-Part-39 gunicorn (PID 99255 master + 99900 worker, started 4 June 12:01 via
+manual nohup, then reparented to launchd PID 1 when its terminal closed) was holding
+port 5001 across the entire Part 39 arc. Symptom: `launchctl kickstart` on the
+LaunchAgent succeeded with exit 0 but the service entered a crash-respawn loop
+because it couldn't bind 5001. Diagnosis path: `lsof -nP -iTCP:5001 -sTCP:LISTEN` to
+identify the squatter, `ps -o pid,ppid,lstart,command -p <pid>` to confirm PPID 1
+and pre-arc start time, `launchctl print gui/$(id -u)/io.thesignalvault.gunicorn` to
+confirm the LaunchAgent was the intended manager and was looping. Resolution: SIGTERM
+the orphan pair; LaunchAgent rebinds within seconds. Codification: session-open
+gunicorn baseline check should assert "exactly one master with launchd-managed PPID
+chain bound to 5001" rather than the weaker "at least one gunicorn process". Stronger
+invariant would catch a stale squatter before the first restart attempt.
+
+The `launchctl last exit code` field is a historical record, not a current-health
+signal. The Part 40 restart left the field reading `1` (the last crash-loop
+casualty's exit code) even after the new master bound cleanly. Acceptance criteria
+for restart gates: master stable across two pgrep samples 3-5s apart AND no new
+err.log entries since the restart timestamp. Do not gate on the exit-code field.
+
 ---
 
 ## THE VERIFICATION GATE: NON-NEGOTIABLE
@@ -1972,6 +1993,31 @@ PROJECT_CONTEXT (this lesson) or CLAUDE.md (the enforcement clause)
 or both. Either way: hook trips on a P23 path go to Mark, not to
 `--no-verify`.
 
+### Phase 2 amendments banked in Part 40
+
+**Amendment A (Step 4.5, commit 6d32096):** `signal_scores_projection()` accepts an
+opt-in keyword-only `surface=` argument. Default behaviour (surface=None) is byte-
+identical to the Step 2 contract (all 11 db_columns + prefixed extras). With surface
+set, filters via `components_for_surface(surface)`. Invalid surface raises ValueError.
+The helper is the single source of truth for surface-specific SELECT projections;
+Steps 5-9 use it directly. `insert_signal_scores` continues calling it with no
+surface argument and gets all 11.
+
+**Amendment B (Step 5.5, commit acf12b6, audit lens):** When the registry's
+`surfaces=` field is questioned against consumer reality, the canonical test is "does
+the API response for this surface carry this column" not "does the consumer render
+it as a visible cell". Server-side sort and filter inputs count as carries because
+the response must include the column. Ticker's 5 sub-scores count as carries because
+/api/ticker is SELECT *. The Step 5.5 audit applied this lens and corrected one
+discrepancy (signals surface, sector_strength_score removed). Ticker and screener
+were inspected under both lenses and left unchanged because the response-carries
+semantic justified their surfaces declarations.
+
+The audit method itself is now banked as a tool: if any future component or surface
+change creates uncertainty about registry-vs-reality alignment, run the per-surface
+empirical audit (consumer grep + response-shape inspection) before editing the
+registry. The Step 5.5 prompt body is the template.
+
 ---
 
 ## PAYWALL ENFORCEMENT + BILLING (Step 3 + Phase 2 — complete 26-27 May & 29 May 2026)
@@ -2484,6 +2530,8 @@ NEW (1 June 2026, Part 35 diagnostic):
   production (Mac Mini runs against the long-lived trading_system.db).
   Surfaced by Phase 3 Step 2 smoke harness on 4 June 2026. P19-class
   fix when prioritised, requires its own CRUD-path inventory pass.
+
+- [PRODUCT/ENGINE] **Filing Narrative Component (10-K Reality Check), candidate, deferred behind Yahoo and paywall.** Origin (4 June 2026): an external workflow doc on reading annual reports with an LLM prompted the question of whether structured LLM parsing of SEC filings belongs in SignalIntel as a scoring input. SEC EDGAR is already live for legal_risk; filings exist for every issuer, are dated and legally binding, and refresh on a quarterly or annual cadence (bounded LLM cost per ticker per year). Hypothesis (UNVALIDATED): a structured-prompt pipeline against the latest 10-K or 10-Q could emit a narrative-versus-numbers signal (management-narrative tone or disclosed-risk drift relative to reported fundamentals), closer to Bernard-Thomas PEAD than to headline sentiment. The COMPOSITE PURITY INVARIANT and the Kmak 2025 finding (social sentiment weakly correlated with returns) mean this clears the same evidentiary bar as any component before touching the composite; default assumption until proven otherwise is dashboard-only, NOT a composite component. Open questions (none answered): is the extracted signal a scoring input at all or a per-ticker narrative artefact for the ticker page plus /methodology content plus an Elite feature; if scoring, does it fill or sit alongside the queued News Sentiment slot (component 15); formula, weight, and composite-versus-dashboard placement all TBD, requiring external validation in the analyst_mom event-study mould before any weight is assigned; pipeline shape is a Skill-style Python module (filing URL in, structured JSON memo out) batched nightly like a scraper. Sequencing: explicitly deferred behind Yahoo components 9 to 16 and the paywall arc; decide formula, weight, and placement only after the engine reaches v0.18 or later and Yahoo lands. Banked for the record, not to action this arc.
 
 ### NEXT-COMPONENT + VALIDATION PRINCIPLES (25 May 2026)
 
