@@ -2276,8 +2276,13 @@ def api_ticker(ticker):
         "SELECT * FROM ticker_metadata WHERE ticker = ?", (ticker,)
     )
 
-    signal = db_query("""
-        SELECT * FROM signal_scores WHERE ticker = ?
+    _signal_proj = signal_scores_projection(
+        surface='ticker',
+        extras=('rating', 'composite_score', 'target_price',
+                'target_upside', 'sector_modifier_applied'),
+    )
+    signal = db_query(f"""
+        SELECT {_signal_proj} FROM signal_scores WHERE ticker = ?
         ORDER BY scored_at DESC LIMIT 1
     """, (ticker,))
 
