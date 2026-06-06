@@ -289,9 +289,7 @@ async function loadSOTD() {
         </div>
         <div class="scores-grid">
             <div class="score-item"><div class="score-label">Composite</div><div class="score-val ${scoreClass(s.composite_score)}">${(s.composite_score||0).toFixed(0)}</div></div>
-            <div class="score-item"><div class="score-label">Momentum</div><div class="score-val ${scoreClass(s.momentum_score)}">${(s.momentum_score||0).toFixed(0)}</div></div>
-            <div class="score-item"><div class="score-label">Quality</div><div class="score-val ${scoreClass(s.quality_score)}">${(s.quality_score||0).toFixed(0)}</div></div>
-            <div class="score-item"><div class="score-label">Insider</div><div class="score-val ${scoreClass(s.insider_score)}">${(s.insider_score||0).toFixed(0)}</div></div>
+            ${PENNY_COMP.map(c => `<div class="score-item"><div class="score-label">${c.label}</div><div class="score-val ${scoreClass(s[c.dbColumn])}">${(s[c.dbColumn]||0).toFixed(0)}</div></div>`).join('\n            ')}
         </div>
         <div class="sotd-meta">
             ${target}${upside}
@@ -365,6 +363,13 @@ function renderHot(exch) {
 }
 
 {% if not locked %}
+// Canonical component registry, injected server-side by inject_component_registry
+// (web/app.py). Gated inside the not-locked guard so the locked (non-Elite) payload
+// stays unchanged. Explicit allowlist drives the SOTD score cells; NO reversion (3 only).
+window.COMPONENTS_DATA = {{ components_json|safe }};
+const _COMP_BY_KEY = Object.fromEntries(window.COMPONENTS_DATA.map(c => [c.key, c]));
+const PENNY_COMP_KEYS = ['momentum', 'quality', 'insider'];
+const PENNY_COMP = PENNY_COMP_KEYS.map(k => ({ label: _COMP_BY_KEY[k].label, dbColumn: _COMP_BY_KEY[k].dbColumn }));
 loadSOTD();
 loadHot();
 {% endif %}
