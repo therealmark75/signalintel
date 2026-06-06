@@ -2018,6 +2018,33 @@ change creates uncertainty about registry-vs-reality alignment, run the per-surf
 empirical audit (consumer grep + response-shape inspection) before editing the
 registry. The Step 5.5 prompt body is the template.
 
+### Registry-driven rendering is now the canonical substrate (Phase 3 complete, 6 June 2026)
+
+The component-rendering refactor arc is complete and merged to main (merge `6c43330`).
+Registry-driven rendering is now a project invariant: component data and ordering come
+from `signals/components.py`, reaching handlers via `signal_scores_projection(surface=...)`
+and templates via the injected `components` Jinja var and the `window.COMPONENTS_DATA`
+shim. Do NOT hardcode a component cell list (a JS array, a Jinja tuple-list, or a
+repeated set of `*_score` cells) in a template, and do NOT `SELECT *` from
+`signal_scores` in a handler that feeds component cells. Add or change components in the
+registry and let the surface projection carry them. Per-surface visible sets are pinned
+by explicit ordered key allowlists at each render site (the byte-identical discipline),
+so a registry addition does not silently appear on every surface.
+
+Reachable surfaces driven by the registry: `ticker.html`, `dashboard.html`,
+`industry.html`, `penny.html` (templates), plus the `/api/*` handlers via the projection
+helper. Deliberately NOT registry-rendered, by design rather than oversight, and not to
+be re-litigated without a route or coupling change first:
+
+- `watchlist.html`: heterogeneous cells; the coupling lives in `database/db.py:get_watchlist`, not the template.
+- `screener.html`: composite aggregate + one bespoke `sector_strength_score` cell; no core component set.
+- `index.html`: dead code behind the unconditional `/` to `/dashboard` redirect at `app.py:221` (its only `render_template` is unreachable).
+- `penny_screener.html`: sort/filter option lists only, no rendered score cells.
+
+The Step 5.5 carried-response lens (Amendment B) was applied a second time in this arc
+(reversion surface set, dashboard + industry); the lens is the standing tool for any
+registry-vs-reality question.
+
 ---
 
 ## PAYWALL ENFORCEMENT + BILLING (Step 3 + Phase 2 — complete 26-27 May & 29 May 2026)
