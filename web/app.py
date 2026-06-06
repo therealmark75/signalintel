@@ -800,7 +800,7 @@ def dashboard():
         return out
 
     top_strong = _annotate(db_query(f"""
-        SELECT ticker, rating, composite_score, {signal_scores_projection(surface='signals')}
+        SELECT ticker, rating, composite_score, {signal_scores_projection(surface='dashboard')}
         FROM signal_scores
         WHERE DATE(scored_at) = DATE((SELECT MAX(scored_at) FROM signal_scores))
           AND rating IN ('STRONG_BUY','BUY')
@@ -813,7 +813,7 @@ def dashboard():
     # whose composite went negative and got floored. Real bearish names start
     # at composite ~0.1 (LVO) under the current methodology.
     top_bearish = _annotate(db_query(f"""
-        SELECT ticker, rating, composite_score, {signal_scores_projection(surface='signals')}
+        SELECT ticker, rating, composite_score, {signal_scores_projection(surface='dashboard')}
         FROM signal_scores
         WHERE DATE(scored_at) = DATE((SELECT MAX(scored_at) FROM signal_scores))
           AND rating IN ('SELL','STRONG_SELL')
@@ -1066,7 +1066,7 @@ def api_industry(industry_name):
         SELECT ss.ticker, ss.company, ss.price, ss.change_pct,
                ss.market_cap, ss.sector, ss.industry,
                sc.rating, sc.composite_score,
-               {signal_scores_projection(prefix='sc.', surface='signals')},
+               {signal_scores_projection(prefix='sc.', surface='industry')},
                ss.analyst_recom
         FROM screener_snapshots ss
         LEFT JOIN signal_scores sc ON ss.ticker = sc.ticker

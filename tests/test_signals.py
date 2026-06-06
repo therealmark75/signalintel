@@ -138,7 +138,8 @@ def test_api_signals_non_component_carries_and_no_raw_flags(client):
 def test_api_industry_component_shape(client):
     """Step 7: /api/industry/<industry_name> locks the four-component set via the
     registry projection (api_industry migrated to signal_scores_projection with
-    prefix='sc.', surface='signals').
+    prefix='sc.', surface='industry'; reversion added to the industry surface in
+    Step 9.5).
 
     Biotechnology is a real industry that normally carries rows. If it ever
     returns zero rows (industry empty, or all snapshots outside the handler's
@@ -158,7 +159,7 @@ def test_api_industry_component_shape(client):
     # Four components present, sector_strength_score absent (shared with 1-3).
     _assert_component_shape(rows, url)
 
-    expected = {c.db_column for c in components_for_surface("signals")}
+    expected = {c.db_column for c in components_for_surface("industry")}
     for row in rows:
         keys = set(row.keys())
         # Registry-coupling: live keys must be a superset of the registry set.

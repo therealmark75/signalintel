@@ -95,7 +95,10 @@ COMPONENTS: tuple = (
         key='reversion', db_column='reversion_score', label='Reversion',
         tooltip='Mean reversion signal. Low score = price has moved far from average and may revert. High = trending strongly',
         weight=0.10,
-        surfaces=('ticker', 'screener', 'signals'),
+        # reversion added to dashboard+industry per Step 5.5 carried-response lens:
+        # both responses already carry reversion_score (dashboard _thesis() consumes it).
+        # Not a visibility expansion, a correction of an under-listing under the old lens.
+        surfaces=('ticker', 'screener', 'signals', 'dashboard', 'industry'),
         dot_color='#facc15', radar_index=3, sortable=False, in_strip=True,
         null_overlay=True, introduced_version='0.9.0',
     ),
