@@ -38,7 +38,7 @@ from config.entitlements import (
 )
 from config.settings import FLASK_SECRET_KEY, STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET
 from signals.signal_labels import tier_short
-from signals.components import COMPONENTS, to_json_dict
+from signals.components import COMPONENTS, to_json_dict, sortable_columns
 
 app = Flask(__name__, template_folder="templates", static_folder="static")
 app.secret_key = FLASK_SECRET_KEY
@@ -2053,14 +2053,18 @@ def api_screener():
     page      = max(1, request.args.get("page", type=int, default=1))
     per_page  = min(200, request.args.get("per_page", type=int, default=50))
 
-    allowed_sorts = {
+    # Registry-derived: component sort columns come from sortable_columns();
+    # screener_extras holds only the non-component screener columns. The two
+    # unioned reproduce the prior 25-element set exactly (screener is already
+    # a superset of the sortable component columns).
+    screener_extras = {
         "ticker", "company", "sector", "market_cap", "composite_score",
         "target_price", "target_upside", "price", "change_pct", "volume",
         "pe_ratio", "rsi_14", "rating", "high_52w_pct", "low_52w_pct",
-        "momentum_score", "quality_score", "insider_score",
         "short_interest_pct", "insider_transactions", "beta",
-        "rel_volume", "avg_volume", "sector_strength_score", "exchange",
+        "rel_volume", "avg_volume", "exchange",
     }
+    allowed_sorts = set(sortable_columns()) | screener_extras
     if sort_col not in allowed_sorts:
         sort_col = "composite_score"
     if sort_dir not in ("asc", "desc"):
