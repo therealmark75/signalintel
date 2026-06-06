@@ -133,3 +133,41 @@ def test_api_signals_non_component_carries_and_no_raw_flags(client):
             "/api/signals row exposes raw 'flags'; it should be converted to "
             "'flag_list' by the post-query transform"
         )
+
+
+def test_api_industry_component_shape(client):
+    """Step 7: /api/industry/<industry_name> locks the four-component set via the
+    registry projection (api_industry migrated to signal_scores_projection with
+    prefix='sc.', surface='signals').
+
+    Biotechnology is a real industry that normally carries rows. If it ever
+    returns zero rows (industry empty, or all snapshots outside the handler's
+    2-day freshness window), xfail loudly with a clear message rather than
+    silently passing on an empty list, which would void this contract."""
+    url = "/api/industry/Biotechnology"
+    resp = client.get(url)
+    assert resp.status_code == 200, f"{url} returned {resp.status_code}"
+    rows = json.loads(resp.data)
+    assert isinstance(rows, list), f"{url} did not return a list: {type(rows)}"
+    if not rows:
+        pytest.xfail(
+            f"{url} returned zero rows; cannot lock row shape (industry empty "
+            "or all snapshots outside the 2-day freshness window)"
+        )
+
+    # Four components present, sector_strength_score absent (shared with 1-3).
+    _assert_component_shape(rows, url)
+
+    expected = {c.db_column for c in components_for_surface("signals")}
+    for row in rows:
+        keys = set(row.keys())
+        # Registry-coupling: live keys must be a superset of the registry set.
+        assert keys >= expected, (
+            f"{url} row keys are not a superset of the registry signals "
+            f"components; missing {expected - keys}"
+        )
+        # Raw 'flags' is never exposed (this handler never selects it).
+        assert "flags" not in keys, f"{url} row exposes raw 'flags'"
+        # Non-component carries this handler emits.
+        for carry in ("composite_score", "rating"):
+            assert carry in keys, f"{url} row missing non-component carry '{carry}'"
