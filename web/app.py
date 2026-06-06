@@ -799,9 +799,8 @@ def dashboard():
             out.append(d)
         return out
 
-    top_strong = _annotate(db_query("""
-        SELECT ticker, rating, composite_score, momentum_score,
-               quality_score, insider_score, reversion_score
+    top_strong = _annotate(db_query(f"""
+        SELECT ticker, rating, composite_score, {signal_scores_projection(surface='signals')}
         FROM signal_scores
         WHERE DATE(scored_at) = DATE((SELECT MAX(scored_at) FROM signal_scores))
           AND rating IN ('STRONG_BUY','BUY')
@@ -813,9 +812,8 @@ def dashboard():
     # the latest run); they're not genuine bearish conviction, they're tickers
     # whose composite went negative and got floored. Real bearish names start
     # at composite ~0.1 (LVO) under the current methodology.
-    top_bearish = _annotate(db_query("""
-        SELECT ticker, rating, composite_score, momentum_score,
-               quality_score, insider_score, reversion_score
+    top_bearish = _annotate(db_query(f"""
+        SELECT ticker, rating, composite_score, {signal_scores_projection(surface='signals')}
         FROM signal_scores
         WHERE DATE(scored_at) = DATE((SELECT MAX(scored_at) FROM signal_scores))
           AND rating IN ('SELL','STRONG_SELL')
