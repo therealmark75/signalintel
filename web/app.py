@@ -1064,12 +1064,11 @@ def industry_page(industry_name):
 @app.route("/api/industry/<path:industry_name>")
 @login_required  
 def api_industry(industry_name):
-    rows = db_query("""
+    rows = db_query(f"""
         SELECT ss.ticker, ss.company, ss.price, ss.change_pct,
                ss.market_cap, ss.sector, ss.industry,
                sc.rating, sc.composite_score,
-               sc.momentum_score, sc.quality_score,
-               sc.insider_score, sc.reversion_score,
+               {signal_scores_projection(prefix='sc.', surface='signals')},
                ss.analyst_recom
         FROM screener_snapshots ss
         LEFT JOIN signal_scores sc ON ss.ticker = sc.ticker
