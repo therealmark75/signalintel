@@ -3075,14 +3075,13 @@ def _get_penny_pick_full(db_path: str) -> "dict | None":
     if not ticker:
         return None
 
-    rows = db_query("""
+    rows = db_query(f"""
         SELECT ss.ticker, ss.company, ss.sector, ss.industry,
                ss.price, ss.change_pct, ss.volume, ss.rsi_14,
                ss.high_52w_pct, ss.low_52w_pct, ss.rel_volume, ss.avg_volume,
                ss.market_cap, ss.beta,
                sig.rating, sig.composite_score,
-               sig.momentum_score, sig.quality_score,
-               sig.insider_score, sig.reversion_score,
+               {signal_scores_projection(prefix='sig.', surface='signals')},
                sig.target_price, sig.target_upside,
                lr.risk_label, lr.risk_color, lr.penalty
         FROM screener_snapshots ss
