@@ -1,84 +1,74 @@
 # SignalIntel Session Handoff
 
-**Last updated:** end of Part 41 (6 June 2026)
+**Last updated:** end of Part 42 (6 June 2026)
 **Engine:** SCORING_ENGINE_VERSION 0.17.0 (unchanged)
-**Repo:** Part 41 work on branch `refactor/component-registry`. Local HEAD `d3919a1`, 7 commits ahead of `origin/refactor/component-registry` (`66db8da`) pre-push; level after this session's push. `origin/main` at `c3c0e54`, and carries docs-only after this session's cherry-pick (no arc code on main).
-**Suite:** 409 passed, 2 skipped (pre-existing `fmp_price_targets` + `economic_calendar` skips).
+**Repo:** component-rendering refactor arc COMPLETE and MERGED to main. `main` carries the arc via the `--no-ff` merge commit `6c43330` (pushed, `22824d1..6c43330`). Feature branch `refactor/component-registry` tip `736cc2c`, fully merged into main. HEAD returned to `refactor/component-registry` at session close.
+**Suite:** 409 passed, exit 0, 2 known skips (`fmp_price_targets`, `economic_calendar`).
+**Runtime:** gunicorn live, master launchd-managed (PPID 1) on 5001.
 
 ## Where we are
-Parts 39/40/41 (component-rendering refactor, array-driven, hard prerequisite before Yahoo components 9-16) in progress on a feature branch. Phase 1 inventory complete. Phase 2 design locked (two amendments banked Part 40). Phase 3 implementation in progress.
 
-Phase 3 status at Part 41 close: canonical **Step 6 full** (impl + test) and canonical **Step 7a** (dashboard panels) done. Two handlers the original plan omitted were also migrated this session (`api_industry`, `_get_penny_pick_full`), plus one Step-5.5-class registry correction (Step 9.5, reversion surface set). This is **NOT** the full SQL-handler half complete: canonical **Step 8** (ticker `/api/ticker` SELECT* to `surface='ticker'`) and canonical **Step 9** (`allowed_sorts` additive merge) remain OUTSTANDING handler work before the template sub-arc begins. Roughly 7 of 17 canonical steps shipped, with two handler steps still live.
+The component-rendering refactor (registry-driven rendering, the hard prerequisite before the Yahoo Finance pipeline and components 9-16) is **DONE and MERGED**. All canonical steps shipped across Parts 39-42; the arc is on main.
 
-## Part 39/40/41 status
+Rendering is now the canonical component registry (`signals/components.py`) projected to handlers via `signal_scores_projection(surface=...)` and to templates via the injected `components` Jinja var / `window.COMPONENTS_DATA` shim.
 
-### Phase 1 (inventory): COMPLETE
-Two-prompt diagnostic from Part 39 night 1; details in PROJECT_CONTEXT.
+The next arc (Yahoo Finance pipeline + components 9-16) is now **UNBLOCKED** (this refactor was its hard prerequisite).
 
-### Phase 2 (design): LOCKED, with amendments
-Original Q1-Q8 locks held (see PROJECT_CONTEXT). Two amendments banked in Part 40:
+## Component-rendering refactor: COMPLETE + MERGED
 
-- **Amendment A (Step 4.5):** `signal_scores_projection()` accepts an opt-in keyword-only `surface=` argument. Default behaviour (surface=None) byte-identical to Step 2. With surface set, filters via `components_for_surface(surface)`. Raises ValueError on invalid surface. Three tests lock the contract.
-- **Amendment B (Step 5.5 audit lens):** A column belongs on a surface if the API response for that surface carries it, not only if the consumer renders it as a visible cell. Server-side sort and filter inputs count as carries because the response must include the column. Ticker's 5 sub-scores count as carries because /api/ticker is SELECT * and Step 10 will render them in JS. This is the canonical lens for any future registry-vs-reality audit. Applied a second time in Part 41 (Step 9.5, reversion correction).
+Steps 1-7 + 5.5 + 9.5 shipped in Parts 39-41 (registry, projection helper, context processor, surface filter, handler migrations, surface corrections). Part 42 shipped the remaining handler steps and the entire template sub-arc:
 
-### Phase 3 (implementation): canonical Step 6 + 7a shipped, plus extras, on `refactor/component-registry`
+| Canonical step | SHA | What shipped | Verified by |
+|---|---|---|---|
+| Step 8 | `ed5e354` | `api_ticker` signal_scores read: `SELECT *` to `signal_scores_projection(surface='ticker')` | JSON-shape gate (16-key `payload.signal`, all required columns present) |
+| Step 9 | `20dcd4f` | `api_screener` sort gate derived from `sortable_columns()` + explicit `screener_extras` (composed set proven identical to the prior 25-key literal) | set-equality gate |
+| Step 10 | `841f83f` | `ticker.html` rendering driven by `window.COMPONENTS_DATA` + a behaviour table keyed by `key`; same 8 components, pixel-identical | browser walk (ticker) |
+| Step 11 | `b819164` | `dashboard.html` spotlight breakdown via the `components` Jinja var, explicit 3-key allowlist (momentum/quality/insider), no reversion added | byte-diff of both tiers (elite + non-elite) |
+| Step 12 | `6524106` | `industry.html` cells via the `window.COMPONENTS_DATA` shim, 3-key allowlist, reversion excluded | browser walk (industry) |
+| Step 13 | `736cc2c` | `penny.html` SOTD cells via a shim gated inside `{% if not locked %}`, 3-key allowlist; byte-identical both tiers | browser walk (penny, Elite + non-Elite) |
+| Step 16 (merge) | `6c43330` | `--no-ff` merge to main; one additive PROJECT_CONTEXT.md conflict resolved (Filing Narrative Component block kept); main pushed | merge + suite + runtime |
 
-Steps 1 through 5.5 shipped in Parts 39/40 (commits 53ac17c, 2196ff4, 6d57ae7, e1eb2aa, 6d32096, 37cd4a5, acf12b6). Suite at Part 40 close: 403 passed, 2 skipped.
+Verification rhythm: handler steps (8, 9) by JSON-shape / set-equality gates; template Steps 10, 12, 13 by browser walks; Step 11 by byte-diff of both rendered tiers.
 
-**Part 41 commit-to-canonical-step mapping.** The commit-message "Step N" labels are this session's local working sequence and do NOT map 1:1 to canonical plan steps. Reconciled below by mapping table, canonical numbering preserved as the spine (audit-trail rule).
+## Surfaces deliberately NOT migrated (reasons recorded so a future session does not re-litigate)
 
-| SHA | Commit subject | Migrated | Canonical step | Completeness |
-|------|----------------|----------|----------------|--------------|
-| `8536b8a` | Phase 3 Step 6: switch three /api/signals* handlers to registry-driven projection | `/api/signals`, `/api/signals/sector/<sector>`, `/api/signals/<rating>` to `surface='signals'` | Step 6 | full |
-| `fdffad2` | Phase 3 Step 6: shape-lock test for registry-driven signals endpoints | `tests/test_signals.py` (5 cases) locking the signals surface | Step 6 (test) | full (test half) |
-| `91376a0` | Phase 3 Step 7: switch api_industry handler to registry-driven projection | `api_industry` (`/api/industry/<name>`), later `surface='industry'` | none | extra, not in plan (handler the original plan omitted; caught by Step 7 inventory) |
-| `b39f3b8` | Phase 3 Step 7: shape-lock test for api_industry registry projection | `tests/test_signals.py` 6th case for `api_industry` | none | extra, not in plan (test for the extra handler) |
-| `b04d032` | Phase 3 Step 8: switch dashboard top_strong/top_bearish queries to registry-driven projection | `dashboard()` `top_strong` + `top_bearish`, later `surface='dashboard'` | Step 7a | partial (dashboard half of canonical Step 7; watchlist half = Step 7b not addressed) |
-| `01606c3` | Phase 3 Step 9: switch _get_penny_pick_full to registry-driven projection | `_get_penny_pick_full` (penny spotlight, `/api/penny/stock-of-day`), `surface='signals'` deliberate alias | none | extra, not in plan (handler the original plan omitted; caught by Step 7 inventory) |
-| `d3919a1` | Phase 3 Step 9.5: correct reversion surface set (add dashboard+industry per 5.5 lens), re-point handlers to semantic surfaces | registry `reversion` surfaces += `dashboard`, `industry`; re-point dashboard to `surface='dashboard'`, api_industry to `surface='industry'`; industry test bound to `components_for_surface("industry")` | new, 5.5-class | extra, registry correction (mirrors Step 5.5) |
+| Surface | Reason |
+|---|---|
+| `watchlist.html` | Heterogeneous Jinja cells (sector uses bespoke `round\|int` + color logic; momentum/quality/insider uniform). The real coupling lives in `database/db.py:get_watchlist`, which hand-lists the columns, NOT in the template. A template-only loop would not decouple the data layer. Out of arc scope. |
+| `screener.html` | Renders only the `composite_score` aggregate + a single bespoke `sector_strength_score` cell. No core component-cell SET to collapse. Not analogous to ticker/industry/penny. |
+| `index.html` | DEAD CODE. The `/` route unconditionally `redirect`s to `/dashboard` at `app.py:221`, before the only `render_template("index.html")` at line 240. Never served. Its signals/sector tables are not replicated on any live surface. Do not migrate dead code. |
+| `penny_screener.html` | Component-column names appear only as sort `<option>` values and preset configs, not as rendered score cells. Nothing to migrate. |
 
-Net against the canonical plan: Step 6 full (impl + test); Step 7a (dashboard) done, Step 7b (watchlist) not done; plus three out-of-plan-but-correct items (`api_industry`, `_get_penny_pick_full`, the reversion surface correction). No canonical step beyond 7a was advanced.
+The reachable surfaces that genuinely render a core component-cell set are exactly ticker.html, dashboard.html, industry.html, penny.html (all migrated), plus the dead index.html (skipped).
 
-### Remaining Phase 3 work (canonical order)
+## Queued work (next arc first)
 
-| Step | File(s) | Status | Change |
-|------|---------|--------|--------|
-| 7b | web/app.py | RESERVED, parked | watchlist join projection to `surface='watchlist'`. No code target exists today (no watchlist SQL hand-lists component columns). The `watchlist` surface (momentum, quality, insider, sector_strength; no reversion) is wired for future sub-score rendering, not active. |
-| 8 | web/app.py | OUTSTANDING, next target | ticker detail `/api/ticker` `SELECT *` to explicit `signal_scores_projection(surface='ticker')`. Highest value: the `ticker` surface carries the full component set including the five v0.17.0 sub-scores (earnings, piotroski, inst_own, analyst_mom, altman_penalty) plus value/sector/volume/legal. Prerequisite for canonical Step 10's JS consumption. |
-| 9 | web/app.py | OUTSTANDING | `allowed_sorts` additive merge with `sortable_columns()` (preserves non-component sort keys). |
-| 10-15 | web/templates/ | NOT STARTED | Template-loop sub-arc. Per-file breakdown below is INDICATIVE, to be confirmed by each step's own Phase 1 inventory, NOT canonical. Verification rhythm changes from JSON key-checks to numbered visual browser walks (free/pro/elite), pixel-parity confirm. |
-| 16 | merge to main | END OF ARC | Multi-tier browser sweep (free/pro/elite), pixel-parity confirm, fast-forward or squash-merge by Mark's preference. |
+1. **Yahoo Finance pipeline + components 9-16 (NEXT, now unblocked).** The component-rendering refactor was the hard prerequisite and is done. This arc adds the next sub-score components and their data source.
+2. **Backtest harness.** Blocked on persisting the five v0.17.0 sub-scores (earnings, piotroski, inst_own, analyst_mom, altman_penalty) as their own `signal_scores` columns first; the harness needs sub-score history to backtest against. Sequence the persistence-columns change ahead of it.
+3. **FINRA short-interest** integration (queued, unchanged).
+4. **Production Stripe flip** (queued, unchanged).
 
-INDICATIVE template breakdown for Steps 10-15 (confirm per step, do not treat as canonical): 10 = ticker.html (window.COMPONENTS_DATA + JS render shim, largest single step); 11 = screener.html + penny_screener.html per-row cells; 12 = index.html signals + sector tabs; 13 = dashboard.html spotlight breakdown; 14 = watchlist.html per-row cells; 15 = industry.html per-row cells.
+## Operational notes (carry forward)
 
-### Surface strategy (settled this session)
+- **Branch discipline:** the arc is merged, but until the next arc's branch is cut the session-open baseline still asserts `git branch --show-current`. GitHub Desktop branch clicks caused silent HEAD drifts earlier in the arc; keep the rule.
+- **P23 hook:** `web/app.py` is path-matching (any touch trips the hook). Each `web/app.py` commit needs Mark's explicit `--no-verify` in his own terminal after he reviews the auth-clean diff. CC surfaces the trip and the staged diff and waits; CC does not self-clear. `database/db.py`, `signals/components.py`, and `tests/` commit cleanly on auth-clean diffs.
+- **Runtime drift:** any `web/app.py` commit needs a gunicorn restart (`launchctl kickstart -k gui/$(id -u)/io.thesignalvault.gunicorn`); verify the master is launchd-managed (PPID 1) and owns 5001 post-restart. `launchd last exit code` is backward-looking; assert "current PID stable AND no recent err.log entries" instead.
+- **Registry-vs-reality audits** use the Step 5.5 carried-response lens (a column belongs on a surface if the API response carries it, not only if a cell renders it). Applied at 5.5 (sector_strength on signals) and 9.5 (reversion on dashboard/industry).
 
-- Per-surface component sets are real and now correct. `reversion_score` carries on: **ticker, screener, signals, dashboard, industry** (corrected from a 3-surface under-listing in Step 9.5, per the Step 5.5 carried-response lens; the dashboard and industry responses already carried reversion, and dashboard `_thesis()` consumes it).
-- Penny: deliberate `surface='signals'` alias. No penny surface exists by design.
-- Watchlist surface tag (momentum, quality, insider, sector_strength) reserved for future sub-score rendering. No current code target.
-
-### Reconciliation note (process working as designed)
-
-The Step 7 inventory-driven approach FOUND the original plan's handler-list gaps: `api_industry` and `_get_penny_pick_full` were omitted from the canonical Phase 1 enumeration. The two-phase process (inventory before edit) surfaced and closed those gaps in-session. Record this as the method working as intended, not a plan failure.
-
-## Operational notes for the arc
-
-- **Branch discipline:** `refactor/component-registry` is the working branch. GitHub Desktop and any other terminal session must stay on this branch for the whole arc. Three silent HEAD drifts in an earlier part were caused by GitHub Desktop branch clicks; none since the operational rule landed. Baseline verification at session open includes `git branch --show-current` against this exact string.
-- **P23 hook is path-matching for web/app.py and content-scanning for everything else.** Confirmed empirically across Steps 4 through 9.5: every web/app.py touch trips the hook regardless of diff content. Each web/app.py commit needs Mark's explicit `--no-verify` authorisation after Athena confirms the diff is auth-clean and Mark reviews it. database/db.py, signals/components.py, and tests/ do not trip on clean diffs (Steps 2, 4.5, 5.5, plus the Step 6/7/9.5 test commits all committed cleanly; Step 9.5 bundled a web/app.py change so it took the `--no-verify` path).
-- **Runtime drift:** any web/app.py commit needs a gunicorn restart at commit time. `launchctl kickstart -k gui/$(id -u)/io.thesignalvault.gunicorn`. Verify post-restart that the master is launchd-managed (PPID 1) and owns 5001. Clean restarts throughout Part 41 (master plus worker, `-w 1`).
-- **launchd `last exit code` is backward-looking, not a current-health signal.** Assert "current PID stable AND no recent err.log entries" rather than reading the exit-code field.
-- **Step 4.5 / 5.5 amendments in effect:** any surface-projection switch uses `signal_scores_projection(surface='<name>', ...)`. Any registry-vs-reality discrepancy is resolved by the response-carries lens, not the render-cell lens. Applied twice now (5.5 sector_strength on signals, 9.5 reversion on dashboard/industry).
-
-## Known pre-existing FOLLOWUPS unchanged this session
+## Known pre-existing FOLLOWUPS (unchanged this session)
 
 - Dormant `initialise_schema` gap (does not provision volume_score or scoring_version on fresh-DB init). P19-class fix when prioritised. Not in this arc.
-- AGENTS.md + docs/dash_sweep_plan.md tracked since Part 38 close.
-- Orphan-gunicorn diagnosis (Part 40): session-open baseline check should be strengthened from "at least one gunicorn process" to "exactly one master with launchd-managed PPID chain bound to 5001". Pre-existing condition, fixed in-session, worth codifying.
-- PROJECT_CONTEXT Amendment B paragraph records the Step 5.5 lens as correcting "one discrepancy". Part 41 applied the same lens a second time (Step 9.5, reversion). Optional one-line addendum next docs-sync; not a contradiction.
+- AGENTS.md + docs/dash_sweep_plan.md tracked since Part 38 close. PROJECT_CONTEXT.md still carries pre-existing em/en dashes; a full sweep is the tracked task (not done this session).
+- Orphan-gunicorn baseline check: assert "exactly one master with launchd-managed PPID chain bound to 5001", not "at least one gunicorn process".
 
-## Branch state (explicit, for the next fresh chat)
+## Working-style standing instruction (in effect from Part 42)
 
-- All Step 6 through 9.5 CODE commits live on `refactor/component-registry` and are NOT in main: `8536b8a`, `fdffad2`, `91376a0`, `b39f3b8`, `b04d032`, `01606c3`, `d3919a1`.
-- `main` carries ONLY the docs-sync commit (HANDOFF + PROJECT_CONTEXT) from this session's cherry-pick. No arc code on main.
-- Next session opens with the 7-gate baseline. `git branch --show-current` MUST return `refactor/component-registry` before any work. GitHub Desktop stays on the feature branch for the whole arc.
-- Next active target: canonical **Step 8** (ticker detail `/api/ticker` SELECT* to `surface='ticker'`).
+- Replies are prompts-only: when handing Mark something to run or paste, give the literal block with no surrounding narration of steps taken.
+- Label every copy block as **CC-prompt** (paste into a Claude Code session) or **Terminal** (run in his own shell).
+- Lead with the artifact or result; do not narrate the work step by step.
+
+## Branch state (for the next fresh chat)
+
+- Arc fully merged: `main` at `6c43330` (merge commit, pushed); feature branch `refactor/component-registry` at `736cc2c`, merged in.
+- Next session opens on `refactor/component-registry` (or a fresh branch cut for the Yahoo arc). Confirm `git branch --show-current` before any work.
+- Next active target: **Yahoo Finance pipeline + components 9-16** (unblocked).
