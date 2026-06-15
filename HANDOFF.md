@@ -1,64 +1,50 @@
 # SignalIntel Session Handoff
 
-**Last updated:** end of Part 42 (6 June 2026)
-**Engine:** SCORING_ENGINE_VERSION 0.17.0 (unchanged)
-**Repo:** component-rendering refactor arc COMPLETE and MERGED to main. `main` carries the arc via the `--no-ff` merge commit `6c43330` (pushed, `22824d1..6c43330`). Feature branch `refactor/component-registry` tip `736cc2c`, fully merged into main. HEAD returned to `refactor/component-registry` at session close.
-**Suite:** 409 passed, exit 0, 2 known skips (`fmp_price_targets`, `economic_calendar`).
-**Runtime:** gunicorn live, master launchd-managed (PPID 1) on 5001.
+**Last updated:** end of Part 43 (15 June 2026)
+**Engine:** SCORING_ENGINE_VERSION 0.18.0 (bumped this session for the Piotroski P5 fix)
+**Repo:** branch `feature/yahoo-pipeline`, cut fresh off `main` at `ba96ea8`. Three commits ahead of main: `6c67aa7` (methodology docs), `4f440ee` (Piotroski P5 fix, 0.18.0), `3830bef` (Elite sub-score surfacing). Code commits stay on the branch; only the docs commit cherry-picks to main.
+**Suite:** 417 passed, 3 skipped, exit 0. Skips: `fmp_price_targets` and `economic_calendar` (both known-empty), plus a data-conditional `test_themes.py` skip (no STRONG_BUY in the latest run; flips with DB state).
+**Runtime:** gunicorn live, master launchd-managed (PPID 1) on 5001. Restarted twice this session, once after the Piotroski fix and once after the surfacing commit.
 
 ## Where we are
 
-The component-rendering refactor (registry-driven rendering, the hard prerequisite before the Yahoo Finance pipeline and components 9-16) is **DONE and MERGED**. All canonical steps shipped across Parts 39-42; the arc is on main.
+The Yahoo arc opened on `feature/yahoo-pipeline`. The Part 43 handover premise was WRONG and has been corrected in PROJECT_CONTEXT: the Yahoo Finance pipeline was already fully built, scheduled, and live (six Yahoo jobs in the scheduler), and components 9-13 already scored, persisted on `signal_scores`, and fed the composite. The arc was therefore not "build Yahoo ingest"; it became "reconcile the live components, fix a latent P5 bug, and surface the persisted sub-scores."
 
-Rendering is now the canonical component registry (`signals/components.py`) projected to handlers via `signal_scores_projection(surface=...)` and to templates via the injected `components` Jinja var / `window.COMPONENTS_DATA` shim.
+## Part 43 work (this session)
 
-The next arc (Yahoo Finance pipeline + components 9-16) is now **UNBLOCKED** (this refactor was its hard prerequisite).
-
-## Component-rendering refactor: COMPLETE + MERGED
-
-Steps 1-7 + 5.5 + 9.5 shipped in Parts 39-41 (registry, projection helper, context processor, surface filter, handler migrations, surface corrections). Part 42 shipped the remaining handler steps and the entire template sub-arc:
-
-| Canonical step | SHA | What shipped | Verified by |
+| Commit | Type | What shipped | Verified by |
 |---|---|---|---|
-| Step 8 | `ed5e354` | `api_ticker` signal_scores read: `SELECT *` to `signal_scores_projection(surface='ticker')` | JSON-shape gate (16-key `payload.signal`, all required columns present) |
-| Step 9 | `20dcd4f` | `api_screener` sort gate derived from `sortable_columns()` + explicit `screener_extras` (composed set proven identical to the prior 25-key literal) | set-equality gate |
-| Step 10 | `841f83f` | `ticker.html` rendering driven by `window.COMPONENTS_DATA` + a behaviour table keyed by `key`; same 8 components, pixel-identical | browser walk (ticker) |
-| Step 11 | `b819164` | `dashboard.html` spotlight breakdown via the `components` Jinja var, explicit 3-key allowlist (momentum/quality/insider), no reversion added | byte-diff of both tiers (elite + non-elite) |
-| Step 12 | `6524106` | `industry.html` cells via the `window.COMPONENTS_DATA` shim, 3-key allowlist, reversion excluded | browser walk (industry) |
-| Step 13 | `736cc2c` | `penny.html` SOTD cells via a shim gated inside `{% if not locked %}`, 3-key allowlist; byte-identical both tiers | browser walk (penny, Elite + non-Elite) |
-| Step 16 (merge) | `6c43330` | `--no-ff` merge to main; one additive PROJECT_CONTEXT.md conflict resolved (Filing Narrative Component block kept); main pushed | merge + suite + runtime |
-
-Verification rhythm: handler steps (8, 9) by JSON-shape / set-equality gates; template Steps 10, 12, 13 by browser walks; Step 11 by byte-diff of both rendered tiers.
-
-## Surfaces deliberately NOT migrated (reasons recorded so a future session does not re-litigate)
-
-| Surface | Reason |
-|---|---|
-| `watchlist.html` | Heterogeneous Jinja cells (sector uses bespoke `round\|int` + color logic; momentum/quality/insider uniform). The real coupling lives in `database/db.py:get_watchlist`, which hand-lists the columns, NOT in the template. A template-only loop would not decouple the data layer. Out of arc scope. |
-| `screener.html` | Renders only the `composite_score` aggregate + a single bespoke `sector_strength_score` cell. No core component-cell SET to collapse. Not analogous to ticker/industry/penny. |
-| `index.html` | DEAD CODE. The `/` route unconditionally `redirect`s to `/dashboard` at `app.py:221`, before the only `render_template("index.html")` at line 240. Never served. Its signals/sector tables are not replicated on any live surface. Do not migrate dead code. |
-| `penny_screener.html` | Component-column names appear only as sort `<option>` values and preset configs, not as rendered score cells. Nothing to migrate. |
-
-The reachable surfaces that genuinely render a core component-cell set are exactly ticker.html, dashboard.html, industry.html, penny.html (all migrated), plus the dead index.html (skipped).
+| `6c67aa7` | docs only | Five reconciliation docs `docs/methodology/component_09..13` documenting actual live scorer behaviour from source bytes, plus `docs/methodology/FOLLOWUPS.md` banking divergence findings (one P5 violation, one stale docstring, latent tail) | reconciliation gates (line refs, glyph-clean, no .py touched) |
+| `4f440ee` | scoring, 0.18.0 | Piotroski P5 fix: missing line items were counted as failed F-score criteria, producing sub-neutral scores from absent data. Now coverage-aware (absent inputs EXCLUDED, floor at 5 of 9 returns neutral 50, Option B humility cap at 6 for partial coverage, full-coverage identity preserved). Rider: corrected stale analyst_mom docstring to v0.17.0 hard-only. Added partial-coverage test | P29 probe first (about 2,332 sub-neutral scores, about 206 absent-data-driven), suite green, gunicorn restart |
+| `3830bef` | render + gate | Elite-only "Advanced Signals" section on the ticker page: four sub-score chips plus the Altman distress flag (risk badge, only when penalty non-zero). Server-side Elite-strict gate (`strip_subscores_for_non_elite` + `ELITE_ONLY_SUBSCORE_FIELDS`) strips the five fields from `/api/ticker` JSON for non-Elite, price-independent. `subscores_locked` flag drives the teaser. No version bump | six browser walks, including the mandatory Pro leak check (five fields ABSENT from Pro `/api/ticker` JSON via Network tab on DPZ), suite green, gunicorn restart |
 
 ## Queued work (next arc first)
 
-1. **Yahoo Finance pipeline + components 9-16 (NEXT, now unblocked).** The component-rendering refactor was the hard prerequisite and is done. This arc adds the next sub-score components and their data source.
-2. **Backtest harness.** Blocked on persisting the five v0.17.0 sub-scores (earnings, piotroski, inst_own, analyst_mom, altman_penalty) as their own `signal_scores` columns first; the harness needs sub-score history to backtest against. Sequence the persistence-columns change ahead of it.
-3. **FINRA short-interest** integration (queued, unchanged).
-4. **Production Stripe flip** (queued, unchanged).
+1. **Scheduler rescore on 0.18.0.** Code is live but the persisted `piotroski_score` values in the DB are still 0.17.0 numbers until the scheduler rescores on its next cycle. No action needed; recorded so a backtest reader does not mistake stale rows for the new logic.
+2. **Component 14, FINRA short-interest.** The genuine net-new build and the next arc. Probe-first, correlation gate (|r| >= 0.6 is a stop-and-discuss threshold), version bump, its own diagnostic-then-implement sequence.
+3. **fmp_price_targets yahoo reroute.** The table has NO writer wired (`fetch_price_target` / `save_price_target` have no caller; empty by construction), so the Value component (#6) scores on an empty table. Reroute decision LOCKED: source price targets from yfinance `Ticker.info` `targetMeanPrice` and retire the FMP path. Not yet implemented; queued.
+4. **FOLLOWUPS latent tail.** ISO-date string-sort couplings (09/10/13), dead guard (09), 50.0 collision (10), init-as-upgrade (12), vestigial `total_revenue` in `ALTMAN_LOOKUPS` (13). Banked in `docs/methodology/FOLLOWUPS.md`, not urgent.
+5. **Components 15/16 (News Sentiment, Options Flow).** Remain deferred, dashboard-only per the composite-purity invariant.
+6. **Production Stripe flip** (queued, unchanged).
+
+## Test accounts (for tier-gated walks)
+
+- `markn` = elite
+- `beta2` = pro
+- `mark2` = free
 
 ## Operational notes (carry forward)
 
-- **Branch discipline:** the arc is merged, but until the next arc's branch is cut the session-open baseline still asserts `git branch --show-current`. GitHub Desktop branch clicks caused silent HEAD drifts earlier in the arc; keep the rule.
-- **P23 hook:** `web/app.py` is path-matching (any touch trips the hook). Each `web/app.py` commit needs Mark's explicit `--no-verify` in his own terminal after he reviews the auth-clean diff. CC surfaces the trip and the staged diff and waits; CC does not self-clear. `database/db.py`, `signals/components.py`, and `tests/` commit cleanly on auth-clean diffs.
-- **Runtime drift:** any `web/app.py` commit needs a gunicorn restart (`launchctl kickstart -k gui/$(id -u)/io.thesignalvault.gunicorn`); verify the master is launchd-managed (PPID 1) and owns 5001 post-restart. `launchd last exit code` is backward-looking; assert "current PID stable AND no recent err.log entries" instead.
-- **Registry-vs-reality audits** use the Step 5.5 carried-response lens (a column belongs on a surface if the API response carries it, not only if a cell renders it). Applied at 5.5 (sector_strength on signals) and 9.5 (reversion on dashboard/industry).
+- **Branch discipline:** confirm `git branch --show-current` before any work. GitHub Desktop branch clicks have caused silent HEAD drifts before.
+- **P23 hook:** `web/app.py` is path-matching (any touch trips the hook). The hook reads `[y/N]` from `/dev/tty`, so an auth-adjacent commit can only be confirmed from Mark's own terminal; from CC's non-interactive shell it exits 1 with "No controlling terminal". CC stages, surfaces the diff, and hands Mark the literal `git commit` to run himself. CC does not use `--no-verify` unless Mark explicitly authorises it. Docs-only and `database/db.py` / `signals/components.py` / `tests/` commits on auth-clean diffs pass the hook silently.
+- **Hook Pass 0 (dash check):** the pre-commit hook rejects any ADDED line containing an em-dash (U+2014) or en-dash (U+2013) on ANY staged path, including docs. Keep added content glyph-clean or the commit blocks.
+- **Runtime drift:** any `web/app.py` or scorer commit needs a gunicorn restart (`launchctl kickstart -k gui/$(id -u)/io.thesignalvault.gunicorn`); verify the master is launchd-managed (PPID 1) and owns 5001 post-restart. Assert "current PID stable AND no recent err.log entries", not the backward-looking launchd exit code.
+- **Registry-vs-reality audits** use the Step 5.5 carried-response lens (a column belongs on a surface if the API response carries it, not only if a cell renders it).
 
 ## Known pre-existing FOLLOWUPS (unchanged this session)
 
-- Dormant `initialise_schema` gap (does not provision volume_score or scoring_version on fresh-DB init). P19-class fix when prioritised. Not in this arc.
-- AGENTS.md + docs/dash_sweep_plan.md tracked since Part 38 close. PROJECT_CONTEXT.md still carries pre-existing em/en dashes; a full sweep is the tracked task (not done this session).
+- Dormant `initialise_schema` gap (does not provision volume_score or scoring_version on fresh-DB init). P19-class fix when prioritised.
+- PROJECT_CONTEXT.md still carries pre-existing em/en dashes; a full sweep is the tracked task (not done this session). The Piotroski and surfacing commits added only glyph-clean content.
 - Orphan-gunicorn baseline check: assert "exactly one master with launchd-managed PPID chain bound to 5001", not "at least one gunicorn process".
 
 ## Working-style standing instruction (in effect from Part 42)
@@ -69,6 +55,6 @@ The reachable surfaces that genuinely render a core component-cell set are exact
 
 ## Branch state (for the next fresh chat)
 
-- Arc fully merged: `main` at `6c43330` (merge commit, pushed); feature branch `refactor/component-registry` at `736cc2c`, merged in.
-- Next session opens on `refactor/component-registry` (or a fresh branch cut for the Yahoo arc). Confirm `git branch --show-current` before any work.
-- Next active target: **Yahoo Finance pipeline + components 9-16** (unblocked).
+- `feature/yahoo-pipeline` is three commits ahead of `main` (`6c67aa7`, `4f440ee`, `3830bef`); not pushed, not cherry-picked. Mark drives the push / cherry-pick / return sequence.
+- The Part 43 doc-sync commit (HANDOFF.md + PROJECT_CONTEXT.md) is the cherry-pickable-to-main one; code commits stay on the branch.
+- Next active target: **Component 14 (FINRA short-interest)**, the next net-new build.

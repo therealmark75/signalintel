@@ -415,12 +415,19 @@ integer net_momentum (the band is the neutral-tier rule on integers,
 not v0.16-specific dead code). Coverage trade-off accepted: less
 coverage scoring neutrally beats more coverage scoring backwards.
 
-Components 9-16 land in the Yahoo pipeline session (next major work).
-Ticker page rendering is now array-driven via the COMPONENTS registry
-in ticker.html (11 May 2026 refactor), so new components will be
-registry additions, not template surgery.
+Components 9-13 are BUILT and LIVE (earnings, piotroski, inst_own,
+analyst_mom, altman_penalty): they score, persist on signal_scores, and
+feed the composite as of v0.13.0+, and as of Part 43 (15 June 2026) they
+are surfaced on the ticker detail page (Elite-only Advanced Signals
+section). The Yahoo ingest pipeline (six scheduler jobs) is likewise
+already built and live. Components 14-16 remain: 14 (FINRA short-interest)
+is the next net-new build; 15 (News Sentiment) and 16 (Options Flow) stay
+deferred and dashboard-only per the composite-purity invariant. Ticker
+page rendering is array-driven via the COMPONENTS registry in ticker.html
+(11 May 2026 refactor), so new components are registry additions, not
+template surgery.
 
-### SCORING_ENGINE_VERSION: 0.17.0
+### SCORING_ENGINE_VERSION: 0.18.0
 
 Bump policy: PATCH = bug fix without scoring change; MINOR = new
 component, weight change, OR substantive scoring substrate change
@@ -461,6 +468,22 @@ Version history:
   more coverage scoring backwards. Also persists five component
   sub-scores on signal_scores (graduating-bar prerequisite, no scoring
   math change). First prod rows 25 May 2026 17:30 BST.
+- 0.18.0: Piotroski P5 coverage-aware fix (Part 43, 15 June 2026).
+  score_piotroski previously counted absent line items as failed F-score
+  criteria, producing sub-neutral scores from missing data (a P5
+  violation). Now a signal whose inputs are absent is EXCLUDED, not
+  failed: below 5 of 9 computable signals returns neutral 50.0; at or
+  above the floor the passes are normalised over the present signals and
+  capped at 6 for partial coverage (Option B, only full 9-of-9 coverage
+  reaches the 80.0 top tier). Full coverage is the identity case, so
+  well-covered tickers are unchanged; the coverage-starved tail moves off
+  the absent-data floor while genuine full-coverage distress still scores
+  20. P29 probe ran first on the production batch (about 2,332
+  sub-neutral piotroski scores, of which about 206 tickers at 4 or fewer
+  present keys were absent-data-driven). 50.0-for-skipped (no NULL
+  decoupling); the four-way 50.0 collision is accepted and deferred to the
+  backtest harness as coverage metadata. Code live; persisted scores
+  remain 0.17.0 values until the scheduler rescores on its next cycle.
 
 The 11 May refactor (component registry in ticker.html) did NOT bump
 the version, purely presentational, no scoring substrate change.
@@ -745,7 +768,9 @@ modify code outside the prompt's explicit scope.
 ✅ Phase 2b — Cloudflare Tunnel deployment (15 May 2026): cloudflared installed via Homebrew, named tunnel `signalintel`, ingress for apex and www, GoDaddy nameservers swapped to Cloudflare (anahi.ns + craig.ns), DNSSEC confirmed off, propagation completed in ~75 minutes, cloudflared installed as LaunchDaemon with correct ProgramArguments (initial install omitted `tunnel run` args, fixed via plist rewrite). End state: thesignalvault.io live over HTTPS via Cloudflare proxy, four edge connections to London (lhr10/13/13/18). No code commits; operational config only.
 ✅ Phase 2c — Project tree migration out of ~/Documents/ (15 May 2026, 2 commits, pushed): Project moved from ~/Documents/trading-system to ~/signalintel to bypass macOS TCC restrictions on launchd-spawned processes. Venv recreated at new path (pip install -r requirements.txt). Five one-off legal-risk scripts and CLAUDE.md updated for path strings (commit 7eb0899). Tracked .pyc files and web/.DS_Store removed, .gitignore patterns added (commit ab8eca1). Gunicorn now under LaunchAgent at ~/Library/LaunchAgents/io.thesignalvault.gunicorn.plist, surviving reboot. Old path retained at ~/Documents/trading-system.OLD for 24-hour safety window (delete after 16 May 2026 16:49 BST if stable).
 
-[ ] Yahoo Finance pipeline + components 9-16 (FRESH CHAT, large infrastructure session, next major work)
+[x] Yahoo Finance pipeline + components 9-13 (DONE and LIVE: pipeline and components 9-13 were already built/live pre-Part-43; Part 43 reconciled them, shipped the Piotroski P5 fix on 0.18.0, and surfaced the Elite sub-scores on the ticker page)
+[ ] Component 14 (FINRA short-interest): next net-new build, probe-first, correlation gate (|r| >= 0.6 stop-and-discuss), own version bump
+[ ] fmp_price_targets reroute to yfinance targetMeanPrice (dead FMP writer, Value component scores on empty table)
 [ ] Virtual portfolio with margin calls and bust mechanic
 [ ] Email alerts via SendGrid
 
