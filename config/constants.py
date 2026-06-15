@@ -79,7 +79,17 @@ REQUEST_TIMEOUT       = 20
 #   MAJOR  (1.0.0 → 2.0.0)  : post-launch, breaking changes to scoring methodology
 # ⚠  Bump BEFORE shipping any change that affects scoring output.
 #    New data tagged with the old version is permanently mis-stamped.
-SCORING_ENGINE_VERSION = "0.17.0"
+SCORING_ENGINE_VERSION = "0.18.0"
+# v0.18.0 (15 June 2026): score_piotroski made coverage-aware (P5 fix). A
+# Piotroski signal whose inputs are absent is now EXCLUDED rather than
+# scored as a failed criterion. Below 5 of 9 computable signals returns
+# neutral 50.0 (missing data must never penalise, P5); at or above the
+# floor the passes are normalised over the present signals and capped at 6
+# for partial coverage (only full 9-of-9 coverage reaches the 80.0 top
+# tier). Full coverage is the identity case, so previously well-covered
+# tickers are unchanged; thinly-reported tickers that were scored sub-
+# neutral purely from absent line items now resolve toward neutral.
+#
 # v0.17.0 (25 May 2026 PM): analyst_momentum soft-action PT contribution
 # NEUTRALISED to 0 after failing external event-study validation. The
 # v0.16.0 ±0.25 soft weighting (main/reit Raises/Lowers) returned a
