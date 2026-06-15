@@ -423,11 +423,11 @@ def job_daily_summary():
         if not top:
             logger.warning("Daily summary: no signals found")
             return
-        lines = [f"📊 <b>SIGNALINTEL — DAILY SUMMARY</b>  {date.today()}", ""]
+        lines = [f"📊 <b>SIGNALINTEL: DAILY SUMMARY</b>  {date.today()}", ""]
         for s in top:
             emoji = _RATING_EMOJI.get(s["rating"], "")
             lines.append(
-                f"{emoji} <b>${s['ticker']}</b>  {s['rating'].replace('_', ' ')}  "
+                f"{emoji} <b>${s['ticker']}</b>  {tier_short(s['rating'])}  "
                 f"Score: {s['composite_score']:.1f}"
             )
         send_alert("\n".join(lines))
