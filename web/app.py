@@ -35,6 +35,7 @@ from config.pricing import LAUNCH_PRICING, ANNUAL_DISCOUNT_PCT, TIER_FEATURES
 from config.entitlements import (
     effective_tier, can_view_penny_signals, can_view_score_for_ticker,
     strip_scores_for_non_elite, filter_proprietary_flags_for_non_elite,
+    strip_subscores_for_non_elite,
 )
 from config.settings import FLASK_SECRET_KEY, STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET
 from signals.signal_labels import tier_short
@@ -2463,6 +2464,18 @@ def api_ticker(ticker):
     }
     if not score_visible:
         payload["locked"] = True
+
+    # Elite-strict sub-score gate (additive, layered on top of the
+    # price-band score-visible gate above). The four positive sub-scores
+    # plus the Altman distress penalty are Elite-only on this surface
+    # regardless of price; pro/free never receive them in the JSON. The
+    # base eight components and composite stay visible to pro as today.
+    # subscores_locked is the explicit teaser-vs-section flag for the
+    # template: do NOT infer lock state from key absence, since an elite
+    # user on a data-poor ticker can have legitimately NULL sub-scores.
+    if payload["signal"]:
+        strip_subscores_for_non_elite(payload["signal"], tier)
+    payload["subscores_locked"] = (tier != 'elite')
     return jsonify(payload)
 
 

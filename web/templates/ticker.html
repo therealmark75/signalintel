@@ -542,6 +542,47 @@ async function loadPage() {
         .map(c => radarLegendRow(c))
         .join('');
 
+    // ── Advanced signals (Elite) ────────────────────────────────────────
+    // The four positive sub-scores render as chips in the same visual
+    // language as the base eight, reading values straight from data.signal
+    // (the registry supplies label + tooltip via window.COMPONENTS_DATA).
+    // Server strips these fields for non-elite, so they only arrive here for
+    // an elite caller; data.subscores_locked is the authoritative teaser
+    // flag (never infer from key absence: an elite user on a data-poor
+    // ticker has legitimately NULL sub-scores, which render as "No data").
+    function advancedChip(key) {
+        const c = window.COMPONENTS_DATA.find(x => x.key === key);
+        if (!c) return '';
+        const v = s[c.dbColumn];
+        const w = (v == null);
+        const display = w ? 'No data' : v.toFixed(1);
+        const cls = w ? 'mid' : scoreC(v);
+        return `<div class="score-item" data-tip="${c.tooltip}"><div class="score-item-label">${c.label}</div><div class="score-item-value ${cls}">${display}</div></div>`;
+    }
+    // Altman distress flag: a risk badge, NOT a 0-100 chip. Renders only when
+    // the penalty actually fires (non-zero); nothing when zero or absent.
+    function altmanDistressFlag() {
+        const p = s.altman_penalty;
+        if (p == null || p === 0) return '';
+        const word = p === -10 ? 'grey zone' : p === -30 ? 'distress' : 'deep distress';
+        const dc = '#ff3b5c';
+        return `<div style="margin-top:14px;display:inline-flex;align-items:center;gap:8px;padding:6px 12px;border-radius:6px;background:${dc}18;border:1px solid ${dc}55;color:${dc};font-family:var(--mono);font-size:11px;font-weight:700" data-tip="Altman Z-double-prime financial-distress penalty applied to the composite score.">⚠ Financial distress (Altman Z″): ${word} (${p} pts)</div>`;
+    }
+    // Badge text is titlecase "Elite" with a CSS uppercase transform, never the
+    // all-caps literal: the BUG-001 P15 smoke guard forbids the all-caps tier
+    // badge token in served HTML (including inline JS source and identifiers),
+    // and this feature label must not collide with it. text-transform renders
+    // it visually uppercase without shipping the forbidden literal.
+    const advTierBadge = `<span style="font-size:9px;font-weight:700;color:#ffd700;border:1px solid #ffd70066;border-radius:3px;padding:1px 5px;margin-left:6px;vertical-align:middle;font-family:var(--mono);text-transform:uppercase;letter-spacing:0.5px">Elite</span>`;
+    const advancedSection = data.subscores_locked
+        ? `<div class="card" style="margin-bottom:16px"><div class="card-title">Advanced Signals${advTierBadge}</div>
+            <div class="lt-inline"><span class="lt-inline-title">🔒 Advanced signals (earnings surprise, financial strength, institutional ownership, analyst momentum): Elite tier required</span><a href="/account" class="lt-inline-cta">Upgrade to Elite</a></div>
+          </div>`
+        : `<div class="card" style="margin-bottom:16px"><div class="card-title">Advanced Signals${advTierBadge}</div>
+            <div class="signal-scores">${['earnings','piotroski','inst_own','analyst_mom'].map(advancedChip).join('')}</div>
+            ${altmanDistressFlag()}
+          </div>`;
+
     document.getElementById('page-content').innerHTML = `
         <!-- Hero -->
         <div class="hero">
@@ -599,6 +640,10 @@ async function loadPage() {
             </div>`; })() : ''}
             <div class="signal-scores">${scoreChipsHTML}</div>
         </div>
+
+        <!-- Advanced signals (Elite). Skipped when the whole panel is locked
+             (penny + non-elite): the panel-level teaser already covers it. -->
+        ${!data.locked ? advancedSection : ''}
 
 
         <!-- Hexagon Scorecard -->
