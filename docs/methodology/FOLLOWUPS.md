@@ -134,3 +134,44 @@ Source: reconciliation of `docs/methodology/component_09_earnings.md` through
     live penalty. Harmless, but it can mislead a reader into thinking X5 still
     feeds the penalty. Action: annotate or remove from the live lookup set
     opportunistically.
+
+---
+
+## 15 June 2026 (Part 43, post-close)
+
+### PRIORITY-ish (product decision needed, not a code bug to fix blind)
+
+- **economic_calendar is EMPTY from both writers; FMP job throws a daily 402 alert.**
+  - What the bytes/DB show: the `economic_calendar` table holds 0 rows
+    (`COUNT(*) = 0`, `MAX(scraped_at)` NULL). It has TWO writers to the one
+    table, and both currently fail to populate it:
+    - FMP path: `refresh_economic_calendar` to `save_economic_calendar`
+      (`scrapers/fmp_scraper.py:556`), run by the nested `job_economic_calendar`
+      (`main.py:909`, cron 06:30). FMP `/economic-calendar` is plan-gated and
+      returns 402, so the job dies at fetch AND fires a daily Telegram "FMP
+      entitlement failure" alert.
+    - FinViz path: `calendar_scraper.scrape_economic_calendar` to
+      `insert_calendar_events` (`database/db.py:698`), run by
+      `job_news_and_calendar` (`main.py:276`). Also produces zero rows.
+  - Consumers: `api_economic_calendar` (`web/app.py:1769`) and
+    `api_high_impact_banner` (`web/app.py:1802`) feed the `/events` page, which
+    serves an empty calendar regardless. `get_upcoming_events`
+    (`database/db.py:735`) has no caller. No scorer reads economic_calendar.
+  - Latent schema note: `database/db.py:156` `CREATE TABLE IF NOT EXISTS`
+    defines only the narrow FinViz columns (event_name/affected_sectors/
+    forecast/previous), so a fresh-DB init would create a table missing the
+    FMP columns (country/currency/estimate/actual/unit) that
+    `api_economic_calendar` SELECTs. The live DB has the full column set, so
+    this is a fresh-init gap only, not a live break.
+  - DECISION NEEDED (Mark, product call):
+    - (a) Retire the FMP `job_economic_calendar` and its alert. Stops the daily
+      false 402 alarm, loses nothing (the job can never succeed on the current
+      plan, and it is redundant with the FinViz writer on the same table). Does
+      NOT give a working calendar, since the FinViz path is also broken.
+    - (b) Suppress just the alert, leave the job. Strictly worse than (a): keeps
+      a job that can never succeed.
+    - (c) Reroute the economic calendar to FRED (a real free macro source). Own
+      mini-arc; only if a working calendar is actually wanted.
+    - (d) Drop the economic-calendar feature entirely.
+  - Recommended: decide (a) plus investigate why the FinViz path writes zero
+    rows, OR (d), at the start of Part 44.
