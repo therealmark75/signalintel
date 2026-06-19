@@ -114,6 +114,18 @@ the consecutive-429 circuit breaker landed in fmp_scraper.
 boot (mitigates runtime-code drift; necessary but not sufficient, see
 "Runtime-Code Drift"). Correct invocation: `python main.py scheduler`
 (bare `python main.py` exits with usage error; 13 May 2026 lesson).
+`job_watchlist_earnings_alerts` (added Part 45, 19 June 2026; cron id
+`watchlist_earnings_alerts`, 06:30 Mon-Fri, fires right after the 06:05
+`fmp_earnings` calendar refresh) notifies the global Telegram chat when a
+ticker held in any alerts_enabled watchlist reports earnings the next day.
+It reads the FMP-sourced `earnings_calendar` (forward dates), collapses
+multiple future rows per ticker via MIN(earnings_date), fires one grouped
+digest, then records per-(user_id, ticker, earnings_date) dedup rows on a
+truthy send only (send-then-record). The economic_calendar feature was
+fully retired in Part 45 (Events page, three /api/economic-calendar routes,
+the dashboard panel, the FMP fetch/save/refresh helpers, the db.py
+insert_calendar_events and get_upcoming_events helpers, the table, and its
+CREATE in initialise_schema all removed; table dropped manually at deploy).
 
 `web/app.py`: Flask routes, login, current_user(), session management.
 Banner port fixed to 5001 (was incorrectly 5000) on 9 May 2026.
@@ -355,6 +367,16 @@ LaunchAgent `io.thesignalvault.backup`, daily 03:30 BST, 7-daily + 4-weekly rota
   Diagnostic deferred, likely a startup-path init function with
   code-change-conditional DDL branch.
 - `users`: with tier column.
+- `earnings_notifications_sent`: dedup state for the watchlist earnings
+  alert job (added Part 45). Columns: id, user_id, ticker, earnings_date,
+  sent_at, with UNIQUE(user_id, ticker, earnings_date). Created in
+  initialise_schema, written via INSERT OR IGNORE on a truthy send only.
+  No FOREIGN KEY by design (scheduler-owned write state, keyed on user_id
+  by value). Per-subscriber-SHAPED for a future Path B, though delivery
+  is currently global-chat single-recipient (no per-user chat id exists).
+- (`economic_calendar`: REMOVED Part 45. The full economic-calendar
+  feature was retired; table dropped at deploy, CREATE removed from
+  initialise_schema, never resurrected by any init path.)
 
 ---
 
@@ -789,6 +811,14 @@ Bundling Telegram per-user routing + SendGrid email alerts into one
 coherent notifications phase. Half-shipped notifications would be a
 worse user experience than no notifications.
 
+Part 45 note: the watchlist earnings alert job ships on Path A (global-chat
+single-recipient delivery via the existing send_alert path). Its dedup
+table `earnings_notifications_sent` is already keyed per-subscriber
+(user_id, ticker, earnings_date), so the schema is shaped for Path B, but
+true per-subscriber delivery still needs `users.telegram_chat_id` plus the
+bot linking flow below. That linking work is a real arc and is P23
+territory (it touches the users table and auth-adjacent surfaces).
+
 - Per-user Telegram linking flow: generate unique linking code →
   user runs /start on the bot → capture chat_id → write to new
   `user_telegram` table keyed on user_id
@@ -1051,7 +1081,6 @@ Full page inventory:
 - /signals — NEW (extracted). Top Signals (full) + Discovery Themes (full) + tier breakdown.
 - /screener — UNCHANGED. Full 33-column screener with filter sidebar.
 - /markets — UNCHANGED. Global markets overview. Major Indices / S&P Sectors / Currencies / Crypto.
-- /events — ENHANCED. Economic events calendar. Click event → expand into detail + related news (internal expansion).
 - /watchlist — UNCHANGED.
 - /penny — UNCHANGED structure, ENHANCED gating. Visible in top nav for all tiers; content gated to Elite.
 - /penny/screener — UNCHANGED. Same gating as /penny.
