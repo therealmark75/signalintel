@@ -185,6 +185,9 @@ items queued at Part 44 close.
 
 ### economic_calendar web-side cleanup (P23, web/app.py)
 
+> RESOLVED Part 45 (`3fe48bd`). The full web/dashboard/scraper/db/table surface
+> was removed; see the Part 45 close section below. No longer queued.
+
 - The retirement (`29ab9d4`) removed the scheduler job, the FinViz
   `scrape_economic_calendar` writer, and the daily Telegram 402 alert. It
   intentionally LEFT in place:
@@ -202,6 +205,10 @@ items queued at Part 44 close.
   Separate commit when convenient.
 
 ### Watchlist-earnings Telegram notification (mini-arc)
+
+> SHIPPED Part 45 (`ab63a0d`). Built on Path A (global-chat delivery); see the
+> Part 45 close section below for the premise corrections found in diagnosis.
+> No longer queued.
 
 - Notify watchlist subscribers about 24h before a held ticker reports earnings.
 - Reuses the component-11 Yahoo earnings timestamps already ingested (no new
@@ -226,3 +233,73 @@ items queued at Part 44 close.
 - Flagged here so a future reader does not assume relocation parity was the
   intended ceiling. It was the calibration target for THIS change, not a verdict
   that short interest should never weigh more.
+
+---
+
+## 19 June 2026 (Part 45 close)
+
+Two queued items shipped this session. Both code commits are on
+`feature/watchlist-earnings` (HEAD `3fe48bd`, level with origin), deployed, and
+verified. SCORING_ENGINE_VERSION is unchanged at 0.19.0 (neither commit touched
+scoring). Suite: 429 passed, 1 skipped, exit 0 (the single remaining skip is
+`fmp_price_targets`, empty until the 02:30 job first fires; the economic_calendar
+skip is gone with the retired test).
+
+### Watchlist-earnings mini-arc, SHIPPED (`ab63a0d`)
+
+- The queued recommended-next-build is now live: `job_watchlist_earnings_alerts`
+  (cron `watchlist_earnings_alerts`, 06:30 Mon-Fri) fires one grouped Telegram
+  digest naming every watchlist-held ticker reporting the next day, then records
+  per-(user_id, ticker, earnings_date) dedup rows on a truthy send only.
+- Three premise corrections surfaced during the read-only diagnosis, each of
+  which reshaped the build away from the original mini-arc assumption:
+  1. The forward earnings feed is the FMP-written `earnings_calendar` (forward
+     dates, refreshed by the 06:05 `fmp_earnings` job), NOT the component-11
+     Yahoo timestamps. Component 11 (`earnings`) consumes Yahoo `earnings_history`
+     (past quarters, surprise), which carries no forward date. The mini-arc note
+     above (Part 44) assumed Yahoo; that was wrong.
+  2. No per-user Telegram chat id exists. Delivery is the existing global-chat
+     `send_alert` path (Path A, single recipient). The job cannot target a
+     subscriber until the Path B linking flow lands.
+  3. No dedup precedent existed in the DB (only an in-memory, restart-wiped dict
+     in `notifications/telegram.py`). The `earnings_notifications_sent` table is
+     net-new, created in initialise_schema, and survives scheduler restarts.
+
+### economic_calendar retirement, COMPLETED (`3fe48bd`)
+
+- Part 44 retired the engine side (scheduler job, FinViz writer, false 402
+  alert). Part 45 removed the surviving surface: the `/events` page route and
+  template, the three `/api/economic-calendar` routes, the dashboard CLI panel,
+  the FMP `fetch`/`save`/`refresh_economic_calendar` helpers, the db.py
+  `insert_calendar_events` and `get_upcoming_events` helpers, the CREATE in
+  initialise_schema, and the physical table (dropped manually at deploy, not
+  scripted into any init path). The feature is fully gone. Removed from the
+  queued-cleanup list above (see the RESOLVED markers).
+- The general FMP entitlement tests (401/402/403/500 and Telegram dedup) were
+  kept and repointed off the retired `/economic-calendar` endpoint onto the live
+  `/earnings-calendar`; only the economic-calendar-specific job test was deleted.
+  Two historical-provenance docstrings in `tests/test_fmp_entitlement_error.py`
+  still reference the 18 May 2026 economic_calendar staleness incident as the
+  test's origin; these are deliberate history, not live wiring.
+
+### Carry-forward (still open, unchanged)
+
+- **Backtest validation harness.** Unblocked by sub-score persistence (0.17.0+),
+  not yet scoped. Athena's recommended next build for Part 46.
+- **FOLLOWUPS latent tail.** ISO-date string-sort couplings (09/10/13), dead
+  guard (09), 50.0 collision (10), init-as-upgrade (12), vestigial
+  `total_revenue` in `ALTMAN_LOOKUPS` (13). Banked above, not urgent.
+- **Components 15/16** (News Sentiment, Options Flow): deferred, dashboard-only
+  per the composite-purity invariant.
+- **Production Stripe flip** (P32), queued, unchanged.
+- **Short-interest strengthening**: a separate future deliberate decision, NOT
+  queued (see the Part 44 close note above; relocation parity was the calibration
+  target, not a ceiling).
+
+### Future Path B note
+
+- True per-subscriber earnings delivery needs `users.telegram_chat_id` plus a bot
+  linking flow (user runs /start, the bot captures the chat id). That is a real
+  arc and P23 territory (it touches the users table and auth-adjacent surfaces).
+  The `earnings_notifications_sent` dedup schema is already keyed per-subscriber,
+  so it is shaped for Path B with no migration; only the delivery layer changes.
