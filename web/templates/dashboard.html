@@ -77,24 +77,7 @@
   }
   a { text-decoration: none; color: inherit; }
 
-  .parent-bar {
-    background: var(--navy-950); border-bottom: 1px solid var(--line-soft);
-    padding: 8px 0; font-size: 11px; color: var(--ink-400);
-    position: relative; z-index: 3;
-  }
-  .parent-bar-inner {
-    max-width: 1480px; margin: 0 auto; padding: 0 28px;
-    display: flex; align-items: center; justify-content: space-between;
-  }
-  .parent-bar-left { display: flex; align-items: center; gap: 10px; }
-  .vault-wheel { width: 15px; height: 15px; flex-shrink: 0; }
-  .pb-vault { color: var(--ink-200); font-weight: 500; letter-spacing: 0.07em; text-transform: uppercase; font-size: 10px; }
-  .parent-bar-divider { color: var(--navy-600); }
-  .parent-bar-right { display: flex; align-items: center; gap: 20px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; }
-  .parent-bar-right a { color: var(--ink-400); transition: color .18s; }
-  .parent-bar-right a:hover { color: var(--ink-100); }
-
-  /* Nav chrome moved to web/templates/_nav.html (shared, self-contained partial) */
+  /* Nav chrome (utility strip + nav) moved to web/templates/_nav.html (shared, self-contained partial) */
 
   .dash { max-width: 1480px; margin: 0 auto; padding: 32px 28px 80px; position: relative; z-index: 1; }
   .dash-head { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 26px; flex-wrap: wrap; gap: 16px; }
@@ -328,26 +311,6 @@
 {% include "_locked_teaser_css.html" %}
 </head>
 <body>
-
-  <div class="parent-bar">
-    <div class="parent-bar-inner">
-      <div class="parent-bar-left">
-        <svg class="vault-wheel" viewBox="0 0 24 24" fill="none">
-          <circle cx="12" cy="12" r="10" stroke="#c9a04a" stroke-width="1.4"/>
-          <path d="M12 4 L18 15 L6 15 Z" fill="#c9a04a" opacity="0.85"/>
-        </svg>
-        <span class="pb-vault">The Signal Vault</span>
-        <span class="parent-bar-divider">·</span>
-        <span>SignalIntel</span>
-      </div>
-      <div class="parent-bar-right">
-        <a href="#">Commodities</a>
-        <a href="#">Crypto</a>
-        <a href="#">Forex</a>
-        <a href="#">Account</a>
-      </div>
-    </div>
-  </div>
 
   {% include '_nav.html' %}
 
