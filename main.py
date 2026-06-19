@@ -15,7 +15,7 @@ from notifications.telegram import send_alert
 from signals.signal_labels import tier_label, tier_short
 from database.db import (get_connection, initialise_schema, insert_screener_rows, generate_top_signals_of_day, prune_old_snapshots,
     insert_insider_trades, insert_insider_signal, insert_signal_scores, detect_rating_changes, update_analyst_recom,
-    insert_news_articles, insert_ticker_sentiment, insert_calendar_events,
+    insert_news_articles, insert_ticker_sentiment,
     log_run, get_latest_screener, get_recent_insiders, get_cluster_signals,
     get_top_signals, get_ticker_sentiment, get_legal_risk_map, update_target_prices,
     get_price_history_map, get_watchlist_tickers,
@@ -36,7 +36,7 @@ from scrapers.insider_scraper import scrape_all_insider_types, detect_cluster_si
 from signals.scorer import score_all_tickers
 from signals.scanner import run_all_scans
 from scrapers.news_scraper import scrape_news_for_tickers, compute_ticker_sentiment
-from scrapers.calendar_scraper import scrape_economic_calendar, get_earnings_calendar
+from scrapers.calendar_scraper import get_earnings_calendar
 
 Path(LOG_DIR).mkdir(parents=True, exist_ok=True)
 logging.basicConfig(
@@ -270,14 +270,6 @@ def job_news_and_calendar(top_n: int = 30):
             if ranked:
                 logger.info(f"  Most bullish news: {ranked[0]['ticker']} ({ranked[0]['avg_sentiment']:+.3f})")
                 logger.info(f"  Most bearish news: {ranked[-1]['ticker']} ({ranked[-1]['avg_sentiment']:+.3f})")
-
-        # Economic calendar
-        logger.info("  Scraping economic calendar...")
-        events = scrape_economic_calendar(days_ahead=7)
-        if events:
-            insert_calendar_events(DATABASE_PATH, events)
-            high_impact = [e for e in events if e.get("impact") == "HIGH"]
-            logger.info(f"  {len(events)} events, {len(high_impact)} high-impact")
 
         duration = time.time() - start
         log_run(DATABASE_PATH, "news_calendar", "SUCCESS", len(tickers), duration_s=duration)
@@ -903,41 +895,6 @@ def main():
             job_fmp_dividends,
             CronTrigger(hour=3, minute=0, day_of_week="sun"),
             id="fmp_dividends", name="FMP Dividend Refresh Sunday 03:00",
-        )
-
-        # Economic calendar refresh (daily, 06:30)
-        def job_economic_calendar():
-            start = time.time()
-            try:
-                from scrapers.fmp_scraper import refresh_economic_calendar, FMPEntitlementError
-                from notifications.telegram import send_alert_rate_limited
-                n = refresh_economic_calendar(DATABASE_PATH)
-                logger.info(f"[JOB] Economic calendar: {n} events saved")
-                log_run(DATABASE_PATH, "economic_calendar", "SUCCESS", n,
-                        duration_s=time.time()-start)
-            except FMPEntitlementError as e:
-                logger.error(f"[JOB] Economic calendar entitlement failure: {e}")
-                log_run(DATABASE_PATH, "economic_calendar", "FAILED",
-                        error_msg=f"FMP entitlement: {e}",
-                        duration_s=time.time()-start)
-                send_alert_rate_limited(
-                    (e.path, e.status_code),
-                    f"🚨 SignalIntel — FMP entitlement failure\n\n"
-                    f"Job: economic_calendar\n"
-                    f"Endpoint: /economic-calendar\n"
-                    f"Error: {e}\n\n"
-                    f"Check FMP plan tier. Job suppressed until entitlement restored.",
-                )
-            except Exception as e:
-                logger.error(f"[JOB] Economic calendar error: {e}")
-                log_run(DATABASE_PATH, "economic_calendar", "FAILED",
-                        error_msg=str(e),
-                        duration_s=time.time()-start)
-
-        scheduler.add_job(
-            job_economic_calendar,
-            CronTrigger(hour=6, minute=30, day_of_week="mon-fri"),
-            id="economic_calendar", name="FMP Economic Calendar 06:30",
         )
 
         # Market history (indices, sectors, currencies) — daily 07:00
