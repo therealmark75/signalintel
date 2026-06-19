@@ -188,7 +188,8 @@ def initialise_schema(db_path: str) -> None:
             piotroski_score         REAL,
             inst_own_score          REAL,
             analyst_mom_score       REAL,
-            altman_penalty          REAL
+            altman_penalty          REAL,
+            short_interest_penalty  REAL
         )
     """)
 
@@ -201,7 +202,7 @@ def initialise_schema(db_path: str) -> None:
     cur.execute("PRAGMA table_info(signal_scores)")
     _ss_cols = {r["name"] for r in cur.fetchall()}
     for col in ("earnings_score", "piotroski_score", "inst_own_score",
-                "analyst_mom_score", "altman_penalty"):
+                "analyst_mom_score", "altman_penalty", "short_interest_penalty"):
         if col not in _ss_cols:
             cur.execute(f"ALTER TABLE signal_scores ADD COLUMN {col} REAL")
 

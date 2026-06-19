@@ -79,7 +79,18 @@ REQUEST_TIMEOUT       = 20
 #   MAJOR  (1.0.0 → 2.0.0)  : post-launch, breaking changes to scoring methodology
 # ⚠  Bump BEFORE shipping any change that affects scoring output.
 #    New data tagged with the old version is permanently mis-stamped.
-SCORING_ENGINE_VERSION = "0.18.1"
+SCORING_ENGINE_VERSION = "0.19.0"
+# v0.19.0 (19 June 2026): Component 14 added. short_interest is a one-sided
+# additive penalty (0, -1, -2, -3) on the legal/altman penalty line of
+# compute_composite, anchored to the >10 / >20 / >30 breakpoints. None and
+# >100 percent (implausible noise) apply no penalty. The penalty magnitudes
+# are calibrated to reproduce the composite impact of the prior short block
+# that lived inside score_quality (a 0.30-weighted sub-score: -15 there moved
+# the composite about -2.8, which the additive -3 matches), so this is a
+# relocation of short interest out of quality, not a re-weighting of its
+# force. The short block was REMOVED from score_quality in the same change
+# (extract-and-promote), so the composite never double-counts short interest.
+# MINOR: new component changes composite output (P18).
 # v0.18.1 (19 June 2026): price-target writer rerouted from the dead FMP path
 # to yfinance Ticker.info targetMeanPrice via a dedicated daily priority job.
 # PATCH: the fmp_price_targets schema, reader, and target-price blend are

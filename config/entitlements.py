@@ -217,6 +217,9 @@ def can_call_api(tier):
 # 10+ leak surfaces stay synchronised — adding a new score column to
 # signal_scores in the future means adding it here and the gate
 # catches every route automatically.
+# short_interest_penalty is intentionally NOT listed here. It is an all-tiers
+# risk flag, not a proprietary score, and is served to Free, Pro, and Elite
+# alike. Do not add it to this set or to ELITE_ONLY_SUBSCORE_FIELDS.
 PROPRIETARY_SCORE_FIELDS = (
     'composite_score',
     'momentum_score',

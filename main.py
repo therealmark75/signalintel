@@ -144,6 +144,7 @@ def job_generate_signals(sector=None):
             "inst_own_score":    s.inst_own_score,
             "analyst_mom_score": s.analyst_mom_score,
             "altman_penalty":    s.altman_penalty,
+            "short_interest_penalty": s.short_interest_penalty,
         } for s in signals]
         insert_signal_scores(DATABASE_PATH, score_rows)
 

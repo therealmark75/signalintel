@@ -114,8 +114,10 @@ def score_quality(row: dict) -> float:
     Score 0-100 based on:
     - Return on Equity
     - EPS growth (this year + next year)
-    - Short interest (high = risk)
     - Analyst recommendation (1=Strong Buy, 5=Strong Sell)
+
+    Short interest is NOT scored here as of v0.19.0: it was extracted into
+    the standalone short_interest penalty (see score_short_interest_penalty).
     """
     score = 50.0
 
@@ -144,13 +146,6 @@ def score_quality(row: dict) -> float:
         elif eps_ny > 10: score += 6
         elif eps_ny > 0:  score += 2
         elif eps_ny < 0:  score -= 8
-
-    # Short interest (max -15 pts penalty)
-    short = row.get("short_interest_pct")
-    if short is not None:
-        if short > 30:   score -= 15
-        elif short > 20: score -= 10
-        elif short > 10: score -= 5
 
     # Analyst recommendation (1=Strong Buy → 5=Strong Sell)
     analyst = row.get("analyst_recom")
@@ -730,6 +725,43 @@ class TickerSignal:
     altman_penalty:    int   = 0
     inst_own_score:    float = 50.0
     analyst_mom_score: float = 50.0
+    short_interest_penalty: int = 0
+
+
+def score_short_interest_penalty(short_interest_pct) -> int:
+    """Short-interest additive penalty (0, -1, -2, -3), v0.19.0 Component 14.
+
+    One-sided risk drag: heavy short interest as percent of float subtracts
+    from the composite. Joins the additive line alongside legal_penalty and
+    altman_penalty (mirrors score_altman_penalty's shape). Returns <= 0;
+    0 = no penalty. Anchored to the breakpoints the prior score_quality short
+    block used, so the shorted tail is penalised on the same thresholds:
+        si% > 30 -> -3       > 20 -> -2       > 10 -> -1       else 0
+
+    Magnitude calibration (relocate, not amplify): the pre-0.19.0 short block
+    lived INSIDE score_quality, a 0.30-weighted sub-score normalised by total
+    weight 1.60, so its real composite impact was about -15 * 0.30 / 1.60 =
+    -2.8 at the top tier. This additive ladder lands on c_score_raw directly,
+    so -3 / -2 / -1 reproduces that same composite impact. The change is a
+    true relocation of short interest out of quality, not a re-weighting of
+    its force.
+
+    P5 / missing data: short_interest_pct is None -> 0 (never punish missing).
+    Bounds guard: short_interest_pct > 100 is implausible source noise
+    (mirrors score_inst_ownership's >100 guard) -> 0, no penalty.
+    """
+    if short_interest_pct is None:
+        return 0
+    si = float(short_interest_pct)
+    if si > 100:
+        return 0
+    if si > 30:
+        return -3
+    if si > 20:
+        return -2
+    if si > 10:
+        return -1
+    return 0
 
 
 def compute_composite(
@@ -938,6 +970,7 @@ def score_all_tickers(
         p_score   = score_piotroski(ticker, financials_map.get(ticker, {}))
         io_score  = score_inst_ownership(ticker, inst_own_map.get(ticker))
         am_score  = score_analyst_momentum(ticker, analyst_mom_map.get(ticker))
+        si_pen     = score_short_interest_penalty(row.get("short_interest_pct"))
         altman_pen = score_altman_penalty(ticker, financials_map.get(ticker, {}),
                                           row.get("market_cap"))
 
@@ -954,7 +987,7 @@ def score_all_tickers(
             m_score, q_score, i_score, r_score, v_score,
             e_score, p_score, io_score, am_score, weights,
         )
-        c_score_raw = _clamp(raw_composite + legal_penalty + altman_pen)
+        c_score_raw = _clamp(raw_composite + legal_penalty + altman_pen + si_pen)
 
         # ── Sector relative strength modifier ────────────────────────────────
         sector           = row.get("sector", "")
@@ -997,6 +1030,7 @@ def score_all_tickers(
             altman_penalty          = altman_pen,
             inst_own_score          = round(io_score, 1),
             analyst_mom_score       = round(am_score, 1),
+            short_interest_penalty  = si_pen,
         )
         results.append(sig)
 

@@ -176,6 +176,14 @@ COMPONENTS: tuple = (
         dot_color=None, radar_index=None, sortable=False, in_strip=False,
         null_overlay=False, introduced_version='0.13.0',
     ),
+    Component(
+        key='short_interest', db_column='short_interest_penalty', label='Short Interest',
+        tooltip='Short interest as percent of float, read as a risk signal. Heavy short interest applies a penalty to the composite (0, -5, -10, or -15). 0 = no penalty or no data.',
+        weight=0.0, is_penalty=True,
+        surfaces=('ticker',),
+        dot_color=None, radar_index=None, sortable=False, in_strip=False,
+        null_overlay=False, introduced_version='0.19.0',
+    ),
 )
 
 
