@@ -51,14 +51,14 @@ def test_signal_tiers_required_sub_keys():
 def test_tier_label_values(rating, expected):
     """tier_label() must return the canonical descriptive label for each tier."""
     assert tier_label(rating) == expected, \
-        f"tier_label('{rating}') = '{tier_label(rating)}' — expected '{expected}'"
+        f"tier_label('{rating}') = '{tier_label(rating)}', expected '{expected}'"
 
 
 @pytest.mark.parametrize("rating,expected", EXPECTED_SHORT.items())
 def test_tier_short_values(rating, expected):
     """tier_short() must return the canonical short label for each tier."""
     assert tier_short(rating) == expected, \
-        f"tier_short('{rating}') = '{tier_short(rating)}' — expected '{expected}'"
+        f"tier_short('{rating}') = '{tier_short(rating)}', expected '{expected}'"
 
 
 def test_tier_label_unknown_falls_back():
@@ -82,7 +82,7 @@ def test_templates_contain_no_directive_buy_sell_labels():
     """
     P1.2/P15 absence test: templates must not render old directive Buy/Sell display text.
 
-    Catches: <span>Strong Buy</span>, <div>Strong Buy: AAPL</div> — directive language
+    Catches: <span>Strong Buy</span>, <div>Strong Buy: AAPL</div>, directive language
              as rendered display text.
     Ignores: value="STRONG_BUY" (form identifiers), rating-STRONG_BUY (CSS classes),
              {'STRONG_BUY': 'Very Strong'} (JS map keys), 1=Strong Buy (FinViz analyst
@@ -132,8 +132,8 @@ def test_theme_labels_are_descriptive():
     """
     P13/P14/P15: theme labels must not use old directive language.
 
-    Catches: theme label == "Strong Buy Momentum" or "Buy the Dip" — old directive names.
-    Ignores: theme id == "strong_buy_momentum" or "buy_the_dip" — stable IDs (P14).
+    Catches: theme label == "Strong Buy Momentum" or "Buy the Dip", old directive names.
+    Ignores: theme id == "strong_buy_momentum" or "buy_the_dip", stable IDs (P14).
     """
     from config.themes import THEMES
     banned = ["Strong Buy", "Buy the Dip", "Insider Buying Surge"]
@@ -144,9 +144,11 @@ def test_theme_labels_are_descriptive():
 
 
 def test_nav_uses_signal_tiers_label():
-    """_nav.html must say 'Signal Tiers', not the old 'Rating Tiers'."""
-    nav_path = os.path.join(TEMPLATE_DIR, "_nav.html")
-    with open(nav_path) as f:
+    """The ratings page must stay reachable from shared chrome. The five-link
+    nav redesign dropped the in-nav 'Signal Tiers' link, so ratings is now
+    linked from the footer as 'Rating Tiers'. Assert that footer link exists."""
+    footer_path = os.path.join(TEMPLATE_DIR, "_footer.html")
+    with open(footer_path) as f:
         content = f.read()
-    assert "Rating Tiers" not in content, "_nav.html still says 'Rating Tiers'"
-    assert "Signal Tiers" in content, "_nav.html does not say 'Signal Tiers'"
+    assert "Rating Tiers" in content, "_footer.html does not link 'Rating Tiers'"
+    assert 'href="/ratings"' in content, "_footer.html does not link to /ratings"
