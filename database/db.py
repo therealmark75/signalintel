@@ -358,6 +358,22 @@ def initialise_schema(db_path: str) -> None:
         )
     """)
 
+    # ── Watchlist earnings notifications: per-subscriber dedup state ──
+    # Records one row the first time a (user_id, ticker, earnings_date)
+    # earnings alert fires, so it is never re-sent. No FOREIGN KEY by
+    # design: this is scheduler-owned write state keyed on user_id by
+    # value, decoupled from the user-schema init ordering.
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS earnings_notifications_sent (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id       INTEGER NOT NULL,
+            ticker        TEXT    NOT NULL,
+            earnings_date TEXT    NOT NULL,
+            sent_at       TEXT    NOT NULL,
+            UNIQUE(user_id, ticker, earnings_date)
+        )
+    """)
+
     conn.commit()
     conn.close()
     logger.info(f"Database schema ready at: {db_path}")
