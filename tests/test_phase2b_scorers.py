@@ -204,6 +204,63 @@ def test_piotroski_f5_boundary():
     assert score_piotroski("AAPL", financials) == pytest.approx(50.0)
 
 
+def test_piotroski_partial_coverage_p5():
+    """Coverage-aware P5 fix (v0.18.0): absent line items are excluded, not
+    scored as failed criteria. Uses GENUINELY ABSENT keys (dropped from the
+    financials dict), not zero values, so it exercises the missing-input path.
+
+    Catches: regression to the pre-fix behaviour where missing line items
+             silently failed to increment f and dragged a thinly-reported
+             ticker to a sub-neutral score (as low as 20.0) purely from
+             absent data; also the coverage floor (< 5 present → 50.0), the
+             Option B partial cap (partial coverage cannot exceed 65.0), and
+             the full-coverage identity (n_present == 9 maps as pre-fix).
+    Ignores: present-but-failing semantics (covered by populated_negative and
+             snapshot SS07, which stay at 20.0 on full coverage), and the
+             Lock 1 / empty paths (their own tests above).
+    """
+    # (i) Below the floor: only F1, F2, F4 are computable (3 < 5) → neutral.
+    # y0 has NetIncome/TotalAssets/OCF; y1 carries one unrelated key so two
+    # fiscal years exist (Lock 1 clears) but no change-signal can be computed.
+    below_floor = _fin2(
+        income0  = {"NetIncome": 50e9},
+        balance0 = {"TotalAssets": 300e9},
+        cashflow0= {"OperatingCashFlow": 60e9},
+        balance1 = {"LongTermDebt": 10e9},
+    )
+    assert score_piotroski("AAPL", below_floor) == pytest.approx(50.0)
+
+    # (ii) Partial but above the floor: exactly 5 signals computable
+    # (F1, F2, F3, F4, F9), all passing. round(5/5*9)=9, capped to 6 because
+    # n_present < 9 → 65.0. Pre-fix this same ticker would have scored 20.0
+    # (the 4 absent change-signals counted as fails → f=5 → 50.0 at best,
+    # and with fewer passes far lower). Option B caps partial-but-perfect.
+    partial_above_floor = _fin2(
+        income0  = {"NetIncome": 100e9, "TotalRevenue": 400e9},
+        balance0 = {"TotalAssets": 350e9},
+        cashflow0= {"OperatingCashFlow": 110e9},
+        income1  = {"NetIncome":  80e9, "TotalRevenue": 350e9},
+        balance1 = {"TotalAssets": 320e9},
+    )
+    assert score_piotroski("AAPL", partial_above_floor) == pytest.approx(65.0)
+
+    # (iii) Full-coverage identity: all 9 signals present and passing →
+    # round(9/9*9)=9, uncapped (n_present == 9) → 80.0, identical to pre-fix.
+    full_all_pass = _fin2(
+        income0  = {"NetIncome": 100e9, "GrossProfit": 120e9, "TotalRevenue": 400e9},
+        income1  = {"NetIncome":  80e9, "GrossProfit": 100e9, "TotalRevenue": 350e9},
+        balance0 = {"TotalAssets": 350e9, "LongTermDebt":  90e9,
+                    "CurrentAssets": 135e9, "CurrentLiabilities": 125e9,
+                    "OrdinarySharesNumber": 14.5e9},
+        balance1 = {"TotalAssets": 320e9, "LongTermDebt": 100e9,
+                    "CurrentAssets": 120e9, "CurrentLiabilities": 120e9,
+                    "OrdinarySharesNumber": 15.0e9},
+        cashflow0 = {"OperatingCashFlow": 110e9},
+        cashflow1 = {"OperatingCashFlow":  90e9},
+    )
+    assert score_piotroski("AAPL", full_all_pass) == pytest.approx(80.0)
+
+
 # ── score_altman_penalty ──────────────────────────────────────────────────────
 
 def _altman_fin(wc, ta, re, ebit, tl, rev, year="2025"):

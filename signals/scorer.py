@@ -114,8 +114,10 @@ def score_quality(row: dict) -> float:
     Score 0-100 based on:
     - Return on Equity
     - EPS growth (this year + next year)
-    - Short interest (high = risk)
     - Analyst recommendation (1=Strong Buy, 5=Strong Sell)
+
+    Short interest is NOT scored here as of v0.19.0: it was extracted into
+    the standalone short_interest penalty (see score_short_interest_penalty).
     """
     score = 50.0
 
@@ -144,13 +146,6 @@ def score_quality(row: dict) -> float:
         elif eps_ny > 10: score += 6
         elif eps_ny > 0:  score += 2
         elif eps_ny < 0:  score -= 8
-
-    # Short interest (max -15 pts penalty)
-    short = row.get("short_interest_pct")
-    if short is not None:
-        if short > 30:   score -= 15
-        elif short > 20: score -= 10
-        elif short > 10: score -= 5
 
     # Analyst recommendation (1=Strong Buy → 5=Strong Sell)
     analyst = row.get("analyst_recom")
@@ -352,9 +347,23 @@ def score_piotroski(ticker: str, financials: dict) -> float:
     Lock 1: if fewer than 2 fiscal years available, return 50.0 immediately.
     Cannot compute change-based signals (F3, F5, F6, F7, F8, F9) with only 1 year.
 
+    Coverage-aware (v0.18.0, P5 fix): a signal whose inputs are absent is
+    EXCLUDED, never scored as a failed criterion. n_present counts the signals
+    that could be evaluated; f_present counts those that passed. If fewer than
+    5 of the 9 signals are computable, return neutral 50.0 (missing data must
+    never penalise, P5). At or above the floor, f_present is normalised over the
+    present signals as round(f_present / n_present * 9), then capped at 6 for
+    partial coverage so only full 9-of-9 coverage can reach the 80.0 top tier
+    (Option B, humility-discounted). A fully-covered ticker is the identity
+    case: round(f / 9 * 9) == f, so n_present == 9 maps exactly as the pre-fix
+    code did. Present-but-failing signals are unaffected: a fully-covered ticker
+    whose signals genuinely fail still scores low (the absent-data correction
+    never leaks into present-data scoring).
+
     Catches: fundamental deterioration (ROA decline, leverage increase, dilution).
-    Ignores: companies with < 2 years of data — treated as neutral, never penalised.
-    P5: empty financials → returns neutral 50.0.
+    Ignores: companies with < 2 years of data, or fewer than 5 computable
+    signals, treated as neutral 50.0, never penalised.
+    P5: empty financials, single-year, or sub-floor coverage return neutral 50.0.
     """
     all_years: set = set()
     for stmt_data in financials.values():
@@ -370,34 +379,45 @@ def score_piotroski(ticker: str, financials: dict) -> float:
         stmt_type, raw_key = PIOTROSKI_LOOKUPS[canonical_key]
         return financials.get(stmt_type, {}).get(year, {}).get(raw_key)
 
-    f = 0
+    # Coverage-aware accumulation. A signal is counted in n_present only when
+    # ALL its inputs are available; the availability guard is the same
+    # truthiness check used before the fix, so a present-but-zero denominator
+    # (ta, cl, rev, rev1) stays uncomputable rather than crashing or counting
+    # as a fail. f_present counts the available signals that passed.
+    n_present = 0
+    f_present = 0
 
     # F1: ROA > 0
     ni = _get("net_income", y0)
     ta = _get("total_assets", y0)
     if ni is not None and ta:
-        f += 1 if ni / ta > 0 else 0
+        n_present += 1
+        f_present += 1 if ni / ta > 0 else 0
 
     # F2: Operating cash flow > 0
     ocf = _get("operating_cash_flow", y0)
     if ocf is not None:
-        f += 1 if ocf > 0 else 0
+        n_present += 1
+        f_present += 1 if ocf > 0 else 0
 
     # F3: ROA improvement
     ni1 = _get("net_income", y1)
     ta1 = _get("total_assets", y1)
     if ni is not None and ta and ni1 is not None and ta1:
-        f += 1 if (ni / ta) > (ni1 / ta1) else 0
+        n_present += 1
+        f_present += 1 if (ni / ta) > (ni1 / ta1) else 0
 
     # F4: OCF > Net income (accruals quality)
     if ocf is not None and ni is not None:
-        f += 1 if ocf > ni else 0
+        n_present += 1
+        f_present += 1 if ocf > ni else 0
 
     # F5: Long-term leverage decreased
     ltd  = _get("long_term_debt", y0)
     ltd1 = _get("long_term_debt", y1)
     if ltd is not None and ta and ltd1 is not None and ta1:
-        f += 1 if (ltd / ta) < (ltd1 / ta1) else 0
+        n_present += 1
+        f_present += 1 if (ltd / ta) < (ltd1 / ta1) else 0
 
     # F6: Current ratio improved
     ca  = _get("current_assets", y0)
@@ -405,13 +425,15 @@ def score_piotroski(ticker: str, financials: dict) -> float:
     ca1 = _get("current_assets", y1)
     cl1 = _get("current_liabilities", y1)
     if ca is not None and cl and ca1 is not None and cl1:
-        f += 1 if (ca / cl) > (ca1 / cl1) else 0
+        n_present += 1
+        f_present += 1 if (ca / cl) > (ca1 / cl1) else 0
 
     # F7: No new share dilution
     so  = _get("shares_outstanding", y0)
     so1 = _get("shares_outstanding", y1)
     if so is not None and so1 is not None:
-        f += 1 if so <= so1 else 0
+        n_present += 1
+        f_present += 1 if so <= so1 else 0
 
     # F8: Gross margin improved
     gp   = _get("gross_profit", y0)
@@ -419,11 +441,24 @@ def score_piotroski(ticker: str, financials: dict) -> float:
     gp1  = _get("gross_profit", y1)
     rev1 = _get("total_revenue", y1)
     if gp is not None and rev and gp1 is not None and rev1:
-        f += 1 if (gp / rev) > (gp1 / rev1) else 0
+        n_present += 1
+        f_present += 1 if (gp / rev) > (gp1 / rev1) else 0
 
     # F9: Asset turnover improved
     if rev is not None and ta and rev1 is not None and ta1:
-        f += 1 if (rev / ta) > (rev1 / ta1) else 0
+        n_present += 1
+        f_present += 1 if (rev / ta) > (rev1 / ta1) else 0
+
+    # Coverage floor (P5): too few computable signals to judge → neutral 50.0.
+    if n_present < 5:
+        return 50.0
+
+    # Normalise the passes over the present signals, then cap partial coverage
+    # at 6 (Option B): only full 9-of-9 coverage can reach the 80.0 top tier.
+    # Full coverage is the identity case (round(f / 9 * 9) == f).
+    f = round(f_present / n_present * 9)
+    if n_present < 9:
+        f = min(f, 6)
 
     if f >= 7: return 80.0
     if f == 6: return 65.0
@@ -610,10 +645,13 @@ def score_inst_ownership(ticker: str, inst_data: "dict | None") -> float:
 def score_analyst_momentum(ticker: str, mom_data: "dict | None") -> float:
     """Score 0-100 from net analyst momentum over 90 days.
 
-    v0.16.0: net_momentum is now a FLOAT (was int). Hard rating actions
-    contribute ±1; soft actions (main/reit) with priceTargetAction
-    Raises/Lowers contribute ±0.25. See get_analyst_momentum_map for
-    the per-row contribution rules. PT weight 0.25 PROVISIONAL.
+    v0.17.0: net_momentum folds HARD rating actions only. up and init each
+    contribute +1, down contributes -1, soft actions (main/reit) and all
+    other actions contribute 0. The v0.16.0 soft price-target folding
+    (main/reit Raises/Lowers at +/- 0.25) was REMOVED on 25 May 2026 after
+    failing external event-study validation; the contribution is set to 0,
+    not sign-flipped. net_momentum is integer-valued, returned as a float for
+    the ladder below. See get_analyst_momentum_map for the per-row rules.
 
     Ladder (preserves integer thresholds; adds ±0.5 neutral band so a
     single isolated PT move does NOT flip a ticker off neutral, but two
@@ -687,6 +725,43 @@ class TickerSignal:
     altman_penalty:    int   = 0
     inst_own_score:    float = 50.0
     analyst_mom_score: float = 50.0
+    short_interest_penalty: int = 0
+
+
+def score_short_interest_penalty(short_interest_pct) -> int:
+    """Short-interest additive penalty (0, -1, -2, -3), v0.19.0 Component 14.
+
+    One-sided risk drag: heavy short interest as percent of float subtracts
+    from the composite. Joins the additive line alongside legal_penalty and
+    altman_penalty (mirrors score_altman_penalty's shape). Returns <= 0;
+    0 = no penalty. Anchored to the breakpoints the prior score_quality short
+    block used, so the shorted tail is penalised on the same thresholds:
+        si% > 30 -> -3       > 20 -> -2       > 10 -> -1       else 0
+
+    Magnitude calibration (relocate, not amplify): the pre-0.19.0 short block
+    lived INSIDE score_quality, a 0.30-weighted sub-score normalised by total
+    weight 1.60, so its real composite impact was about -15 * 0.30 / 1.60 =
+    -2.8 at the top tier. This additive ladder lands on c_score_raw directly,
+    so -3 / -2 / -1 reproduces that same composite impact. The change is a
+    true relocation of short interest out of quality, not a re-weighting of
+    its force.
+
+    P5 / missing data: short_interest_pct is None -> 0 (never punish missing).
+    Bounds guard: short_interest_pct > 100 is implausible source noise
+    (mirrors score_inst_ownership's >100 guard) -> 0, no penalty.
+    """
+    if short_interest_pct is None:
+        return 0
+    si = float(short_interest_pct)
+    if si > 100:
+        return 0
+    if si > 30:
+        return -3
+    if si > 20:
+        return -2
+    if si > 10:
+        return -1
+    return 0
 
 
 def compute_composite(
@@ -895,6 +970,7 @@ def score_all_tickers(
         p_score   = score_piotroski(ticker, financials_map.get(ticker, {}))
         io_score  = score_inst_ownership(ticker, inst_own_map.get(ticker))
         am_score  = score_analyst_momentum(ticker, analyst_mom_map.get(ticker))
+        si_pen     = score_short_interest_penalty(row.get("short_interest_pct"))
         altman_pen = score_altman_penalty(ticker, financials_map.get(ticker, {}),
                                           row.get("market_cap"))
 
@@ -911,7 +987,7 @@ def score_all_tickers(
             m_score, q_score, i_score, r_score, v_score,
             e_score, p_score, io_score, am_score, weights,
         )
-        c_score_raw = _clamp(raw_composite + legal_penalty + altman_pen)
+        c_score_raw = _clamp(raw_composite + legal_penalty + altman_pen + si_pen)
 
         # ── Sector relative strength modifier ────────────────────────────────
         sector           = row.get("sector", "")
@@ -954,6 +1030,7 @@ def score_all_tickers(
             altman_penalty          = altman_pen,
             inst_own_score          = round(io_score, 1),
             analyst_mom_score       = round(am_score, 1),
+            short_interest_penalty  = si_pen,
         )
         results.append(sig)
 

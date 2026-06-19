@@ -5,9 +5,11 @@ P15 throughout: every test asserts the grant AND the silence (denials).
 Time injection uses monkeypatch on entitlements._now() so the
 day-6 / day-8 boundary tests don't depend on wall-clock drift.
 """
+import sqlite3
 import pytest
 from datetime import datetime, timedelta
 from config import entitlements
+from config.constants import DATABASE_PATH
 from config.entitlements import (
     effective_tier,
     trial_active,
@@ -822,3 +824,209 @@ def test_strip_two_tier_intended_behaviour():
     elite_rows = strip_scores_for_non_elite(fresh(), 'elite')
     assert elite_rows[0]['composite_score'] is not None  # penny intact
     assert elite_rows[1]['composite_score'] is not None  # non-penny intact
+
+
+# ── strip_subscores_for_non_elite, Elite-strict sub-score gate ────
+
+
+def _signal_with_subscores():
+    """A ticker-detail signal dict carrying the four positive sub-scores
+    plus the Altman penalty AND base scores that must survive every strip
+    path. Mirrors the payload['signal'] shape api_ticker builds."""
+    return {
+        'ticker':            'AAPL',
+        'composite_score':   67.5,
+        'momentum_score':    72.0,
+        'rating':            'BUY',
+        'earnings_score':    60.0,
+        'piotroski_score':   65.0,
+        'inst_own_score':    75.0,
+        'analyst_mom_score': 70.0,
+        'altman_penalty':    -30,
+    }
+
+
+def test_strip_subscores_elite_preserves_all():
+    """Elite: all five ELITE_ONLY_SUBSCORE_FIELDS preserved; base scores
+    untouched.
+
+    Catches: an elite short-circuit regression that mutated the dict.
+    Ignores: base-field values beyond presence.
+    """
+    from config.entitlements import (
+        strip_subscores_for_non_elite, ELITE_ONLY_SUBSCORE_FIELDS,
+    )
+    sig = _signal_with_subscores()
+    strip_subscores_for_non_elite(sig, 'elite')
+    for f in ELITE_ONLY_SUBSCORE_FIELDS:
+        assert sig[f] is not None, f'elite lost {f}'
+    assert sig['composite_score'] == 67.5
+    assert sig['momentum_score'] == 72.0
+
+
+def test_strip_subscores_pro_pops_all_fields():
+    """Pro: every sub-score key POPPED (absent, not nulled). Base scores
+    (composite, momentum, rating) survive untouched.
+
+    Catches: the revenue leak, pro retaining any of the five sub-score
+             fields. Popping (not nulling) means the keys cannot reach
+             the client at all.
+    Ignores: which base fields exist beyond the three asserted.
+    """
+    from config.entitlements import (
+        strip_subscores_for_non_elite, ELITE_ONLY_SUBSCORE_FIELDS,
+    )
+    sig = _signal_with_subscores()
+    strip_subscores_for_non_elite(sig, 'pro')
+    for f in ELITE_ONLY_SUBSCORE_FIELDS:
+        assert f not in sig, f'pro retained {f}'
+    assert sig['composite_score'] == 67.5
+    assert sig['momentum_score'] == 72.0
+    assert sig['rating'] == 'BUY'
+
+
+def test_strip_subscores_free_pops_all_fields():
+    """Free: identical to pro for this gate, all five popped.
+
+    Catches: a tier check that only handled 'pro' and let 'free' through.
+    """
+    from config.entitlements import (
+        strip_subscores_for_non_elite, ELITE_ONLY_SUBSCORE_FIELDS,
+    )
+    sig = _signal_with_subscores()
+    strip_subscores_for_non_elite(sig, 'free')
+    for f in ELITE_ONLY_SUBSCORE_FIELDS:
+        assert f not in sig, f'free retained {f}'
+
+
+def test_strip_subscores_price_independent_for_pro():
+    """Elite-strict and price-INDEPENDENT: the helper takes no price, so
+    there is no band that can open the gate for pro. This is the explicit
+    contrast with strip_scores_for_non_elite, which preserves base scores
+    for pro on price >= 5. The sub-scores are Elite-only at EVERY price.
+
+    Catches: a future refactor that reintroduces a price-band exception
+             and lets pro see sub-scores on non-penny tickers (the exact
+             leak the dedicated helper exists to prevent).
+    Ignores: any price value, there is no price parameter by design.
+    """
+    from config.entitlements import (
+        strip_subscores_for_non_elite, ELITE_ONLY_SUBSCORE_FIELDS,
+    )
+    # A notionally high-priced name still loses the sub-scores for pro.
+    sig = _signal_with_subscores()
+    sig['price'] = 175.0
+    strip_subscores_for_non_elite(sig, 'pro')
+    for f in ELITE_ONLY_SUBSCORE_FIELDS:
+        assert f not in sig, f'pro retained {f} on a high-priced ticker'
+
+
+def test_strip_subscores_absent_keys_noop():
+    """A signal dict missing the sub-score keys → no-op (pop with default),
+    no KeyError, no spurious keys added.
+
+    Catches: a pop without default that would crash on a data-poor signal,
+             or an implementation that templates the five keys onto every
+             dict.
+    """
+    from config.entitlements import strip_subscores_for_non_elite
+    sig = {'ticker': 'AAPL', 'composite_score': 50.0}
+    before = set(sig.keys())
+    strip_subscores_for_non_elite(sig, 'pro')
+    assert set(sig.keys()) == before
+
+
+def test_strip_subscores_returns_same_dict():
+    """Helper returns the dict passed in (in-place mutation contract)."""
+    from config.entitlements import strip_subscores_for_non_elite
+    sig = _signal_with_subscores()
+    assert strip_subscores_for_non_elite(sig, 'elite') is sig
+
+
+# ── api_ticker server-side leak guard (integration) ───────────────
+
+
+def _ticker_above_five_with_subscores():
+    """Pick a ticker whose LATEST screener price is >= $5 and whose latest
+    signal row carries at least one non-null sub-score. Mirrors the route's
+    latest-snapshot price read so the chosen ticker is genuinely non-penny
+    for api_ticker. Returns the ticker or None (test skips on a thin DB)."""
+    conn = sqlite3.connect(DATABASE_PATH)
+    conn.row_factory = sqlite3.Row
+    try:
+        row = conn.execute("""
+            SELECT s.ticker
+            FROM signal_scores s
+            WHERE EXISTS (
+                SELECT 1 FROM screener_snapshots ss
+                WHERE ss.ticker = s.ticker
+                  AND ss.scraped_at = (
+                      SELECT MAX(scraped_at) FROM screener_snapshots
+                      WHERE ticker = s.ticker
+                  )
+                  AND ss.price >= 5
+            )
+            AND (s.earnings_score IS NOT NULL OR s.piotroski_score IS NOT NULL
+                 OR s.inst_own_score IS NOT NULL OR s.analyst_mom_score IS NOT NULL)
+            ORDER BY s.scored_at DESC
+            LIMIT 1
+        """).fetchone()
+        return row['ticker'] if row else None
+    finally:
+        conn.close()
+
+
+def test_api_ticker_elite_includes_subscores(client, monkeypatch):
+    """Elite caller on a >= $5 ticker: payload['signal'] carries all five
+    sub-score fields and subscores_locked is False.
+
+    Catches: the server gate over-stripping for elite (the four sub-scores
+             vanishing for the tier that paid for them).
+    Ignores: the sub-score VALUES (some may be legitimately NULL on a
+             data-poor ticker); this asserts key PRESENCE and the flag.
+    """
+    import web.app as webapp
+    ticker = _ticker_above_five_with_subscores()
+    if not ticker:
+        pytest.skip("no >=$5 ticker with sub-scores in DB")
+    monkeypatch.setattr(webapp, 'effective_tier', lambda u: 'elite')
+    resp = client.get(f"/api/ticker/{ticker}")
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data['subscores_locked'] is False
+    sig = data['signal']
+    for f in ('earnings_score', 'piotroski_score', 'inst_own_score',
+              'analyst_mom_score', 'altman_penalty'):
+        assert f in sig, f'elite missing {f} from /api/ticker payload'
+
+
+def test_api_ticker_pro_strips_subscores_leak_guard(client, monkeypatch):
+    """MANDATORY LEAK GUARD. Pro caller on a >= $5 ticker: the base signal
+    is visible (composite present, proving the row is non-penny and NOT
+    empty for the wrong reason), but the five sub-score fields are ABSENT
+    from the JSON, and subscores_locked is True.
+
+    Catches: the revenue leak where pro receives the Elite-only sub-scores
+             in the API response (leakable via view-source / devtools even
+             if the template hides them). This is the regression guard the
+             whole server-side-gate design exists for.
+    Ignores: the base-score values; only their presence (visibility proof)
+             and the sub-score absence matter.
+    """
+    import web.app as webapp
+    ticker = _ticker_above_five_with_subscores()
+    if not ticker:
+        pytest.skip("no >=$5 ticker with sub-scores in DB")
+    monkeypatch.setattr(webapp, 'effective_tier', lambda u: 'pro')
+    resp = client.get(f"/api/ticker/{ticker}")
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data['subscores_locked'] is True
+    sig = data['signal']
+    # Base signal visible for pro on a non-penny ticker (not empty for the
+    # wrong reason): proves the absence below is the strip, not a penny lock.
+    assert sig.get('composite_score') is not None, \
+        'expected a visible base signal for pro on a >=$5 ticker'
+    for f in ('earnings_score', 'piotroski_score', 'inst_own_score',
+              'analyst_mom_score', 'altman_penalty'):
+        assert f not in sig, f'LEAK: pro received {f} in /api/ticker payload'

@@ -217,6 +217,9 @@ def can_call_api(tier):
 # 10+ leak surfaces stay synchronised — adding a new score column to
 # signal_scores in the future means adding it here and the gate
 # catches every route automatically.
+# short_interest_penalty is intentionally NOT listed here. It is an all-tiers
+# risk flag, not a proprietary score, and is served to Free, Pro, and Elite
+# alike. Do not add it to this set or to ELITE_ONLY_SUBSCORE_FIELDS.
 PROPRIETARY_SCORE_FIELDS = (
     'composite_score',
     'momentum_score',
@@ -280,6 +283,47 @@ def strip_scores_for_non_elite(rows, tier, price_key='price'):
                 if f in r:
                     r[f] = None
     return rows
+
+
+# ── Elite-strict sub-score gate (ticker detail Advanced section) ───
+#
+# The four positive sub-scores plus the Altman distress penalty are an
+# Elite-only surface on the ticker detail page, regardless of price.
+# This is STRICTER than strip_scores_for_non_elite, which gates the base
+# scores by price band and would let a pro user see them on >=$5 tickers.
+# Reusing that helper here would leak the sub-scores to pro. Hence a
+# dedicated Elite-strict strip with its own field tuple (single source of
+# truth for the set).
+ELITE_ONLY_SUBSCORE_FIELDS = (
+    'earnings_score',
+    'piotroski_score',
+    'inst_own_score',
+    'analyst_mom_score',
+    'altman_penalty',
+)
+
+
+def strip_subscores_for_non_elite(signal_dict, tier):
+    """Pop every ELITE_ONLY_SUBSCORE_FIELDS key from `signal_dict` unless
+    `tier` is 'elite'. Price-INDEPENDENT: a pro user loses the sub-scores
+    at every price band (unlike strip_scores_for_non_elite, which only
+    strips pro at the penny band).
+
+    Tier semantics:
+      - elite : returns signal_dict untouched (all five fields preserved).
+      - pro / free / anything else : the five keys are popped if present;
+        keys absent from the dict are a no-op (pop with default).
+
+    Mutates `signal_dict` in place and returns it. The caller passes the
+    per-ticker signal dict (web/app.py api_ticker), not a list of rows, so
+    this takes a single dict rather than mirroring the list-based
+    strip_scores_for_non_elite signature.
+    """
+    if tier == 'elite':
+        return signal_dict
+    for f in ELITE_ONLY_SUBSCORE_FIELDS:
+        signal_dict.pop(f, None)
+    return signal_dict
 
 
 def filter_proprietary_flags_for_non_elite(rows, tier, price_key='price', flag_key='flag_list'):

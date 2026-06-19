@@ -15,7 +15,7 @@ from notifications.telegram import send_alert
 from signals.signal_labels import tier_label, tier_short
 from database.db import (get_connection, initialise_schema, insert_screener_rows, generate_top_signals_of_day, prune_old_snapshots,
     insert_insider_trades, insert_insider_signal, insert_signal_scores, detect_rating_changes, update_analyst_recom,
-    insert_news_articles, insert_ticker_sentiment, insert_calendar_events,
+    insert_news_articles, insert_ticker_sentiment,
     log_run, get_latest_screener, get_recent_insiders, get_cluster_signals,
     get_top_signals, get_ticker_sentiment, get_legal_risk_map, update_target_prices,
     get_price_history_map, get_watchlist_tickers,
@@ -28,7 +28,7 @@ from scrapers.legal_risk_scraper import scrape_priority_tickers
 from scrapers.yahoo_scraper import (
     YahooRateLimitedError,
     fetch_earnings_history, fetch_financial_statements,
-    fetch_institutional_holders, fetch_analyst_changes,
+    fetch_institutional_holders, fetch_analyst_changes, fetch_price_target,
     get_priority_tickers, get_upcoming_earnings_tickers,
 )
 from scrapers.screener_scraper import scrape_all_sectors
@@ -36,7 +36,7 @@ from scrapers.insider_scraper import scrape_all_insider_types, detect_cluster_si
 from signals.scorer import score_all_tickers
 from signals.scanner import run_all_scans
 from scrapers.news_scraper import scrape_news_for_tickers, compute_ticker_sentiment
-from scrapers.calendar_scraper import scrape_economic_calendar, get_earnings_calendar
+from scrapers.calendar_scraper import get_earnings_calendar
 
 Path(LOG_DIR).mkdir(parents=True, exist_ok=True)
 logging.basicConfig(
@@ -144,6 +144,7 @@ def job_generate_signals(sector=None):
             "inst_own_score":    s.inst_own_score,
             "analyst_mom_score": s.analyst_mom_score,
             "altman_penalty":    s.altman_penalty,
+            "short_interest_penalty": s.short_interest_penalty,
         } for s in signals]
         insert_signal_scores(DATABASE_PATH, score_rows)
 
@@ -270,14 +271,6 @@ def job_news_and_calendar(top_n: int = 30):
             if ranked:
                 logger.info(f"  Most bullish news: {ranked[0]['ticker']} ({ranked[0]['avg_sentiment']:+.3f})")
                 logger.info(f"  Most bearish news: {ranked[-1]['ticker']} ({ranked[-1]['avg_sentiment']:+.3f})")
-
-        # Economic calendar
-        logger.info("  Scraping economic calendar...")
-        events = scrape_economic_calendar(days_ahead=7)
-        if events:
-            insert_calendar_events(DATABASE_PATH, events)
-            high_impact = [e for e in events if e.get("impact") == "HIGH"]
-            logger.info(f"  {len(events)} events, {len(high_impact)} high-impact")
 
         duration = time.time() - start
         log_run(DATABASE_PATH, "news_calendar", "SUCCESS", len(tickers), duration_s=duration)
@@ -423,11 +416,11 @@ def job_daily_summary():
         if not top:
             logger.warning("Daily summary: no signals found")
             return
-        lines = [f"📊 <b>SIGNALINTEL — DAILY SUMMARY</b>  {date.today()}", ""]
+        lines = [f"📊 <b>SIGNALINTEL: DAILY SUMMARY</b>  {date.today()}", ""]
         for s in top:
             emoji = _RATING_EMOJI.get(s["rating"], "")
             lines.append(
-                f"{emoji} <b>${s['ticker']}</b>  {s['rating'].replace('_', ' ')}  "
+                f"{emoji} <b>${s['ticker']}</b>  {tier_short(s['rating'])}  "
                 f"Score: {s['composite_score']:.1f}"
             )
         send_alert("\n".join(lines))
@@ -510,6 +503,44 @@ def job_yahoo_earnings_priority():
     except Exception as e:
         logger.error(f"Yahoo Earnings Priority FAILED: {e}", exc_info=True)
         log_run(DATABASE_PATH, "yahoo_earnings_priority", "FAILED", error_msg=str(e), duration_s=time.time()-start)
+
+
+def job_yahoo_price_targets():
+    """Daily 02:30 BST Mon-Fri: fetch 12-month analyst price targets for priority tickers."""
+    start = time.time()
+    logger.info("=" * 60)
+    logger.info("JOB START: Yahoo Price Targets (priority)")
+    try:
+        import yfinance as yf
+        from scrapers.fmp_scraper import upsert_price_target
+        tickers = get_priority_tickers(DATABASE_PATH)
+        if not tickers:
+            logger.info("JOB DONE: Yahoo Price Targets | 0 tickers in priority set")
+            return
+        logger.info(f"  Priority tickers: {len(tickers)}")
+        total_rows = 0
+        for ticker in tickers:
+            try:
+                t = yf.Ticker(ticker)
+                target, analyst_count = fetch_price_target(t, ticker)
+                if target is not None:
+                    n = _write_with_retry(upsert_price_target, DATABASE_PATH, ticker, target, analyst_count)
+                    total_rows += n
+                upsert_external_scrape_log(DATABASE_PATH, ticker, "PRICE_TARGET", success=True)
+            except YahooRateLimitedError:
+                raise
+            except Exception as e:
+                logger.warning(f"  [Yahoo Price Targets] {ticker}: {e}")
+                upsert_external_scrape_log(DATABASE_PATH, ticker, "PRICE_TARGET", success=False, error=str(e))
+            time.sleep(YAHOO_REQUEST_DELAY_SECONDS)
+        duration = time.time() - start
+        log_run(DATABASE_PATH, "yahoo_price_targets", "SUCCESS", total_rows, duration_s=duration)
+        logger.info(f"JOB DONE: Yahoo Price Targets | {total_rows} rows | {duration:.1f}s")
+    except YahooRateLimitedError:
+        raise
+    except Exception as e:
+        logger.error(f"Yahoo Price Targets FAILED: {e}", exc_info=True)
+        log_run(DATABASE_PATH, "yahoo_price_targets", "FAILED", error_msg=str(e), duration_s=time.time()-start)
 
 
 def job_yahoo_institutional_holders():
@@ -905,41 +936,6 @@ def main():
             id="fmp_dividends", name="FMP Dividend Refresh Sunday 03:00",
         )
 
-        # Economic calendar refresh (daily, 06:30)
-        def job_economic_calendar():
-            start = time.time()
-            try:
-                from scrapers.fmp_scraper import refresh_economic_calendar, FMPEntitlementError
-                from notifications.telegram import send_alert_rate_limited
-                n = refresh_economic_calendar(DATABASE_PATH)
-                logger.info(f"[JOB] Economic calendar: {n} events saved")
-                log_run(DATABASE_PATH, "economic_calendar", "SUCCESS", n,
-                        duration_s=time.time()-start)
-            except FMPEntitlementError as e:
-                logger.error(f"[JOB] Economic calendar entitlement failure: {e}")
-                log_run(DATABASE_PATH, "economic_calendar", "FAILED",
-                        error_msg=f"FMP entitlement: {e}",
-                        duration_s=time.time()-start)
-                send_alert_rate_limited(
-                    (e.path, e.status_code),
-                    f"🚨 SignalIntel — FMP entitlement failure\n\n"
-                    f"Job: economic_calendar\n"
-                    f"Endpoint: /economic-calendar\n"
-                    f"Error: {e}\n\n"
-                    f"Check FMP plan tier. Job suppressed until entitlement restored.",
-                )
-            except Exception as e:
-                logger.error(f"[JOB] Economic calendar error: {e}")
-                log_run(DATABASE_PATH, "economic_calendar", "FAILED",
-                        error_msg=str(e),
-                        duration_s=time.time()-start)
-
-        scheduler.add_job(
-            job_economic_calendar,
-            CronTrigger(hour=6, minute=30, day_of_week="mon-fri"),
-            id="economic_calendar", name="FMP Economic Calendar 06:30",
-        )
-
         # Market history (indices, sectors, currencies) — daily 07:00
         def job_market_history():
             try:
@@ -965,6 +961,12 @@ def main():
             job_yahoo_earnings_priority,
             CronTrigger(hour=2, minute=15, day_of_week="mon-fri"),
             id="yahoo_earnings_02:15", name="Yahoo Earnings (priority)",
+        )
+        # Yahoo price targets (priority), daily 02:30 off-peak
+        scheduler.add_job(
+            job_yahoo_price_targets,
+            CronTrigger(hour=2, minute=30, day_of_week="mon-fri"),
+            id="yahoo_price_targets_02:30", name="Yahoo Price Targets (priority)",
         )
         # ── Yahoo weekly bulk (spread across Sun-Tue) ─────────
         scheduler.add_job(

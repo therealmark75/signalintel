@@ -292,6 +292,13 @@ _SYNTHETIC_ANALYST_MOM_MAP = {
 #       remains 0.0 because Altman -60 still clamps. No other snapshot rows change
 #       — the other 13 tickers have no inst_own_map entry and stay on the P5
 #       neutral 50.0 default.
+# v0.19.0: short interest extracted from score_quality into the standalone
+#       short_interest additive penalty (0/-1/-2/-3), calibrated to reproduce
+#       the prior quality-embedded composite impact (relocate, not amplify).
+#       Four tickers shift by the relocation residual: HO04 45.3 -> 45.2,
+#       WH05 38.6 -> 38.5, WH14 37.6 -> 37.5, SE06 32.5 -> 30.5. No rating,
+#       legal_penalty, or sector_modifier changes. Values regenerated under
+#       the pinned clock from score_all_tickers, not hand-edited.
 # Re-generate with: python -c "from tests.test_scorer_snapshot import _SYNTHETIC_ROWS, ..."
 # Do NOT modify this to match broken output — fix the refactor instead.
 EXPECTED_SNAPSHOT = {
@@ -304,10 +311,10 @@ EXPECTED_SNAPSHOT = {
     "LN09": {"composite_score_raw": 56.1, "composite_score": 56.1, "rating": "STRONG_HOLD", "legal_penalty": 0,  "sector_modifier_applied":  0.0},
     "LM08": {"composite_score_raw": 53.8, "composite_score": 53.8, "rating": "STRONG_HOLD", "legal_penalty": -5, "sector_modifier_applied":  0.0},
     "NL13": {"composite_score_raw": 50.0, "composite_score": 50.0, "rating": "STRONG_HOLD", "legal_penalty": 0,  "sector_modifier_applied":  0.0},
-    "HO04": {"composite_score_raw": 45.3, "composite_score": 45.3, "rating": "HOLD",        "legal_penalty": 0,  "sector_modifier_applied":  0.0},
-    "WH05": {"composite_score_raw": 38.6, "composite_score": 38.6, "rating": "SELL",        "legal_penalty": 0,  "sector_modifier_applied":  0.0},
-    "WH14": {"composite_score_raw": 37.6, "composite_score": 37.6, "rating": "WEAK_HOLD",   "legal_penalty": 0,  "sector_modifier_applied":  0.0},
-    "SE06": {"composite_score_raw": 32.5, "composite_score": 32.5, "rating": "SELL",        "legal_penalty": 0,  "sector_modifier_applied":  0.0},
+    "HO04": {"composite_score_raw": 45.2, "composite_score": 45.2, "rating": "HOLD",        "legal_penalty": 0,  "sector_modifier_applied":  0.0},
+    "WH05": {"composite_score_raw": 38.5, "composite_score": 38.5, "rating": "SELL",        "legal_penalty": 0,  "sector_modifier_applied":  0.0},
+    "WH14": {"composite_score_raw": 37.5, "composite_score": 37.5, "rating": "WEAK_HOLD",   "legal_penalty": 0,  "sector_modifier_applied":  0.0},
+    "SE06": {"composite_score_raw": 30.5, "composite_score": 30.5, "rating": "SELL",        "legal_penalty": 0,  "sector_modifier_applied":  0.0},
     "SS07": {"composite_score_raw":  0.0, "composite_score":  0.0, "rating": "STRONG_SELL", "legal_penalty": 0,  "sector_modifier_applied":  0.0, "inst_own_score": 45.0},
 }
 

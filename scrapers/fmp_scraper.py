@@ -447,27 +447,6 @@ def get_dividends(db_path: str, min_yield: float = 0, sector: str = None,
 
 # ── Analyst price targets ─────────────────────────────────────────────────────
 
-def fetch_price_target(ticker: str) -> float | None:
-    """Fetch consensus analyst price target from FMP stable API."""
-    data = _get("/price-target-consensus", {"symbol": ticker})
-    if data and isinstance(data, list) and data[0]:
-        t = data[0].get("targetConsensus") or data[0].get("targetMedian")
-        return float(t) if t else None
-    return None
-
-
-def save_price_target(db_path: str, ticker: str, target: float, analyst_count: int = 0):
-    _ensure_tables(db_path)
-    conn = sqlite3.connect(db_path)
-    c = conn.cursor()
-    c.execute("""
-        INSERT OR REPLACE INTO fmp_price_targets (ticker, price_target, analyst_count, last_updated)
-        VALUES (?,?,?,?)
-    """, (ticker, target, analyst_count, datetime.now().isoformat()))
-    conn.commit()
-    conn.close()
-
-
 def get_price_targets_map(db_path: str) -> dict:
     """Return {ticker: price_target} from cached fmp_price_targets."""
     _ensure_tables(db_path)
@@ -481,6 +460,26 @@ def get_price_targets_map(db_path: str) -> dict:
     result = {r["ticker"]: r["price_target"] for r in c.fetchall()}
     conn.close()
     return result
+
+
+def upsert_price_target(db_path: str, ticker: str, price_target, analyst_count=None) -> int:
+    """
+    Upsert one row into fmp_price_targets, stamping last_updated = now (UTC).
+    Writes only when price_target is a positive float; returns 1 if written,
+    0 if skipped. The yfinance price-target job in main.py is the sole caller;
+    the reader get_price_targets_map above consumes what this writes, unchanged.
+    """
+    if price_target is None or price_target <= 0:
+        return 0
+    _ensure_tables(db_path)
+    conn = sqlite3.connect(db_path)
+    conn.execute("""
+        INSERT OR REPLACE INTO fmp_price_targets (ticker, price_target, analyst_count, last_updated)
+        VALUES (?,?,?, datetime('now'))
+    """, (ticker, float(price_target), analyst_count))
+    conn.commit()
+    conn.close()
+    return 1
 
 
 # ── Batch jobs ────────────────────────────────────────────────────────────────
