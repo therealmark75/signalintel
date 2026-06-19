@@ -1,37 +1,48 @@
 # signals/backtester.py
 # ─────────────────────────────────────────────────
-# Phase 4: Signal backtester.
+# Signal backtester (persisted-price rewire).
 #
-# Takes historical signal scores from the DB and
-# tests how those tickers actually performed over
-# holding periods of 5, 10, 20, and 60 days.
+# Validates historical signal ratings against subsequent price action to
+# check whether the ratings have directional predictive value.
 #
-# Uses yfinance for historical price data.
-# Produces win rate, avg return, Sharpe-like ratio.
+# PRICE BASIS (read before trusting any number this produces):
+#   Forward prices come from the persisted screener_snapshots.price series,
+#   NOT from a live market feed. That column is an intraday FinViz SPOT price
+#   captured at scrape time. It is NOT dividend or split adjusted, and there
+#   may be several snapshots on one calendar day. This basis is acceptable for
+#   N=1 and N=5 trading-day DIRECTIONAL validation (does the rating lean the
+#   right way over a few days), and must NOT be trusted beyond short horizons:
+#   over longer windows the lack of corporate-action adjustment and the
+#   spot-vs-close mismatch dominate the signal. N=20 is intentionally NOT
+#   supported here.
+#
+# SEGMENTATION:
+#   A backtest run is scoped to ONE scoring_version cohort. Composite scores
+#   are never pooled across engine versions, because the scoring methodology
+#   (and therefore the meaning of a given composite value) changes between
+#   versions. Every read, summary, and persisted row carries scoring_version.
+#
+# Produces win rate, avg return, and a rough Sharpe-like ratio per
+# (scoring_version, rating, hold_days) cohort.
 from __future__ import annotations
 # ─────────────────────────────────────────────────
 
 import logging
-import time
 import sqlite3
-from datetime import datetime, timedelta
-from dataclasses import dataclass, field
-from pathlib import Path
+from datetime import datetime
+from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
 
+# yfinance is intentionally NOT used by the backtest path anymore. The guard
+# is kept only so the module imports cleanly in environments that still expect
+# the symbol present; no backtest code path calls into yf.
 try:
     import yfinance as yf
     YFINANCE_AVAILABLE = True
 except ImportError:
     YFINANCE_AVAILABLE = False
-    logger.warning("yfinance not available. Install with: pip install yfinance")
-
-try:
-    import pandas as pd
-    PANDAS_AVAILABLE = True
-except ImportError:
-    PANDAS_AVAILABLE = False
+    logger.warning("yfinance not available (unused by the backtest path).")
 
 
 # ── Data classes ──────────────────────────────────
@@ -68,94 +79,100 @@ class BacktestSummary:
     sharpe_approx:  float   # avg_return / std_return
 
 
-# ── Price fetcher ─────────────────────────────────
+# ── Persisted-price lookups (screener_snapshots) ──
 
-def fetch_price_on_date(ticker: str, date_str: str) -> float | None:
-    """Fetch closing price for a ticker on or near a given date."""
-    if not YFINANCE_AVAILABLE:
+def fetch_entry_price(conn: sqlite3.Connection, ticker: str, signal_date: str) -> float | None:
+    """
+    Entry price for (ticker, signal_date): the latest priced screener snapshot
+    ON that calendar day. If several snapshots exist that day we take the one
+    with MAX(scraped_at) (latest spot of the day). Returns None if the ticker
+    has no priced snapshot on signal_date (unpriceable entry).
+    """
+    row = conn.execute(
+        """
+        SELECT price
+        FROM screener_snapshots
+        WHERE ticker = ?
+          AND DATE(scraped_at) = ?
+          AND price IS NOT NULL
+        ORDER BY scraped_at DESC
+        LIMIT 1
+        """,
+        (ticker, signal_date),
+    ).fetchone()
+    return row[0] if row else None
+
+
+def fetch_exit_price(conn: sqlite3.Connection, ticker: str, signal_date: str, hold_days: int) -> float | None:
+    """
+    Exit price at horizon N (= hold_days) TRADING days forward. We enumerate
+    the distinct priced snapshot dates strictly after signal_date for this
+    ticker, in ascending order, and step to the Nth one. This steps OVER gap
+    and weekend dates (absent dates are simply not in the list), so the horizon
+    is measured in real subsequent observations, never calendar signal_date+N.
+    On that Nth forward date we take the MAX(scraped_at) price. Returns None if
+    fewer than N forward priced dates exist (no exit yet).
+    """
+    forward_dates = conn.execute(
+        """
+        SELECT DISTINCT DATE(scraped_at) AS d
+        FROM screener_snapshots
+        WHERE ticker = ?
+          AND DATE(scraped_at) > ?
+          AND price IS NOT NULL
+        ORDER BY d ASC
+        LIMIT ?
+        """,
+        (ticker, signal_date, hold_days),
+    ).fetchall()
+
+    if len(forward_dates) < hold_days:
         return None
-    try:
-        # Fetch a window around the date to handle weekends/holidays
-        start = (datetime.strptime(date_str, "%Y-%m-%d") - timedelta(days=3)).strftime("%Y-%m-%d")
-        end   = (datetime.strptime(date_str, "%Y-%m-%d") + timedelta(days=3)).strftime("%Y-%m-%d")
 
-        tk   = yf.Ticker(ticker)
-        hist = tk.history(start=start, end=end, auto_adjust=True)
-
-        if hist.empty:
-            return None
-
-        # Get the closest date to our target
-        target = pd.Timestamp(date_str)
-        closest_idx = (hist.index - target).abs().argmin()
-        return float(hist["Close"].iloc[closest_idx])
-
-    except Exception as e:
-        logger.debug(f"Price fetch failed for {ticker} on {date_str}: {e}")
-        return None
-
-
-def fetch_price_after_days(ticker: str, start_date: str, hold_days: int) -> float | None:
-    """Fetch closing price hold_days after start_date."""
-    if not YFINANCE_AVAILABLE:
-        return None
-    try:
-        start_dt = datetime.strptime(start_date, "%Y-%m-%d")
-        end_dt   = start_dt + timedelta(days=hold_days + 5)  # buffer for weekends
-
-        tk   = yf.Ticker(ticker)
-        hist = tk.history(
-            start=start_dt.strftime("%Y-%m-%d"),
-            end=end_dt.strftime("%Y-%m-%d"),
-            auto_adjust=True
-        )
-
-        if hist.empty or len(hist) < 2:
-            return None
-
-        # Skip the first row (entry), get the row closest to hold_days later
-        target_dt = start_dt + timedelta(days=hold_days)
-        target_ts = pd.Timestamp(target_dt)
-
-        # Find closest available trading day
-        diffs = abs(hist.index - target_ts)
-        closest_idx = diffs.argmin()
-        return float(hist["Close"].iloc[closest_idx])
-
-    except Exception as e:
-        logger.debug(f"Exit price fetch failed for {ticker}: {e}")
-        return None
+    nth_date = forward_dates[hold_days - 1][0]
+    row = conn.execute(
+        """
+        SELECT price
+        FROM screener_snapshots
+        WHERE ticker = ?
+          AND DATE(scraped_at) = ?
+          AND price IS NOT NULL
+        ORDER BY scraped_at DESC
+        LIMIT 1
+        """,
+        (ticker, nth_date),
+    ).fetchone()
+    return row[0] if row else None
 
 
 # ── Core backtest functions ───────────────────────
 
 def backtest_signals_from_db(
-    db_path:    str,
-    rating:     str = "BUY",
-    hold_days:  int = 20,
-    min_score:  float = 60.0,
-    limit:      int = 100,
-    delay:      float = 0.5,
+    db_path:         str,
+    scoring_version: str,
+    rating:          str = "BUY",
+    hold_days:       int = 1,
+    min_score:       float = 60.0,
+    limit:           int = 100,
 ) -> list[TradeResult]:
     """
-    Pull historical signal scores from DB and test their performance.
+    Backtest one (scoring_version, rating, hold_days) cohort against the
+    persisted screener_snapshots price series.
 
     Args:
-        db_path:   Path to SQLite database
-        rating:    Signal rating to test (BUY, REVERSION, STRONG_BUY)
-        hold_days: How many days to hold after signal
-        min_score: Minimum composite score to include
-        limit:     Max signals to test
-        delay:     Delay between yfinance calls (be polite)
+        db_path:         Path to SQLite database
+        scoring_version: REQUIRED. Cohort to scope to. Scores are never pooled
+                         across versions.
+        rating:          Signal rating to test (BUY, REVERSION, STRONG_BUY, ...)
+        hold_days:       Forward horizon in TRADING days (1 or 5)
+        min_score:       Minimum composite score to include
+        limit:           Max signals to test
 
     Returns:
-        List of TradeResult objects
+        List of TradeResult objects. Unpriceable / no-exit-yet signals are
+        returned with .error set and .return_pct None so compute_summary
+        excludes them from the stats.
     """
-    if not YFINANCE_AVAILABLE:
-        logger.error("yfinance required for backtesting. pip install yfinance")
-        return []
-
-    # Pull historical signals from DB
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     cur  = conn.cursor()
@@ -166,43 +183,43 @@ def backtest_signals_from_db(
         FROM signal_scores
         WHERE rating = ?
           AND composite_score >= ?
+          AND scoring_version = ?
         GROUP BY ticker, DATE(scored_at)
         ORDER BY scored_at DESC
         LIMIT ?
-    """, (rating, min_score, limit))
+    """, (rating, min_score, scoring_version, limit))
 
     signals = [dict(r) for r in cur.fetchall()]
-    conn.close()
 
-    logger.info(f"Backtesting {len(signals)} {rating} signals over {hold_days}-day hold...")
+    logger.info(
+        f"Backtesting {len(signals)} {rating} signals (v{scoring_version}) "
+        f"over {hold_days}-trading-day hold..."
+    )
 
     results = []
     for i, sig in enumerate(signals):
         ticker      = sig["ticker"]
         signal_date = sig["signal_date"]
 
-        logger.info(f"  [{i+1}/{len(signals)}] {ticker} | signal: {signal_date}")
-
-        # Get entry price (day of signal)
-        entry_price = fetch_price_on_date(ticker, signal_date)
+        # Entry price (latest spot on the signal day)
+        entry_price = fetch_entry_price(conn, ticker, signal_date)
         if not entry_price:
             results.append(TradeResult(
                 ticker=ticker, signal_date=signal_date,
                 signal_rating=rating, composite_score=sig["composite_score"],
-                entry_price=0, hold_days=hold_days, error="No entry price"
+                entry_price=0, hold_days=hold_days, error="No entry price",
             ))
-            time.sleep(delay)
             continue
 
-        # Get exit price (hold_days later)
-        exit_price = fetch_price_after_days(ticker, signal_date, hold_days)
+        # Exit price (Nth forward trading day)
+        exit_price = fetch_exit_price(conn, ticker, signal_date, hold_days)
         if not exit_price:
             results.append(TradeResult(
                 ticker=ticker, signal_date=signal_date,
                 signal_rating=rating, composite_score=sig["composite_score"],
-                entry_price=entry_price, hold_days=hold_days, error="No exit price"
+                entry_price=round(entry_price, 2), hold_days=hold_days,
+                error=f"No exit price at N={hold_days}",
             ))
-            time.sleep(delay)
             continue
 
         return_pct = ((exit_price - entry_price) / entry_price) * 100
@@ -218,10 +235,7 @@ def backtest_signals_from_db(
             win=win,
         ))
 
-        logger.info(f"    Entry: ${entry_price:.2f} → Exit: ${exit_price:.2f} | "
-                    f"Return: {return_pct:+.2f}% | {'WIN' if win else 'LOSS'}")
-        time.sleep(delay)
-
+    conn.close()
     return results
 
 
@@ -277,28 +291,30 @@ def compute_summary(results: list[TradeResult], rating: str, hold_days: int) -> 
 
 
 def run_full_backtest(
-    db_path:   str,
-    ratings:   list[str] = None,
-    hold_days: list[int] = None,
-    min_score: float = 60.0,
-    limit:     int = 50,
+    db_path:         str,
+    scoring_version: str,
+    ratings:         list[str] = None,
+    hold_days:       list[int] = None,
+    min_score:       float = 60.0,
+    limit:           int = 50,
 ) -> dict:
     """
-    Run backtests across multiple ratings and holding periods.
+    Run backtests across multiple ratings and SHORT holding periods, scoped to
+    a single scoring_version.
 
-    Returns nested dict: {rating: {hold_days: BacktestSummary}}
+    Returns nested dict: {rating: {hold_days: {summary, trades}}}
     """
     ratings   = ratings   or ["BUY", "REVERSION", "STRONG_BUY"]
-    hold_days = hold_days or [5, 10, 20]
+    hold_days = hold_days or [1, 5]
 
     all_results = {}
 
     for rating in ratings:
         all_results[rating] = {}
         for days in hold_days:
-            logger.info(f"\nBacktesting {rating} | {days}-day hold...")
+            logger.info(f"\nBacktesting {rating} | v{scoring_version} | {days}-trading-day hold...")
             results = backtest_signals_from_db(
-                db_path=db_path, rating=rating,
+                db_path=db_path, scoring_version=scoring_version, rating=rating,
                 hold_days=days, min_score=min_score, limit=limit,
             )
             summary = compute_summary(results, rating, days)
@@ -315,8 +331,15 @@ def run_full_backtest(
     return all_results
 
 
-def save_backtest_results(db_path: str, results: dict) -> None:
-    """Persist backtest summaries to the database."""
+def _ensure_scoring_version_column(conn: sqlite3.Connection, table: str) -> None:
+    """Idempotently add a scoring_version TEXT column to an existing table."""
+    cols = [r[1] for r in conn.execute(f"PRAGMA table_info({table})").fetchall()]
+    if "scoring_version" not in cols:
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN scoring_version TEXT")
+
+
+def save_backtest_results(db_path: str, results: dict, scoring_version: str) -> None:
+    """Persist backtest summaries to the database, stamped with scoring_version."""
     conn = sqlite3.connect(db_path)
     conn.execute("""
         CREATE TABLE IF NOT EXISTS backtest_results (
@@ -350,6 +373,9 @@ def save_backtest_results(db_path: str, results: dict) -> None:
             error           TEXT
         )
     """)
+    # Idempotent column add for pre-existing tables (no drop/recreate).
+    _ensure_scoring_version_column(conn, "backtest_results")
+    _ensure_scoring_version_column(conn, "backtest_trades")
 
     now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
 
@@ -360,11 +386,11 @@ def save_backtest_results(db_path: str, results: dict) -> None:
                 INSERT INTO backtest_results
                     (run_at, rating, hold_days, total_trades, win_rate,
                      avg_return, median_return, best_trade, worst_trade,
-                     profit_factor, sharpe_approx)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?)
+                     profit_factor, sharpe_approx, scoring_version)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
             """, (now, s.rating, s.hold_days, s.total_trades, s.win_rate,
                   s.avg_return, s.median_return, s.best_trade, s.worst_trade,
-                  s.profit_factor, s.sharpe_approx))
+                  s.profit_factor, s.sharpe_approx, scoring_version))
 
             for t in data["trades"]:
                 if t.return_pct is not None:
@@ -372,12 +398,12 @@ def save_backtest_results(db_path: str, results: dict) -> None:
                         INSERT INTO backtest_trades
                             (run_at, ticker, signal_date, signal_rating,
                              composite_score, entry_price, exit_price,
-                             hold_days, return_pct, win, error)
-                        VALUES (?,?,?,?,?,?,?,?,?,?,?)
+                             hold_days, return_pct, win, error, scoring_version)
+                        VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
                     """, (now, t.ticker, t.signal_date, t.signal_rating,
                           t.composite_score, t.entry_price, t.exit_price,
                           t.hold_days, t.return_pct, int(t.win) if t.win is not None else None,
-                          t.error))
+                          t.error, scoring_version))
 
     conn.commit()
     conn.close()
