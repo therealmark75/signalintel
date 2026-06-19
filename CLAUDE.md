@@ -44,7 +44,7 @@ trading-system/
 ├── database/
 │   └── db.py                        # SQLite helper functions
 ├── config/
-│   └── settings.py                  # Constants and configuration (NEWS_SCRAPE_TIMES etc.)
+│   └── constants.py                 # Constants and configuration (NEWS_SCRAPE_TIMES etc.)
 └── data/
     └── trading_system.db            # SQLite database
 ```
@@ -91,11 +91,11 @@ Rating changes are detected and logged immediately after every signal generation
 
 ## Scheduler Jobs (main.py)
 - Signal scoring runs on schedule and triggers `detect_rating_changes` after every run
-- News scraping is configurable via `NEWS_SCRAPE_TIMES` in `config/settings.py`
+- News scraping is configurable via `NEWS_SCRAPE_TIMES` in `config/constants.py`
 - 11 jobs registered total
 
 ## Key Patterns & Principles
-- **Configuration over hardcoding** — times, thresholds, and settings belong in `config/settings.py`
+- **Configuration over hardcoding**: times, thresholds, and settings belong in `config/constants.py`
 - **Automated fix scripts preferred** over manual edits
 - **Commit working code to git** between feature sets as checkpoints
 - **FinViz individual ticker page scraping** (`finviz.com/quote.ashx?t=TICKER`) is used for high-priority tickers (watchlist + top signals) for data not available in bulk screener views (e.g. analyst recommendations)
@@ -160,7 +160,7 @@ Margin call mechanic:
 4. Legal risk scoring via SEC EDGAR feeds into composite score as penalty
 
 ## Scoring Engine Versioning
-- **`SCORING_ENGINE_VERSION`** lives in `config/settings.py`
+- **`SCORING_ENGINE_VERSION`** lives in `config/constants.py`
 - Every `signal_scores` row and every `rating_changes` row is stamped with the version that produced it
 - The `/backtest` page filters all stats by version; a dropdown appears automatically when multiple versions exist in the data
 - **Bump policy:**
@@ -171,14 +171,14 @@ Margin call mechanic:
 - **⚠ Bump the version BEFORE shipping any change that affects scoring output.** New data tagged with the old version is permanently mis-stamped and will pollute backtest comparisons.
 
 ### Before committing scoring changes
-- [ ] Did this change affect signal scoring output? If yes, bump `SCORING_ENGINE_VERSION` in `config/settings.py` first.
+- [ ] Did this change affect signal scoring output? If yes, bump `SCORING_ENGINE_VERSION` in `config/constants.py` first.
 
 ## Signal Universe Constraints
-- **`MIN_PRICE_FOR_SIGNAL = 1.00`** (defined in `config/settings.py`)
+- **`MIN_PRICE_FOR_SIGNAL = 1.00`** (defined in `config/constants.py`)
 - Tickers below this price are excluded from new signal scoring. The filter lives in `signals/scorer.py` — tickers with `price < MIN_PRICE_FOR_SIGNAL` are skipped before any sub-score is computed.
 - Existing watchlist entries that fall below threshold are **mark-and-hold**: visible on the watchlist with a greyed "BELOW $1" badge, no new signals generated.
 - Rationale: sub-$1 percentage returns are mathematically distorting (penny-stock asymmetry). VEEE at $0.15 was producing +4,380% theoretical returns that are untradeable due to bid-ask spreads and liquidity.
-- Threshold is provisional and may be raised. To change it: update `MIN_PRICE_FOR_SIGNAL` in `config/settings.py`, then re-run `scripts/purge_sub_threshold_rating_changes.py` to clean historical data, then re-run `scripts/rebuild_rating_changes.py` to regenerate transitions.
+- Threshold is provisional and may be raised. To change it: update `MIN_PRICE_FOR_SIGNAL` in `config/constants.py`, then re-run `scripts/purge_sub_threshold_rating_changes.py` to clean historical data, then re-run `scripts/rebuild_rating_changes.py` to regenerate transitions.
 
 ## Signal Terminology: Internal Codes vs Display Labels
 
@@ -356,6 +356,6 @@ review, not in the gate's source code.
 - Flask runs on port 5001
 - When editing scrapers, be mindful of FinViz rate limits — add delays between requests
 - `rating_changes` table should be populated via `detect_rating_changes()` called after every signal run, not as a standalone job
-- Check `config/settings.py` before hardcoding any values
+- Check `config/constants.py` before hardcoding any values
 - **Ratings Guide has been removed.** The "Ratings Guide" modal and button no longer exist in the nav. `/ratings` (Rating Tiers page) is the single reference for all rating and scoring information. Do not re-add a Ratings Guide button or modal.
 - **Nav bar order** (defined in `web/templates/_nav.html`): Dashboard · Rating Tiers · Screener · Earnings · Dividends · Events · Markets · Watchlist · Backtest · Sign out
