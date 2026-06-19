@@ -203,7 +203,6 @@ def main():
     if v == "reversion":          show_top_signals(rating="REVERSION",  limit=args.limit)
     if v == "scores":             show_top_signals(rating=args.rating,   limit=args.limit)
     if v in ("news",    "all"):   show_news_sentiment(limit=args.limit)
-    if v in ("calendar","all"):   show_calendar(days=args.days)
 
 if __name__ == "__main__":
     main()
@@ -237,28 +236,3 @@ def show_news_sentiment(limit=20):
     console.print(tbl)
 
 
-def show_calendar(days=7):
-    from database.db import get_upcoming_events
-    events = get_upcoming_events(DATABASE_PATH, days=days)
-    if not events:
-        console.print(f"[yellow]No calendar events. Run: python main.py news[/yellow]")
-        return
-
-    tbl = Table(title=f"Economic Calendar (next {days} days)", box=box.ROUNDED, show_lines=True)
-    tbl.add_column("Date",    no_wrap=True)
-    tbl.add_column("Event",   max_width=40)
-    tbl.add_column("Impact",  style="bold")
-    tbl.add_column("Sectors", max_width=35)
-    tbl.add_column("Forecast")
-
-    impact_colours = {"HIGH": "bold red", "MEDIUM": "yellow", "LOW": "dim", "NONE": "dim"}
-    for e in events:
-        ic = impact_colours.get(e.get("impact",""), "white")
-        tbl.add_row(
-            e.get("event_date",""),
-            e.get("event_name",""),
-            f"[{ic}]{e.get('impact','')}[/{ic}]",
-            e.get("affected_sectors",""),
-            e.get("forecast","") or "-",
-        )
-    console.print(tbl)

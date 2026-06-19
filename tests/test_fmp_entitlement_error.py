@@ -63,12 +63,12 @@ def test_get_402_raises_entitlement_error():
          patch("scrapers.fmp_scraper._api_key", return_value="testkey"):
 
         with pytest.raises(fmp.FMPEntitlementError) as excinfo:
-            fmp._get("/economic-calendar")
+            fmp._get("/earnings-calendar")
 
     assert excinfo.value.status_code == 402
-    assert excinfo.value.path == "/economic-calendar"
+    assert excinfo.value.path == "/earnings-calendar"
     assert "402" in str(excinfo.value)
-    assert "/economic-calendar" in str(excinfo.value)
+    assert "/earnings-calendar" in str(excinfo.value)
 
 
 def test_get_401_raises_entitlement_error():
@@ -137,60 +137,6 @@ def test_get_500_does_not_raise_entitlement_error():
     assert result is None
 
 
-def test_job_economic_calendar_writes_failed_on_entitlement_error(tmp_path):
-    """
-    When refresh_economic_calendar raises FMPEntitlementError, the
-    job_economic_calendar handler must write status='FAILED' to
-    run_log with the endpoint path captured in error_msg.
-
-    Catches: regression where the handler catches the exception but
-    forgets the log_run call — the 18 May root cause where the cron
-    fired but produced zero observability.
-    Ignores: Telegram side effects (covered by separate test);
-    log message format; duration_s precision.
-    """
-    # Build a tmp DB with the production schema so run_log exists.
-    db_path = str(tmp_path / "tripwire.db")
-    from database.db import initialise_schema, log_run
-    initialise_schema(db_path)
-
-    # Reconstruct the job handler body locally (the real handler is
-    # nested inside main.py's scheduler setup and not directly
-    # importable; the locked Phase 2 shape is what we exercise here).
-    import time as time_mod
-    def _run_job():
-        start = time_mod.time()
-        try:
-            from scrapers.fmp_scraper import refresh_economic_calendar, FMPEntitlementError
-            n = refresh_economic_calendar(db_path)
-            log_run(db_path, "economic_calendar", "SUCCESS", n,
-                    duration_s=time_mod.time()-start)
-        except fmp.FMPEntitlementError as e:
-            log_run(db_path, "economic_calendar", "FAILED",
-                    error_msg=f"FMP entitlement: {e}",
-                    duration_s=time_mod.time()-start)
-
-    # Stub _get to behave as if FMP returned 402 on /economic-calendar.
-    with patch("scrapers.fmp_scraper.requests.get",
-               return_value=_mock_response(402)), \
-         patch("scrapers.fmp_scraper.time.sleep"), \
-         patch("scrapers.fmp_scraper._api_key", return_value="testkey"):
-        _run_job()
-
-    conn = sqlite3.connect(db_path)
-    conn.row_factory = sqlite3.Row
-    rows = conn.execute(
-        "SELECT job_name, status, error_msg FROM run_log "
-        "WHERE job_name = 'economic_calendar' ORDER BY run_at DESC"
-    ).fetchall()
-    conn.close()
-
-    assert len(rows) == 1, f"expected exactly 1 run_log row, got {len(rows)}"
-    assert rows[0]["status"] == "FAILED"
-    assert "economic-calendar" in rows[0]["error_msg"]
-    assert "402" in rows[0]["error_msg"]
-
-
 def test_telegram_alert_rate_limited_per_endpoint():
     """
     send_alert_rate_limited must fire send_alert(message) at most once
@@ -212,7 +158,7 @@ def test_telegram_alert_rate_limited_per_endpoint():
 
         # First call: fires.
         sent_1 = tg.send_alert_rate_limited(
-            ("/economic-calendar", 402), "alert body 1"
+            ("/earnings-calendar", 402), "alert body 1"
         )
         assert sent_1 is True
         assert mock_send.call_count == 1
@@ -220,7 +166,7 @@ def test_telegram_alert_rate_limited_per_endpoint():
         # Second call, same key, 1 hour later (well inside 24h window): suppressed.
         fake_now[0] += 3600
         sent_2 = tg.send_alert_rate_limited(
-            ("/economic-calendar", 402), "alert body 2"
+            ("/earnings-calendar", 402), "alert body 2"
         )
         assert sent_2 is False
         assert mock_send.call_count == 1  # no new call
@@ -235,7 +181,7 @@ def test_telegram_alert_rate_limited_per_endpoint():
         # Original key, 24h+1s later: fires again.
         fake_now[0] += 86401 - 3600  # advance to just past 24h since the first call
         sent_4 = tg.send_alert_rate_limited(
-            ("/economic-calendar", 402), "alert body 4"
+            ("/earnings-calendar", 402), "alert body 4"
         )
         assert sent_4 is True
         assert mock_send.call_count == 3

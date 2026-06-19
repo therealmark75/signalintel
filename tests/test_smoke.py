@@ -14,7 +14,6 @@ PAGE_ROUTES = [
     "/penny",
     "/earnings",
     "/dividends",
-    "/events",
     "/markets",
     "/watchlist",
     "/backtest",
@@ -51,8 +50,6 @@ API_ROUTES = [
     "/api/signals/STRONG_BUY",
     "/api/signals/sector/Technology",
     "/api/industry/Technology",
-    "/api/economic-calendar",
-    "/api/economic-calendar/high-impact-banner",
     "/api/markets/SPY",
 ]
 
