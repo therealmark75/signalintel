@@ -175,3 +175,54 @@ Source: reconciliation of `docs/methodology/component_09_earnings.md` through
     - (d) Drop the economic-calendar feature entirely.
   - Recommended: decide (a) plus investigate why the FinViz path writes zero
     rows, OR (d), at the start of Part 44.
+
+## 19 June 2026 (Part 44 close)
+
+The economic_calendar decision from Part 43 was resolved as option (a): the FMP
+`job_economic_calendar` and its daily false 402 alert were retired (`29ab9d4`),
+along with the FinViz writer. Banked below: the leftover residue and the new
+items queued at Part 44 close.
+
+### economic_calendar web-side cleanup (P23, web/app.py)
+
+- The retirement (`29ab9d4`) removed the scheduler job, the FinViz
+  `scrape_economic_calendar` writer, and the daily Telegram 402 alert. It
+  intentionally LEFT in place:
+  - the web routes `/api/economic-calendar/refresh` and the `/events` read and
+    banner routes in `web/app.py`,
+  - the FMP `refresh_economic_calendar` helper in `scrapers/fmp_scraper.py`
+    (still imported by the refresh route),
+  - the dead `insert_calendar_events` helper in `database/db.py` (its only
+    caller, the FinViz writer, was removed),
+  - the empty `economic_calendar` table.
+- Harmless: the job is gone and nothing repopulates the table, so the routes
+  serve an empty calendar and no alert fires. A tidiness cleanup, not a
+  correctness fix.
+- Touches `web/app.py`, so it trips the P23 pre-commit hook (Mark's terminal).
+  Separate commit when convenient.
+
+### Watchlist-earnings Telegram notification (mini-arc)
+
+- Notify watchlist subscribers about 24h before a held ticker reports earnings.
+- Reuses the component-11 Yahoo earnings timestamps already ingested (no new
+  scrape). Stock-specific and actionable, unlike the retired generic macro
+  calendar; that is why this is worth building where the macro calendar was not.
+- Requires a dedup-state design: the alert must fire once per upcoming earnings
+  date per subscriber, not re-fire every day the ticker sits inside the 24h
+  window. Needs a sent-state table or equivalent keyed on (subscriber, ticker,
+  earnings_date).
+
+### Short-interest strengthening (optional future, NOT queued)
+
+- Component 14 (`4d9b3ca`, 0.19.0) ships at RELOCATION PARITY: the additive
+  0 / -1 / -2 / -3 ladder reproduces the prior quality-embedded composite impact
+  (about -2.8 composite points at the top tier), so the composite is effectively
+  unchanged (P29 mean -0.004, 14 label changes).
+- IF Mark later decides the historical force underweighted short interest,
+  strengthening the penalty is a SEPARATE deliberate decision: an amplification,
+  not a relocation. It needs its own P29 distribution evidence against the
+  current 0.19.0 baseline (not against the pre-component state), and a MINOR
+  bump.
+- Flagged here so a future reader does not assume relocation parity was the
+  intended ceiling. It was the calibration target for THIS change, not a verdict
+  that short interest should never weigh more.
