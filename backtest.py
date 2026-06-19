@@ -1,11 +1,13 @@
 # backtest.py
 # ─────────────────────────────────────────────────
 # Standalone backtest runner.
+# A run is scoped to ONE scoring_version cohort and SHORT horizons (1, 5
+# trading days). Forward prices come from persisted screener_snapshots.
 # Usage:
-#   python backtest.py                  # run full backtest
-#   python backtest.py --rating BUY     # specific rating
-#   python backtest.py --days 5 10 20   # specific hold periods
-#   python backtest.py --show           # show last results
+#   python backtest.py --version 0.17.0            # run full backtest for a cohort
+#   python backtest.py --version 0.17.0 --rating BUY
+#   python backtest.py --version 0.17.0 --days 1 5 # specific hold periods
+#   python backtest.py --show                      # show last results (no --version needed)
 # ─────────────────────────────────────────────────
 
 import sys
@@ -129,10 +131,12 @@ def show_results():
 
 def main():
     parser = argparse.ArgumentParser(description="Signal Backtester")
+    parser.add_argument("--version", default=None,
+                        help="scoring_version cohort to backtest (required for a run)")
     parser.add_argument("--rating",  nargs="+", default=["BUY", "REVERSION"],
                         help="Ratings to test (default: BUY REVERSION)")
-    parser.add_argument("--days",    nargs="+", type=int, default=[5, 10, 20],
-                        help="Hold periods in days (default: 5 10 20)")
+    parser.add_argument("--days",    nargs="+", type=int, default=[1, 5],
+                        help="Hold periods in trading days (default: 1 5)")
     parser.add_argument("--limit",   type=int, default=50,
                         help="Max signals to test per rating/period (default: 50)")
     parser.add_argument("--min-score", type=float, default=60.0,
@@ -145,8 +149,12 @@ def main():
         show_results()
         return
 
+    if not args.version:
+        parser.error("--version is required for a backtest run (cohorts are version-scoped)")
+
     logger.info("=" * 60)
     logger.info("BACKTEST START")
+    logger.info(f"  Version:    {args.version}")
     logger.info(f"  Ratings:    {args.rating}")
     logger.info(f"  Hold days:  {args.days}")
     logger.info(f"  Min score:  {args.min_score}")
@@ -154,14 +162,15 @@ def main():
     logger.info("=" * 60)
 
     results = run_full_backtest(
-        db_path   = DATABASE_PATH,
-        ratings   = args.rating,
-        hold_days = args.days,
-        min_score = args.min_score,
-        limit     = args.limit,
+        db_path         = DATABASE_PATH,
+        scoring_version = args.version,
+        ratings         = args.rating,
+        hold_days       = args.days,
+        min_score       = args.min_score,
+        limit           = args.limit,
     )
 
-    save_backtest_results(DATABASE_PATH, results)
+    save_backtest_results(DATABASE_PATH, results, args.version)
     show_results()
     logger.info("Backtest complete.")
 

@@ -68,17 +68,10 @@
     </style>
 </head>
 <body>
-<header>
-    <a href="/" class="logo">Signal<span>Intel</span></a>
-    {% include '_search.html' %}
-    <div class="user-menu">
-        <a href="/screener" style="color:var(--muted2);text-decoration:none;font-family:var(--mono);font-size:11px">Screener</a>
-        <a href="/earnings" style="color:var(--muted2);text-decoration:none;font-family:var(--mono);font-size:11px">Earnings</a>
-        <a href="/dividends" style="color:var(--muted2);text-decoration:none;font-family:var(--mono);font-size:11px">Dividends</a>
-        <a href="/ticker/{{ ticker }}">← Back to {{ ticker }}</a>
-        <a href="/logout">Sign out</a>
-    </div>
-</header>
+{% include '_nav.html' %}
+<div style="max-width:1480px;margin:0 auto;padding:16px 28px 0">
+    <a href="/ticker/{{ ticker }}" style="color:var(--muted2);text-decoration:none;font-family:var(--mono);font-size:11px">← Back to {{ ticker }}</a>
+</div>
 
 <main>
     <div style="margin-bottom:28px">
@@ -129,5 +122,6 @@
     </div>
     {% endif %}
 </main>
+{% include '_footer.html' %}
 </body>
 </html>

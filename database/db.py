@@ -151,20 +151,6 @@ def initialise_schema(db_path: str) -> None:
         )
     """)
 
-    # ── Economic calendar (Phase 3) ───────────────────────────────
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS economic_calendar (
-            id               INTEGER PRIMARY KEY AUTOINCREMENT,
-            scraped_at       TEXT    NOT NULL,
-            event_date       TEXT    NOT NULL,
-            event_name       TEXT,
-            impact           TEXT,
-            affected_sectors TEXT,
-            forecast         TEXT,
-            previous         TEXT
-        )
-    """)
-
     # ── Signal scores (Phase 2) ───────────────────────────────────
     cur.execute("""
         CREATE TABLE IF NOT EXISTS signal_scores (
@@ -355,6 +341,22 @@ def initialise_schema(db_path: str) -> None:
             last_success_at    TEXT,
             last_error         TEXT,
             PRIMARY KEY (ticker, data_type)
+        )
+    """)
+
+    # ── Watchlist earnings notifications: per-subscriber dedup state ──
+    # Records one row the first time a (user_id, ticker, earnings_date)
+    # earnings alert fires, so it is never re-sent. No FOREIGN KEY by
+    # design: this is scheduler-owned write state keyed on user_id by
+    # value, decoupled from the user-schema init ordering.
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS earnings_notifications_sent (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id       INTEGER NOT NULL,
+            ticker        TEXT    NOT NULL,
+            earnings_date TEXT    NOT NULL,
+            sent_at       TEXT    NOT NULL,
+            UNIQUE(user_id, ticker, earnings_date)
         )
     """)
 
@@ -696,21 +698,6 @@ def insert_ticker_sentiment(db_path: str, rows: list[dict]) -> int:
     return len(rows)
 
 
-def insert_calendar_events(db_path: str, events: list[dict]) -> int:
-    if not events: return 0
-    conn = get_connection(db_path)
-    now  = datetime.now().isoformat()
-    conn.executemany("""
-        INSERT INTO economic_calendar
-            (scraped_at, event_date, event_name, impact, affected_sectors, forecast, previous)
-        VALUES (:scraped_at,:event_date,:event_name,:impact,:affected_sectors,:forecast,:previous)
-    """, [{**e, "scraped_at": now,
-           "affected_sectors": ",".join(e.get("affected_sectors",[]))} for e in events])
-    conn.commit()
-    conn.close()
-    return len(events)
-
-
 def get_ticker_sentiment(db_path: str, tickers: list[str] = None) -> list[dict]:
     conn = get_connection(db_path)
     cur  = conn.cursor()
@@ -728,20 +715,6 @@ def get_ticker_sentiment(db_path: str, tickers: list[str] = None) -> list[dict]:
             WHERE scored_at = (SELECT MAX(scored_at) FROM ticker_sentiment)
             ORDER BY avg_sentiment DESC
         """)
-    rows = [dict(r) for r in cur.fetchall()]
-    conn.close()
-    return rows
-
-
-def get_upcoming_events(db_path: str, days: int = 7) -> list[dict]:
-    conn = get_connection(db_path)
-    cur  = conn.cursor()
-    cur.execute("""
-        SELECT * FROM economic_calendar
-        WHERE event_date BETWEEN date('now') AND date('now', ?)
-          AND scraped_at = (SELECT MAX(scraped_at) FROM economic_calendar)
-        ORDER BY event_date, impact DESC
-    """, (f"+{days} days",))
     rows = [dict(r) for r in cur.fetchall()]
     conn.close()
     return rows

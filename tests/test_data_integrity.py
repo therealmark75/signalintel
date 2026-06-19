@@ -339,27 +339,3 @@ def test_fmp_price_targets_freshness(db):
         latest = latest.replace(tzinfo=timezone.utc)
     cutoff = datetime.now(timezone.utc) - timedelta(days=14)
     assert latest >= cutoff, f"fmp_price_targets last updated {row[0]} — older than 14 days"
-
-
-def test_fmp_economic_calendar_freshness(db):
-    """
-    Latest economic_calendar scraped_at must be within 72 hours.
-
-    Note: this table uses `scraped_at` (TEXT NOT NULL), NOT `last_updated`
-    like the other three FMP tables — economic_calendar is defined in
-    database/db.py rather than scrapers/fmp_scraper.py and follows the
-    older naming convention.
-
-    Skipped if the table is empty (FMP economic scraper not yet run).
-
-    Catches: economic_calendar job (mon-fri 06:30) dying silently.
-    Ignores: weekends — 72h cutoff covers Sat/Sun without false positives.
-    """
-    row = db.execute("SELECT MAX(scraped_at) FROM economic_calendar").fetchone()
-    if row[0] is None:
-        pytest.skip("economic_calendar is empty — FMP economic scraper not yet run")
-    latest = datetime.fromisoformat(row[0])
-    if latest.tzinfo is None:
-        latest = latest.replace(tzinfo=timezone.utc)
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=72)
-    assert latest >= cutoff, f"economic_calendar last scraped {row[0]} — older than 72h"

@@ -823,6 +823,11 @@ def dashboard():
     """), "bearish")
 
     # ── Panel 4: Market State (Hang Seng dropped, Phase 1 flagged ^HSI empty) ─
+    # The tile data read is keyed on the yfinance symbol, but the chart link
+    # must use the TradingView symbol or the widget rejects it. The yf to tv
+    # map is single-sourced in config.markets.MAJOR_INDICES.
+    from config.markets import MAJOR_INDICES
+    tv_by_yf = {i["yf"]: i["tv"] for i in MAJOR_INDICES}
     INDICES = [
         ("^GSPC", "S&P 500"),
         ("^IXIC", "NASDAQ"),
@@ -833,14 +838,21 @@ def dashboard():
     market_tiles = []
     for sym, name in INDICES:
         rows = db_query(
-            "SELECT close FROM market_history WHERE symbol = ? ORDER BY date DESC LIMIT 2",
+            "SELECT close FROM market_history WHERE symbol = ? AND close IS NOT NULL ORDER BY date DESC LIMIT 2",
             (sym,),
         )
         latest = rows[0]["close"] if rows else None
         prev   = rows[1]["close"] if len(rows) > 1 else None
         chg_pct = ((latest - prev) / prev * 100.0) if (latest and prev) else None
+        tv_sym = tv_by_yf.get(sym)
+        if tv_sym is None:
+            app.logger.warning(
+                f"[dashboard] Market State: no TradingView symbol for {sym}, linking with yf key"
+            )
+            tv_sym = sym
         market_tiles.append({
-            "symbol":  sym,
+            "symbol":  sym,        # yfinance key, used for the market_history read
+            "tv":      tv_sym,     # TradingView key, used for the chart link
             "name":    name,
             "level":   latest,
             "chg_pct": chg_pct,
@@ -1757,65 +1769,6 @@ def ratings():
                            last_run=last_run[0]["ts"] if last_run else None)
 
 
-@app.route("/events")
-@login_required
-def events_page():
-    user = current_user()
-    return render_template("events.html", user=user)
-
-
-@app.route("/api/economic-calendar")
-@login_required
-def api_economic_calendar():
-    impact = request.args.get("impact", "")
-    country = request.args.get("country", "")
-    from_date = request.args.get("from", "")
-    to_date = request.args.get("to", "")
-
-    conditions = []
-    params = []
-    if impact:
-        conditions.append("impact = ?")
-        params.append(impact)
-    if country:
-        conditions.append("country = ?")
-        params.append(country.upper())
-    if from_date:
-        conditions.append("event_date >= ?")
-        params.append(from_date)
-    if to_date:
-        conditions.append("event_date <= ?")
-        params.append(to_date)
-
-    where = "WHERE " + " AND ".join(conditions) if conditions else ""
-    rows = db_query(f"""
-        SELECT event_date, event_name, impact, country, currency,
-               estimate, actual, previous, unit
-        FROM economic_calendar
-        {where}
-        ORDER BY event_date ASC, impact DESC
-        LIMIT 500
-    """, params)
-    return jsonify(rows)
-
-
-@app.route("/api/economic-calendar/high-impact-banner")
-@login_required
-def api_high_impact_banner():
-    """Return high-impact US events within next 7 days for events page banner."""
-    rows = db_query("""
-        SELECT event_date, event_name
-        FROM economic_calendar
-        WHERE impact = 'High'
-          AND event_date >= DATE('now')
-          AND event_date <= DATE('now', '+7 days')
-          AND country = 'US'
-        ORDER BY event_date ASC
-        LIMIT 20
-    """)
-    return jsonify(rows)
-
-
 def _compute_theme_counts(db_path: str) -> dict:
     """Return stock counts for all 7 discovery theme cards.
 
@@ -1926,17 +1879,6 @@ def _compute_theme_counts(db_path: str) -> dict:
 def api_theme_counts():
     """Return stock counts for all 7 discovery theme cards as JSON."""
     return jsonify(_compute_theme_counts(DATABASE_PATH))
-
-
-@app.route("/api/economic-calendar/refresh", methods=["POST"])
-@login_required
-def api_economic_calendar_refresh():
-    try:
-        from scrapers.fmp_scraper import refresh_economic_calendar
-        n = refresh_economic_calendar(DATABASE_PATH)
-        return jsonify({"ok": True, "saved": n})
-    except Exception as e:
-        return jsonify({"ok": False, "error": str(e)}), 500
 
 
 # ── Markets ─────────────────────────────────────────────────────────────────

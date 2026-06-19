@@ -66,13 +66,20 @@ def scrape_markets(db_path, days=90):
             rows = []
             for idx, row in df.iterrows():
                 date_str = idx.strftime("%Y-%m-%d")
+                close = _safe_float(row.get("Close"))
+                if close is None:
+                    # Forming/partial bar (e.g. pre-close NaN from a same-day
+                    # fetch): do not persist a NULL-close row, it would blank
+                    # the dashboard Market State tile for that symbol.
+                    logger.debug(f"[markets] {symbol}: skipping {date_str} row, close is None")
+                    continue
                 rows.append((
                     symbol,
                     date_str,
                     _safe_float(row.get("Open")),
                     _safe_float(row.get("High")),
                     _safe_float(row.get("Low")),
-                    _safe_float(row.get("Close")),
+                    close,
                     _safe_float(row.get("Volume")),
                 ))
 

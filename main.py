@@ -1,6 +1,6 @@
 # main.py - Phase 1 + Phase 2
 import sys, time, logging, argparse, signal, subprocess, sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, timezone, date, timedelta
 from pathlib import Path
 from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -343,6 +343,91 @@ def _send_rating_alerts(changes: list):
         body = "\n".join(lines)
         send_alert(f"📋 <b>SignalIntel — watchlist changes</b>\n\n{body}")
 
+
+
+def job_watchlist_earnings_alerts(db_path=DATABASE_PATH, target_date=None):
+    """Notify (global chat) that watchlist-held tickers report earnings tomorrow.
+
+    Fires once per (user_id, ticker, earnings_date) triple. `target_date` is
+    the date treated as "tomorrow"; defaults to date.today()+1 so tests can
+    inject a fixed date without freezing the system clock. Send-then-record:
+    the dedup rows are written ONLY after a truthy send_alert, so a crash
+    between send and write re-sends once next run rather than silently
+    dropping the warning.
+    """
+    if target_date is None:
+        target_date = (date.today() + timedelta(days=1)).isoformat()
+
+    logger.info("JOB START: watchlist earnings alerts (target_date=%s)", target_date)
+    try:
+        conn = get_connection(db_path)
+        try:
+            cur = conn.cursor()
+            cur.execute("""
+                WITH next_earn AS (
+                    SELECT ticker, MIN(earnings_date) AS earnings_date
+                    FROM   earnings_calendar
+                    WHERE  earnings_date >= DATE('now')
+                    GROUP  BY ticker
+                )
+                SELECT DISTINCT wm.user_id, w.ticker, ne.earnings_date
+                FROM   watchlists w
+                JOIN   watchlists_meta wm ON wm.id = w.watchlist_id
+                JOIN   next_earn ne       ON ne.ticker = w.ticker
+                WHERE  wm.alerts_enabled = 1
+                  AND  ne.earnings_date = ?
+                  AND  NOT EXISTS (
+                         SELECT 1 FROM earnings_notifications_sent s
+                         WHERE  s.user_id       = wm.user_id
+                           AND  s.ticker        = w.ticker
+                           AND  s.earnings_date = ne.earnings_date
+                       )
+                ORDER BY w.ticker
+            """, (target_date,))
+            triples = cur.fetchall()
+        finally:
+            conn.close()
+
+        if not triples:
+            logger.info("job_watchlist_earnings_alerts: no watchlist tickers report on %s", target_date)
+            log_run(db_path, "watchlist_earnings_alerts", "SUCCESS", 0)
+            return
+
+        # One grouped digest. user_id is carried only for the dedup write,
+        # it is not shown in the message (global-chat delivery).
+        tickers = sorted({row[1] for row in triples})
+        lines = "\n".join(f"⚡ <b>{t}</b>" for t in tickers)
+        message = (
+            f"📅 <b>SignalIntel: earnings tomorrow ({target_date})</b>\n\n"
+            f"{lines}"
+        )
+
+        sent = send_alert(message)
+        if not sent:
+            logger.warning("job_watchlist_earnings_alerts: send_alert failed, recording nothing (will retry next run)")
+            log_run(db_path, "watchlist_earnings_alerts", "FAILED", error_msg="send_alert returned falsy")
+            return
+
+        conn = get_connection(db_path)
+        try:
+            cur = conn.cursor()
+            now_iso = datetime.now().isoformat()
+            for user_id, ticker, earnings_date in triples:
+                cur.execute("""
+                    INSERT OR IGNORE INTO earnings_notifications_sent
+                        (user_id, ticker, earnings_date, sent_at)
+                    VALUES (?, ?, ?, ?)
+                """, (user_id, ticker, earnings_date, now_iso))
+            conn.commit()
+        finally:
+            conn.close()
+
+        logger.info("job_watchlist_earnings_alerts: sent %d ticker(s), recorded %d triple(s)", len(tickers), len(triples))
+        log_run(db_path, "watchlist_earnings_alerts", "SUCCESS", len(triples))
+
+    except Exception as e:
+        logger.exception("job_watchlist_earnings_alerts failed")
+        log_run(db_path, "watchlist_earnings_alerts", "FAILED", error_msg=str(e))
 
 
 def job_fmp_earnings():
@@ -927,6 +1012,13 @@ def main():
             job_fmp_earnings,
             CronTrigger(hour=6, minute=5, day_of_week="mon-fri"),
             id="fmp_earnings", name="FMP Earnings Calendar 06:05",
+        )
+
+        # Watchlist earnings alerts (daily, 06:30), runs after fmp_earnings 06:05 so the calendar is fresh
+        scheduler.add_job(
+            job_watchlist_earnings_alerts,
+            CronTrigger(hour=6, minute=30, day_of_week="mon-fri"),
+            id="watchlist_earnings_alerts", name="Watchlist Earnings Alerts 06:30",
         )
 
         # FMP dividend refresh (weekly, Sunday 03:00) — circuit breaker in _get() protects against stuck loops
