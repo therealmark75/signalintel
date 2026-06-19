@@ -351,7 +351,7 @@
               <span class="stat-label"><span class="stat-icn" style="background:var(--gold-400)"></span>Earnings today</span>
               <span class="stat-value">{{ summary.earnings_today }}</span>
             </a>
-            <a href="/markets/^VIX" class="stat-line">
+            <a href="/markets/CBOE:VIX" class="stat-line">
               <span class="stat-label"><span class="stat-icn" style="background:var(--ink-400)"></span>VIX state</span>
               <span class="stat-value">{% if summary.vix_val is not none %}{{ '%.1f'|format(summary.vix_val) }} {{ summary.vix_label }}{% else %}-{% endif %}</span>
             </a>
@@ -413,7 +413,7 @@
         <div class="panel-body">
           <div class="mkt-grid">
             {% for t in market_tiles %}
-            <a class="mkt-tile" href="/markets/{{ t.symbol }}">
+            <a class="mkt-tile" href="/markets/{{ t.tv }}">
               <div class="mkt-name">{{ t.name }}</div>
               <div class="mkt-level">{% if t.level is not none %}{{ '{:,.0f}'.format(t.level) if t.level >= 100 else '%.2f'|format(t.level) }}{% else %}-{% endif %}</div>
               <div class="mkt-chg {% if t.chg_pct is not none and t.chg_pct >= 0 %}up{% elif t.chg_pct is not none %}down{% endif %}">

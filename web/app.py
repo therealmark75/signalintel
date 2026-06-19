@@ -823,6 +823,11 @@ def dashboard():
     """), "bearish")
 
     # ── Panel 4: Market State (Hang Seng dropped, Phase 1 flagged ^HSI empty) ─
+    # The tile data read is keyed on the yfinance symbol, but the chart link
+    # must use the TradingView symbol or the widget rejects it. The yf to tv
+    # map is single-sourced in config.markets.MAJOR_INDICES.
+    from config.markets import MAJOR_INDICES
+    tv_by_yf = {i["yf"]: i["tv"] for i in MAJOR_INDICES}
     INDICES = [
         ("^GSPC", "S&P 500"),
         ("^IXIC", "NASDAQ"),
@@ -839,8 +844,15 @@ def dashboard():
         latest = rows[0]["close"] if rows else None
         prev   = rows[1]["close"] if len(rows) > 1 else None
         chg_pct = ((latest - prev) / prev * 100.0) if (latest and prev) else None
+        tv_sym = tv_by_yf.get(sym)
+        if tv_sym is None:
+            app.logger.warning(
+                f"[dashboard] Market State: no TradingView symbol for {sym}, linking with yf key"
+            )
+            tv_sym = sym
         market_tiles.append({
-            "symbol":  sym,
+            "symbol":  sym,        # yfinance key, used for the market_history read
+            "tv":      tv_sym,     # TradingView key, used for the chart link
             "name":    name,
             "level":   latest,
             "chg_pct": chg_pct,
