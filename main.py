@@ -28,7 +28,7 @@ from scrapers.legal_risk_scraper import scrape_priority_tickers
 from scrapers.yahoo_scraper import (
     YahooRateLimitedError,
     fetch_earnings_history, fetch_financial_statements,
-    fetch_institutional_holders, fetch_analyst_changes,
+    fetch_institutional_holders, fetch_analyst_changes, fetch_price_target,
     get_priority_tickers, get_upcoming_earnings_tickers,
 )
 from scrapers.screener_scraper import scrape_all_sectors
@@ -504,6 +504,44 @@ def job_yahoo_earnings_priority():
         log_run(DATABASE_PATH, "yahoo_earnings_priority", "FAILED", error_msg=str(e), duration_s=time.time()-start)
 
 
+def job_yahoo_price_targets():
+    """Daily 02:30 BST Mon-Fri: fetch 12-month analyst price targets for priority tickers."""
+    start = time.time()
+    logger.info("=" * 60)
+    logger.info("JOB START: Yahoo Price Targets (priority)")
+    try:
+        import yfinance as yf
+        from scrapers.fmp_scraper import upsert_price_target
+        tickers = get_priority_tickers(DATABASE_PATH)
+        if not tickers:
+            logger.info("JOB DONE: Yahoo Price Targets | 0 tickers in priority set")
+            return
+        logger.info(f"  Priority tickers: {len(tickers)}")
+        total_rows = 0
+        for ticker in tickers:
+            try:
+                t = yf.Ticker(ticker)
+                target, analyst_count = fetch_price_target(t, ticker)
+                if target is not None:
+                    n = _write_with_retry(upsert_price_target, DATABASE_PATH, ticker, target, analyst_count)
+                    total_rows += n
+                upsert_external_scrape_log(DATABASE_PATH, ticker, "PRICE_TARGET", success=True)
+            except YahooRateLimitedError:
+                raise
+            except Exception as e:
+                logger.warning(f"  [Yahoo Price Targets] {ticker}: {e}")
+                upsert_external_scrape_log(DATABASE_PATH, ticker, "PRICE_TARGET", success=False, error=str(e))
+            time.sleep(YAHOO_REQUEST_DELAY_SECONDS)
+        duration = time.time() - start
+        log_run(DATABASE_PATH, "yahoo_price_targets", "SUCCESS", total_rows, duration_s=duration)
+        logger.info(f"JOB DONE: Yahoo Price Targets | {total_rows} rows | {duration:.1f}s")
+    except YahooRateLimitedError:
+        raise
+    except Exception as e:
+        logger.error(f"Yahoo Price Targets FAILED: {e}", exc_info=True)
+        log_run(DATABASE_PATH, "yahoo_price_targets", "FAILED", error_msg=str(e), duration_s=time.time()-start)
+
+
 def job_yahoo_institutional_holders():
     """Weekly Sunday 04:00 BST: fetch institutional holders for full active universe."""
     start = time.time()
@@ -922,6 +960,12 @@ def main():
             job_yahoo_earnings_priority,
             CronTrigger(hour=2, minute=15, day_of_week="mon-fri"),
             id="yahoo_earnings_02:15", name="Yahoo Earnings (priority)",
+        )
+        # Yahoo price targets (priority), daily 02:30 off-peak
+        scheduler.add_job(
+            job_yahoo_price_targets,
+            CronTrigger(hour=2, minute=30, day_of_week="mon-fri"),
+            id="yahoo_price_targets_02:30", name="Yahoo Price Targets (priority)",
         )
         # ── Yahoo weekly bulk (spread across Sun-Tue) ─────────
         scheduler.add_job(

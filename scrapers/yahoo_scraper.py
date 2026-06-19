@@ -234,6 +234,23 @@ def fetch_analyst_changes(t: yf.Ticker, ticker: str) -> list:
     return rows
 
 
+def fetch_price_target(t: yf.Ticker, ticker: str) -> tuple:
+    """
+    Fetch the 12-month analyst consensus target from Yahoo Ticker.info.
+    Returns (price_target, analyst_count) as (float, int|None) when a positive
+    targetMeanPrice is present, else the (None, None) sentinel pair. Goes
+    through _safe_fetch so the shared circuit breaker and YahooRateLimitedError
+    path cover it; t.info is one heavier call than the method-based fetchers.
+    """
+    info = _safe_fetch(lambda: t.info, ticker, "PRICE_TARGET")
+    if not info:
+        return (None, None)
+    target = _to_float(info.get("targetMeanPrice"))
+    if target is None or target <= 0:
+        return (None, None)
+    return (target, _to_int(info.get("numberOfAnalystOpinions")))
+
+
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
 def _to_float(val) -> float | None:

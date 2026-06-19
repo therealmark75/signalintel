@@ -79,7 +79,11 @@ REQUEST_TIMEOUT       = 20
 #   MAJOR  (1.0.0 → 2.0.0)  : post-launch, breaking changes to scoring methodology
 # ⚠  Bump BEFORE shipping any change that affects scoring output.
 #    New data tagged with the old version is permanently mis-stamped.
-SCORING_ENGINE_VERSION = "0.18.0"
+SCORING_ENGINE_VERSION = "0.18.1"
+# v0.18.1 (19 June 2026): price-target writer rerouted from the dead FMP path
+# to yfinance Ticker.info targetMeanPrice via a dedicated daily priority job.
+# PATCH: the fmp_price_targets schema, reader, and target-price blend are
+# unchanged, so scoring output is not altered; only the cache source differs.
 # v0.18.0 (15 June 2026): score_piotroski made coverage-aware (P5 fix). A
 # Piotroski signal whose inputs are absent is now EXCLUDED rather than
 # scored as a failed criterion. Below 5 of 9 computable signals returns
