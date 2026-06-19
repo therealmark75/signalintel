@@ -1,50 +1,73 @@
 <style>
-/* ── Shared Navigation ──────────────────────── */
-header{position:sticky;top:0;z-index:100;background:rgba(8,12,20,0.95);backdrop-filter:blur(12px);
-    border-bottom:1px solid var(--border);padding:0 24px;display:flex;align-items:center;
-    justify-content:space-between;height:56px;}
-.logo{font-family:var(--mono);font-size:15px;color:var(--accent);letter-spacing:2px;text-transform:uppercase;text-decoration:none;flex-shrink:0;}
-.logo span{color:var(--accent2);}
-.header-right{display:flex;align-items:center;gap:10px;flex-shrink:0;}
-.live-dot{display:flex;align-items:center;gap:5px;font-family:var(--mono);font-size:10px;color:var(--muted2);white-space:nowrap;}
-.live-dot::before{content:'';width:6px;height:6px;border-radius:50%;background:var(--accent2);box-shadow:0 0 6px var(--accent2);animation:livepulse 2s infinite;flex-shrink:0;}
-@keyframes livepulse{0%,100%{opacity:1}50%{opacity:.3}}
-.nav-ts{font-family:var(--mono);font-size:10px;color:var(--muted);white-space:nowrap;}
-.nav-sep{width:1px;height:14px;background:var(--border);flex-shrink:0;}
-.nav-user{font-family:var(--mono);font-size:11px;color:var(--muted);white-space:nowrap;}
-.nav-link{font-family:var(--mono);font-size:11px;color:var(--muted2);text-decoration:none;transition:color .15s;white-space:nowrap;}
-.nav-link:hover,.nav-link.active{color:var(--accent);}
-.nav-btn{font-family:var(--mono);font-size:11px;color:var(--muted2);background:transparent;border:1px solid var(--border);border-radius:4px;padding:4px 10px;cursor:pointer;transition:all .15s;white-space:nowrap;}
-.nav-btn:hover{color:var(--accent);border-color:var(--accent);}
-.nav-tier{font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.5px;padding:2px 6px;border-radius:3px;white-space:nowrap;}
-.nav-tier-free{color:#64748b;border:1px solid #64748b;}
-.nav-tier-starter{color:#3b82f6;border:1px solid #3b82f6;}
-.nav-tier-pro{color:#a855f7;border:1px solid #a855f7;}
-.nav-tier-elite{color:#00ff88;border:1px solid rgba(0,255,136,.45);}
+/* ── Shared Navigation ────────────────────────────────────────────────
+   Self-contained: the nav defines its own design tokens scoped to .nav so
+   it renders identically on pages that do NOT carry the dashboard token set.
+   Do not rely on the including page for these values. */
+.nav{
+    /* local token values, scoped to the nav subtree (no global leak) */
+    --ink-50:#f6f7f9; --ink-100:#e8ebf0; --ink-300:#aab3c2; --ink-400:#8a93a6; --ink-500:#5a6478;
+    --green-400:#3ec762;
+    --line:rgba(255,255,255,0.06);
+    --gold-500:#c9a04a; --gold-400:#d4b06a; --gold-glow:rgba(201,160,74,0.16);
+    --font-mono:'JetBrains Mono', ui-monospace, monospace;
+    position: sticky; top: 0; z-index: 50;
+    background: rgba(8,17,31,0.82);
+    backdrop-filter: blur(12px) saturate(140%);
+    -webkit-backdrop-filter: blur(12px) saturate(140%);
+    border-bottom: 1px solid var(--line);
+}
+.nav-inner { max-width: 1480px; margin: 0 auto; padding: 14px 28px; display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+.nav-logo { display: flex; align-items: center; gap: 11px; text-decoration: none; flex-shrink: 0; }
+.nav-mark { width: 28px; height: 28px; }
+.nav-wordmark { font-size: 19px; font-weight: 600; letter-spacing: -0.015em; color: var(--ink-50); }
+.nav-wordmark .intel { color: var(--green-400); font-weight: 700; }
+.nav-links { display: flex; align-items: center; gap: 26px; }
+.nav-links a { color: var(--ink-300); font-size: 13.5px; font-weight: 500; letter-spacing: 0.01em; transition: color .18s; position: relative; padding: 4px 0; text-decoration: none; white-space: nowrap; }
+.nav-links a:hover { color: var(--green-400); }
+.nav-links a.active { color: var(--ink-50); }
+.nav-links a.active::after { content: ''; position: absolute; bottom: -15px; left: 0; right: 0; height: 2px; background: var(--green-400); }
+.nav-right { display: flex; align-items: center; gap: 18px; flex-shrink: 0; }
+.tier-pill {
+    font-family: var(--font-mono); font-size: 10px; font-weight: 500;
+    letter-spacing: 0.08em; text-transform: uppercase;
+    padding: 4px 10px; border-radius: 5px;
+    border: 1px solid var(--gold-500); color: var(--gold-400);
+    background: var(--gold-glow);
+}
+.tier-pill.tp-free, .tier-pill.tp-starter, .tier-pill.tp-pro {
+    border-color: var(--ink-500); color: var(--ink-300); background: transparent;
+}
+.nav-signout { color: var(--ink-400); font-size: 13px; text-decoration: none; }
+.nav-signout:hover { color: var(--ink-100); }
 </style>
-<header>
-    <a href="/" class="logo">SIGNAL<span>INTEL</span></a>
-    {% include '_search.html' %}
-    <div class="header-right">
-        <div class="live-dot">LIVE</div>
-        <span class="nav-ts" id="last-updated"></span>
-        <span class="nav-user">{{ user.username if user else '' }}</span>
-        {% if user %}<span class="nav-tier nav-tier-{{ nav_tier }}">{{ nav_tier|upper }}</span>{% endif %}
-        <div class="nav-sep"></div>
-        <a href="/" class="nav-link{{ ' active' if request.path == '/' else '' }}">Dashboard</a>
-        <a href="/ratings" class="nav-link{{ ' active' if request.path == '/ratings' else '' }}">Signal Tiers</a>
-        <a href="/screener" class="nav-link{{ ' active' if request.path == '/screener' else '' }}">Screener</a>
-        <a href="/earnings" class="nav-link{{ ' active' if request.path == '/earnings' else '' }}">Earnings</a>
-        <a href="/dividends" class="nav-link{{ ' active' if request.path == '/dividends' else '' }}">Dividends</a>
-        <a href="/markets" class="nav-link{{ ' active' if request.path == '/markets' else '' }}">Markets</a>
-        <a href="/watchlist" class="nav-link{{ ' active' if request.path == '/watchlist' else '' }}">Watchlist</a>
-        <a href="/backtest" class="nav-link{{ ' active' if request.path == '/backtest' else '' }}">Backtest</a>
-        <div class="nav-sep"></div>
-        <a href="/logout" class="nav-link">Sign out</a>
+<nav class="nav">
+    <div class="nav-inner">
+        <a class="nav-logo" href="/dashboard">
+            <svg class="nav-mark" viewBox="0 0 32 32" fill="none">
+                <path d="M16 3 L27 9.5 V22.5 L16 29 L5 22.5 V9.5 Z" stroke="#3ec762" stroke-width="1.6" fill="rgba(62,199,98,0.05)"/>
+                <path d="M11 13 L16 21 L21 11" stroke="#3ec762" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <span class="nav-wordmark">Signal<span class="intel">Intel</span></span>
+        </a>
+        {% include '_search.html' %}
+        <div class="nav-links">
+            <a href="/dashboard" class="{{ 'active' if request.path == '/dashboard' else '' }}">Dashboard</a>
+            <a href="/signals" class="{{ 'active' if request.path == '/signals' else '' }}">Signals</a>
+            <a href="/screener" class="{{ 'active' if request.path == '/screener' else '' }}">Screener</a>
+            <a href="/markets" class="{{ 'active' if request.path == '/markets' else '' }}">Markets</a>
+            <a href="/watchlist" class="{{ 'active' if request.path == '/watchlist' else '' }}">Watchlist</a>
+            <a href="/penny" class="{{ 'active' if request.path == '/penny' else '' }}">Penny</a>
+        </div>
+        <div class="nav-right">
+            {% if user %}
+            <span class="tier-pill tp-{{ nav_tier }}">{{ (nav_tier or 'free')|capitalize }}</span>
+            <a href="/logout" class="nav-signout">Sign out</a>
+            {% endif %}
+        </div>
     </div>
-</header>
+</nav>
 <style>
-/* Toast: must live outside header to avoid backdrop-filter fixed-positioning bug */
+/* Toast: must live outside the nav to avoid backdrop-filter fixed-positioning bug */
 #wl-toast{position:fixed;bottom:24px;right:24px;z-index:99999;
     background:#0a1628;border:1px solid rgba(0,255,136,0.35);border-radius:8px;
     padding:12px 18px;font-family:var(--mono,monospace);font-size:12px;

@@ -94,36 +94,7 @@
   .parent-bar-right a { color: var(--ink-400); transition: color .18s; }
   .parent-bar-right a:hover { color: var(--ink-100); }
 
-  .nav {
-    position: sticky; top: 0; z-index: 50;
-    background: rgba(8,17,31,0.82);
-    backdrop-filter: blur(12px) saturate(140%);
-    -webkit-backdrop-filter: blur(12px) saturate(140%);
-    border-bottom: 1px solid var(--line);
-  }
-  .nav-inner { max-width: 1480px; margin: 0 auto; padding: 14px 28px; display: flex; align-items: center; justify-content: space-between; }
-  .nav-logo { display: flex; align-items: center; gap: 11px; }
-  .nav-mark { width: 28px; height: 28px; }
-  .nav-wordmark { font-size: 19px; font-weight: 600; letter-spacing: -0.015em; color: var(--ink-50); }
-  .nav-wordmark .intel { color: var(--green-400); font-weight: 700; }
-  .nav-links { display: flex; align-items: center; gap: 26px; }
-  .nav-links a { color: var(--ink-300); font-size: 13.5px; font-weight: 500; letter-spacing: 0.01em; transition: color .18s; position: relative; padding: 4px 0; }
-  .nav-links a:hover { color: var(--green-400); }
-  .nav-links a.active { color: var(--ink-50); }
-  .nav-links a.active::after { content: ''; position: absolute; bottom: -15px; left: 0; right: 0; height: 2px; background: var(--green-400); }
-  .nav-right { display: flex; align-items: center; gap: 18px; }
-  .tier-pill {
-    font-family: var(--font-mono); font-size: 10px; font-weight: 500;
-    letter-spacing: 0.08em; text-transform: uppercase;
-    padding: 4px 10px; border-radius: 5px;
-    border: 1px solid var(--gold-500); color: var(--gold-400);
-    background: var(--gold-glow);
-  }
-  .tier-pill.tp-free, .tier-pill.tp-starter, .tier-pill.tp-pro {
-    border-color: var(--ink-500); color: var(--ink-300); background: transparent;
-  }
-  .nav-signout { color: var(--ink-400); font-size: 13px; }
-  .nav-signout:hover { color: var(--ink-100); }
+  /* Nav chrome moved to web/templates/_nav.html (shared, self-contained partial) */
 
   .dash { max-width: 1480px; margin: 0 auto; padding: 32px 28px 80px; position: relative; z-index: 1; }
   .dash-head { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 26px; flex-wrap: wrap; gap: 16px; }
@@ -378,29 +349,7 @@
     </div>
   </div>
 
-  <nav class="nav">
-    <div class="nav-inner">
-      <a class="nav-logo" href="/dashboard">
-        <svg class="nav-mark" viewBox="0 0 32 32" fill="none">
-          <path d="M16 3 L27 9.5 V22.5 L16 29 L5 22.5 V9.5 Z" stroke="#3ec762" stroke-width="1.6" fill="rgba(62,199,98,0.05)"/>
-          <path d="M11 13 L16 21 L21 11" stroke="#3ec762" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-        <span class="nav-wordmark">Signal<span class="intel">Intel</span></span>
-      </a>
-      <div class="nav-links">
-        <a href="/dashboard" class="active">Dashboard</a>
-        <a href="/signals">Signals</a>
-        <a href="/screener">Screener</a>
-        <a href="/markets">Markets</a>
-        <a href="/watchlist">Watchlist</a>
-        <a href="/penny">Penny</a>
-      </div>
-      <div class="nav-right">
-        <span class="tier-pill tp-{{ tier_key }}">{{ (tier_key or 'free')|capitalize }}</span>
-        <a href="/logout" class="nav-signout">Sign out</a>
-      </div>
-    </div>
-  </nav>
+  {% include '_nav.html' %}
 
   <main class="dash">
     <div class="dash-head">
@@ -797,6 +746,8 @@
     </div>
     {# ─── END BELOW THE FOLD ─────────────────────────────────────────── #}
   </main>
+
+  {% include '_footer.html' %}
 
 </body>
 </html>
