@@ -42,16 +42,10 @@
     </style>
 </head>
 <body>
-<header>
-    <a href="/" class="logo">SIGNAL<span>INTEL</span></a>
-    {% include '_search.html' %}
-    <div style="display:flex;align-items:center;gap:12px;font-family:var(--mono);font-size:11px">
-        <a href="/screener" style="color:var(--muted2);text-decoration:none">Screener</a>
-        <a href="/earnings" style="color:var(--muted2);text-decoration:none">Earnings</a>
-        <a href="/dividends" style="color:var(--muted2);text-decoration:none">Dividends</a>
-        <a href="javascript:history.back()" class="btn-back">← Back</a>
-    </div>
-</header>
+{% include '_nav.html' %}
+<div class="page-actions" style="max-width:1480px;margin:0 auto;padding:16px 28px 0">
+    <a href="javascript:history.back()" class="btn-back">← Back</a>
+</div>
 <main>
     <div class="page-title" id="page-title">{{ industry }}</div>
     <div class="page-sub" id="page-sub">Loading tickers...</div>
@@ -149,5 +143,6 @@ fetch(`/api/industry/${encodeURIComponent(INDUSTRY)}`)
         renderTable();
     });
 </script>
+{% include '_footer.html' %}
 </body>
 </html>
