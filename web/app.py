@@ -833,7 +833,7 @@ def dashboard():
     market_tiles = []
     for sym, name in INDICES:
         rows = db_query(
-            "SELECT close FROM market_history WHERE symbol = ? ORDER BY date DESC LIMIT 2",
+            "SELECT close FROM market_history WHERE symbol = ? AND close IS NOT NULL ORDER BY date DESC LIMIT 2",
             (sym,),
         )
         latest = rows[0]["close"] if rows else None
