@@ -1,34 +1,43 @@
 # SignalIntel Session Handoff
 
-**Last updated:** end of Part 45 (19 June 2026)
-**Engine:** SCORING_ENGINE_VERSION 0.19.0, UNCHANGED this session (neither Part 45 commit touched scoring).
-**Repo:** branch `feature/watchlist-earnings`, HEAD `3fe48bd`, level with origin. The Yahoo arc is CLOSED and merged to `main` at Part 45 open (merge commit `2d713c7`); `main` now carries the full Yahoo arc (ingest pipeline, components 9 to 14, price-target reroute). Two code commits this session, both deployed: `ab63a0d` (watchlist earnings notification job, Path A) and `3fe48bd` (economic_calendar full retirement).
-**Suite:** 429 passed, 1 skipped, exit 0. The single remaining skip is `fmp_price_targets` (test_data_integrity.py:336, empty until the 02:30 job first fires). The `economic_calendar` skip is GONE (that test was removed in the retirement).
-**Runtime:** scheduler live as `io.thesignalvault.scheduler`, last restarted this session to PID 43738, with the new job registered: `Watchlist Earnings Alerts 06:30` (id `watchlist_earnings_alerts`, Mon-Fri, fires right after the 06:05 `fmp_earnings` calendar refresh). gunicorn restarted this session to PID 47870 (carries the economic_calendar route removal). The `economic_calendar` table was physically DROPPED this session (manual one-line drop at deploy, not scripted into any init path).
+**Last updated:** end of Part 46 (19 June 2026)
+**Engine:** SCORING_ENGINE_VERSION 0.19.0, UNCHANGED this session (no scoring change in Part 46).
+**Repo:** branch `feature/watchlist-earnings`. This session's commits sit on the branch ahead of the Part 45 state; `main` is being merged up to the branch at this session's close (see close note). Yahoo arc remains merged to `main` (`2d713c7`).
+**Suite:** 441 passed, 1 skipped, exit 0. The single skip is `fmp_price_targets` (test_data_integrity.py, empty until the 02:30 job first fires).
+**Runtime:** scheduler live as `io.thesignalvault.scheduler`; gunicorn live as `io.thesignalvault.gunicorn` on 5001. Both restarted this session (scheduler for the markets-writer guard, gunicorn for the reader and link fixes). PIDs differ next session.
 
-## Where we are
+## Part 46 work (this session)
 
-Part 45 opened with the Yahoo arc closed and merged to `main` (merge commit `2d713c7`), so `main` now carries the full Yahoo work: the ingest pipeline, components 9 to 14, and the price-target reroute. Work then moved to a fresh branch, `feature/watchlist-earnings`, which shipped two commits this session. First, the watchlist earnings notification job (Path A): a daily scheduler job that sends one grouped Telegram digest naming watchlist-held tickers reporting the next day, with a net-new per-subscriber-shaped dedup table so each (subscriber, ticker, earnings_date) fires once. Second, the full retirement of the economic_calendar feature: Part 44 removed the engine side, and Part 45 removed the surviving web, dashboard, scraper, db, and table surface. Neither commit touched scoring, so the engine stays at 0.19.0.
+| Item | Commits | What shipped |
+|---|---|---|
+| 1. Backtester rewire | `0c92d6d` | Backtester rewired to persisted screener prices, version-segmented, short-horizon only. Retired the live-yfinance fetch path; forward prices now from `screener_snapshots.price` (intraday spot, N=1/N=5 directional only, not corporate-action adjusted). Horizons [1,5], N=20 removed. Runs scoped to one scoring_version cohort; `backtest_results` / `backtest_trades` gained an idempotent scoring_version column. First persisted cohort baseline v0.17.0 BUY full pool: N=1 win 52.3 pct avg +0.21 pct, N=5 win 49.2 pct avg flat. 7 tests. |
+| 2. Sitewide design-system migration | `d29ab30`, `1c16997`, `a26225d` (plus prior `1e9439b` "web design" that committed the Phase 2 partials) | Promoted the new nav into the shared `_nav.html` partial; utility strip (The Signal Vault / Commodities / Crypto / Forex / Account) folded into the partial so it renders sitewide, with the three product links inert/coming-soon and Account inert (no routes exist yet). Dropped the Signals nav link (routed to dashboard, redundant with Screener); five-link nav. Green hexagon logo canonical. Migrated industry.html and ticker_news.html off bespoke headers onto the shared partial, preserving their back-links and adding the footer. 17 pages auto-migrated via the partial; 20 pages now include the shared nav. |
+| 3. Nav-contract test updates + em-dash sweep | `cbbda9c` | Four stale nav tests retargeted to the new contract (nav-tier to tier-pill, FREE to Free casing, Signal-Tiers link asserted via footer); full em-dash sweep of tests/test_smoke.py and tests/test_signal_labels.py. BUG-001 and P15 security assertions byte-identical, only message/docstring text changed. |
+| 4. Market State NULL-close fix | writer `4c83bd6`, reader `00e3ce6` | Root cause: the 07:00 BST markets job runs pre-US-close, yfinance returns a forming bar with NaN close, persisted as a NULL-close row; the dashboard reader took the latest row by date and blanked the S&P/NASDAQ/DOW tiles. Writer now skips NULL-close bars; reader query adds `AND close IS NOT NULL`. Tiles populate. 4 tests. |
+| 5. Market State chart-link fix | `f420a38` | Tiles linked `/markets/<yf-symbol>` (`^GSPC`), which the TradingView widget rejects. Now resolve the tv symbol from `config.markets.MAJOR_INDICES` (single-source) and link with that, keeping yf for the data read; hardcoded VIX stat-line fixed to `CBOE:VIX`. 1 test. |
 
-## Part 45 work (this session)
+## Part 45 (prior session)
 
-| Commit | Type | What shipped | Verified by |
-|---|---|---|---|
-| `ab63a0d` | feature, scheduler | Watchlist earnings notification job (Path A). `job_watchlist_earnings_alerts` (cron `watchlist_earnings_alerts`, 06:30 Mon-Fri, after the 06:05 `fmp_earnings` refresh) queries tickers in alerts_enabled watchlists whose MIN(earnings_date) in FMP `earnings_calendar` equals a Python-injected target date (defaults to tomorrow), sends one grouped global-chat digest, then writes per-(user_id, ticker, earnings_date) rows to the net-new `earnings_notifications_sent` table via INSERT OR IGNORE on a truthy send only (send-then-record). New table created in initialise_schema, no FOREIGN KEY by design. 7 unit tests | suite 433 green at commit; live smoke test fired one digest for TSM at target 2026-07-16, wrote one dedup row, then row deleted to restore clean state; scheduler kickstart to PID 43738, job registered |
-| `3fe48bd` | retirement | economic_calendar FULL retirement. Removed the `/events` page route and template, the three `/api/economic-calendar` routes, the dashboard CLI panel, the FMP `fetch`/`save`/`refresh_economic_calendar` helpers, the db.py `insert_calendar_events` and `get_upcoming_events` helpers, the CREATE in initialise_schema, and three stale `/events` nav/footer links. Table dropped manually at deploy (not scripted into init). General FMP entitlement tests kept and repointed to the live `/earnings-calendar`; only the economic-calendar-specific job test deleted | suite 429 green, exit 0; gunicorn kickstart to PID 47870, `/events` and `/api/economic-calendar` both return 404, `/markets` and `/dashboard` 302 (live); completeness grep clean of live wiring |
+Part 45 (prior session): watchlist earnings job (`ab63a0d`) + economic_calendar full retirement (`3fe48bd`) + docs (`c811e51`), all now merged to main via the Part 46 close. See git history for detail.
 
 ## Queued work
 
-1. **Backtest validation harness.** Unblocked by sub-score persistence (0.17.0+), not yet scoped. Athena's recommended next build for Part 46.
-2. **FOLLOWUPS latent tail.** ISO-date string-sort couplings (09/10/13), dead guard (09), 50.0 collision (10), init-as-upgrade (12), vestigial `total_revenue` in `ALTMAN_LOOKUPS` (13). Banked in `docs/methodology/FOLLOWUPS.md`, not urgent.
-3. **Components 15/16 (News Sentiment, Options Flow).** Remain deferred, dashboard-only per the composite-purity invariant.
-4. **Production Stripe flip** (P32, queued, unchanged).
-5. **Short-interest strengthening** (NOT queued). A separate future deliberate decision, not a backlog item; Component 14 shipped at relocation parity, which was the calibration target, not a ceiling. Banked in FOLLOWUPS.
-6. **Future Path B: per-subscriber earnings delivery.** The earnings job ships on Path A (global-chat, single recipient) because no per-user Telegram chat id exists. True per-subscriber delivery needs `users.telegram_chat_id` plus a bot linking flow, a real arc and P23 territory. The dedup table is already keyed per-subscriber, so it is shaped for Path B with no migration; only the delivery layer changes.
+1. **Backtest validation harness next steps.** The 0.17.0 composite/tier baseline is live; per-sub-score and N=20 harness blocked on accumulation, earliest ~late June when 0.17.0+ rows clear a 20-trading-day forward window. Run 0.18.0/0.19.0 cohorts once they have forward depth (noise today).
+2. **FOLLOWUPS latent tail** (unchanged): ISO-date string-sort couplings (09/10/13), dead guard (09), 50.0 collision (10), init-as-upgrade (12), vestigial `total_revenue` in `ALTMAN_LOOKUPS` (13).
+3. **Components 15/16 (News Sentiment, Options Flow)**, deferred, dashboard-only.
+4. **Production Stripe flip** (P32), queued.
+5. **Future Path B: per-subscriber earnings delivery** (needs `users.telegram_chat_id` plus bot linking, P23).
+6. **feature/watchlist-earnings merge to main**: being done at THIS session's close (see close note); update next session to reflect the merged state.
 
-### Shipped this session (was queued)
-- Watchlist-earnings mini-arc: shipped `ab63a0d`, Path A, live. Diagnosis corrected three premises from the original mini-arc note: the forward feed is FMP `earnings_calendar` not Yahoo component-11; no per-user chat id exists, so delivery is global-chat; no dedup precedent existed, so the table is net-new.
-- economic_calendar web-side cleanup: shipped `3fe48bd` as a FULL retirement (not just the web routes the Part 44 note scoped). Feature now entirely gone.
+## Part 46 new FOLLOWUPS (banked, not urgent)
+
+- **test_data_integrity.py content tests have no mid-scoring-cycle guard:** any pytest run roughly 14:00-15:20 BST shows phantom failures because the content gates snapshot a half-written scoring run. Skip-guard when `latest_run_date` scoring is incomplete. (Surfaced at Part 46 open when a 15:23 run showed 2 false failures.)
+- **markets_scraper.py line ~100 carries a pre-existing em-dash** in a log string (the `Scrape complete` line). One-character dash-sweep when convenient.
+- **app.py ~line 2744 references a `logger` not defined at module scope:** latent NameError on the backtest-stats error path. Pre-existing, not triggered normally.
+- **Backtester penny-name spot-price tails:** unadjusted intraday spot on thin names produces noise outliers (e.g. a +95.9 pct one-day move). Consider a price-floor or winsorization filter before trusting tail stats; separate decision, own evidence.
+- **PRODUCT: Market State tiles link to TradingView's own chart widget** (third-party surface). Works for beta, but it sends the user off our surface and ties charting to a vendor. Revisit before paid launch (own charting vs embed).
+- **PRE-BETA OPS: the running server currently serves a feature branch in production** (single-machine setup, Cloudflare tunnel to localhost:5001). Before testers land, make `main` the deployed branch so "what's live" has a clean answer (merge-then-restart as the deploy discipline). The Part 46 close merges the branch to main, which begins this.
+- **Eco/ethical screen page (product idea, post-beta):** a curated green/ethical universe (companies that do not harm environment/animals) analysed with the SAME SignalIntel scoring. Scope as a SCREENER-PRESET / filtered universe, NOT a scoring-component change (keep the composite defensible and free of contested moral judgments). The make-or-break is the ethical-data substrate (curated exclusion list vs public ESG dataset vs vendor scores vs SEC-filing signals), resolve that FIRST in a Phase 1 scope before any build. Potential USP: ethical universe + genuine signal intelligence, the intersection most ESG tools and most signal tools each miss.
 
 ## Test accounts (for tier-gated walks)
 
@@ -59,6 +68,4 @@ Part 45 opened with the Yahoo arc closed and merged to `main` (merge commit `2d7
 
 ## Branch state (for the next fresh chat)
 
-- `feature/watchlist-earnings` code commits are pushed (HEAD `3fe48bd`, level with origin): `ab63a0d` (watchlist earnings job) and `3fe48bd` (economic_calendar full retirement). This Part 45 doc-sync commit lands on top and is NOT yet pushed, so the branch will be one commit ahead of origin until Mark pushes.
-- `main` carries the full Yahoo arc as of Part 45 open (merge commit `2d713c7`). The two Part 45 code commits stay on the branch; this Part 45 doc-sync commit is the next cherry-pick candidate to `main`. Mark drives the push / cherry-pick / return sequence himself (this session STOPS at the docs commit, before any branch switch).
-- Next active target: **backtest validation harness**, Athena's recommended next build for Part 46 (unblocked by sub-score persistence since 0.17.0, not yet scoped).
+- Part 46 closes by merging `feature/watchlist-earnings` into `main` and restarting gunicorn on `main`, so local working tree, `main`, and the live site (thesignalvault.io via the Cloudflare tunnel to localhost:5001) are all the same state. There is no separate deploy step; a gunicorn restart on the latest code IS the live deploy.

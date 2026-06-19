@@ -621,6 +621,11 @@ Long-lived processes (the scheduler, the Flask web server) load module
 code into memory at start time. New commits to disk do NOT deploy until
 the process restarts. This is invisible without explicit instrumentation.
 
+There is no separate production deploy: the Mac Mini gunicorn process serves
+thesignalvault.io directly via the Cloudflare tunnel, so a gunicorn restart on
+the current working-tree code IS the live deploy. Pre-beta intent: `main`
+should be the deployed branch.
+
 This failure mode bit the project four times in 72 hours (7-9 May 2026):
 - 7 May commits on disk for ~24 hours but not running
 - 8 May 08:00 BST scrape ran with pre-fix code
@@ -1066,8 +1071,8 @@ Aesthetic split locked:
 
 ### SECTION 1: SITE MAP
 
-Top nav (post-restructure, 7 items + sign-out):
-Dashboard · Signals · Screener · Markets · Events · Watchlist · Penny · [Sign out]
+Top nav (post-restructure, 5 items + sign-out):
+Dashboard · Screener · Markets · Watchlist · Penny · [Sign out]
 
 Footer / reference (not top-nav):
 Methodology · About · Contact · Privacy · Terms · Risk Disclaimer · Sign Out
