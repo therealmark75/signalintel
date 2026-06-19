@@ -3,13 +3,34 @@
    Self-contained: the nav defines its own design tokens scoped to .nav so
    it renders identically on pages that do NOT carry the dashboard token set.
    Do not rely on the including page for these values. */
-.nav{
-    /* local token values, scoped to the nav subtree (no global leak) */
-    --ink-50:#f6f7f9; --ink-100:#e8ebf0; --ink-300:#aab3c2; --ink-400:#8a93a6; --ink-500:#5a6478;
+.parent-bar, .nav{
+    /* local token values, scoped to the chrome subtree (no global leak) */
+    --ink-50:#f6f7f9; --ink-100:#e8ebf0; --ink-200:#cfd5e0; --ink-300:#aab3c2; --ink-400:#8a93a6; --ink-500:#5a6478;
     --green-400:#3ec762;
-    --line:rgba(255,255,255,0.06);
+    --line:rgba(255,255,255,0.06); --line-soft:rgba(255,255,255,0.035);
+    --navy-950:#060f1c; --navy-600:#1f4570;
     --gold-500:#c9a04a; --gold-400:#d4b06a; --gold-glow:rgba(201,160,74,0.16);
     --font-mono:'JetBrains Mono', ui-monospace, monospace;
+}
+.parent-bar {
+    background: var(--navy-950); border-bottom: 1px solid var(--line-soft);
+    padding: 8px 0; font-size: 11px; color: var(--ink-400);
+    position: relative; z-index: 3;
+}
+.parent-bar-inner {
+    max-width: 1480px; margin: 0 auto; padding: 0 28px;
+    display: flex; align-items: center; justify-content: space-between;
+}
+.parent-bar-left { display: flex; align-items: center; gap: 10px; }
+.vault-wheel { width: 15px; height: 15px; flex-shrink: 0; }
+.pb-vault { color: var(--ink-200); font-weight: 500; letter-spacing: 0.07em; text-transform: uppercase; font-size: 10px; }
+.parent-bar-divider { color: var(--navy-600); }
+.parent-bar-right { display: flex; align-items: center; gap: 20px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; }
+.parent-bar-right a { color: var(--ink-400); transition: color .18s; }
+.parent-bar-right a:hover { color: var(--ink-100); }
+.parent-bar-right a.pb-soon { opacity: 0.45; cursor: default; }
+.parent-bar-right a.pb-soon:hover { color: var(--ink-400); }
+.nav{
     position: sticky; top: 0; z-index: 50;
     background: rgba(8,17,31,0.82);
     backdrop-filter: blur(12px) saturate(140%);
@@ -40,6 +61,25 @@
 .nav-signout { color: var(--ink-400); font-size: 13px; text-decoration: none; }
 .nav-signout:hover { color: var(--ink-100); }
 </style>
+<div class="parent-bar">
+    <div class="parent-bar-inner">
+        <div class="parent-bar-left">
+            <svg class="vault-wheel" viewBox="0 0 24 24" fill="none">
+                <circle cx="12" cy="12" r="10" stroke="#c9a04a" stroke-width="1.4"/>
+                <path d="M12 4 L18 15 L6 15 Z" fill="#c9a04a" opacity="0.85"/>
+            </svg>
+            <span class="pb-vault">The Signal Vault</span>
+            <span class="parent-bar-divider">·</span>
+            <span>SignalIntel</span>
+        </div>
+        <div class="parent-bar-right">
+            <a href="javascript:void(0)" class="pb-soon" title="Coming soon">Commodities</a>
+            <a href="javascript:void(0)" class="pb-soon" title="Coming soon">Crypto</a>
+            <a href="javascript:void(0)" class="pb-soon" title="Coming soon">Forex</a>
+            <a href="javascript:void(0)" title="Coming soon">Account</a>
+        </div>
+    </div>
+</div>
 <nav class="nav">
     <div class="nav-inner">
         <a class="nav-logo" href="/dashboard">
@@ -52,7 +92,6 @@
         {% include '_search.html' %}
         <div class="nav-links">
             <a href="/dashboard" class="{{ 'active' if request.path == '/dashboard' else '' }}">Dashboard</a>
-            <a href="/signals" class="{{ 'active' if request.path == '/signals' else '' }}">Signals</a>
             <a href="/screener" class="{{ 'active' if request.path == '/screener' else '' }}">Screener</a>
             <a href="/markets" class="{{ 'active' if request.path == '/markets' else '' }}">Markets</a>
             <a href="/watchlist" class="{{ 'active' if request.path == '/watchlist' else '' }}">Watchlist</a>
