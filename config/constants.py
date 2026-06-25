@@ -141,6 +141,21 @@ SCORING_ENGINE_VERSION = "0.19.0"
 # Adjust upward if backtest data shows continued distortion.
 MIN_PRICE_FOR_SIGNAL = 1.00
 
+# ── Values screen ────────────────────────────────
+# Values-screen exclusion set, industry-string match against screener_snapshots.industry, v1 four-category scope (tobacco, gambling, alcohol, fossil-fuel extraction).
+ETHICAL_EXCLUDED_INDUSTRIES = (
+    "Tobacco",
+    "Gambling",
+    "Resorts & Casinos",
+    "Beverages - Brewers",
+    "Beverages - Wineries & Distilleries",
+    "Oil & Gas E&P",
+    "Oil & Gas Drilling",
+    "Oil & Gas Integrated",
+    "Thermal Coal",
+    "Coking Coal",
+)
+
 # ── Alert thresholds ─────────────────────────────
 # ALERTS_ENABLED and ALERT_CONFIG (smtp credentials) live in
 # config/settings.py (gitignored) to prevent credential leakage.

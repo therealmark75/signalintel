@@ -15,7 +15,12 @@ from flask_limiter.util import get_remote_address
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from config.constants import DATABASE_PATH, MIN_PRICE_FOR_SIGNAL, SCORING_ENGINE_VERSION
+from config.constants import (
+    DATABASE_PATH,
+    MIN_PRICE_FOR_SIGNAL,
+    SCORING_ENGINE_VERSION,
+    ETHICAL_EXCLUDED_INDUSTRIES,
+)
 from database.db import (
     get_connection, get_latest_screener, get_recent_insiders,
     get_cluster_signals, get_top_signals, get_signal_summary,
@@ -1990,6 +1995,7 @@ def api_screener():
     dividend_yield_min  = request.args.get("dividend_yield_min", type=float)
     earnings_days       = request.args.get("earnings_days", type=int)
     legally_clean_param = request.args.get("legally_clean", "").lower() in ("1", "true", "yes")
+    exclude_ethical     = request.args.get("exclude_ethical", "").lower() in ("1", "true", "on")
     exchanges  = [e for e in request.args.get("exchange", "").split(",") if e]
     sort_col  = request.args.get("sort", "composite_score")
     sort_dir  = request.args.get("dir", "desc").lower()
@@ -2033,6 +2039,10 @@ def api_screener():
     if sector:
         where.append("ss.sector = ?")
         params.append(sector)
+    if exclude_ethical:
+        placeholders = ",".join("?" * len(ETHICAL_EXCLUDED_INDUSTRIES))
+        where.append(f"ss.industry NOT IN ({placeholders})")
+        params.extend(ETHICAL_EXCLUDED_INDUSTRIES)
     if ratings:
         placeholders = ",".join("?" * len(ratings))
         where.append(f"sig.rating IN ({placeholders})")
@@ -2167,7 +2177,7 @@ def api_screener():
         extras=('rating', 'composite_score', 'target_price', 'target_upside'),
     )
     rows = db_query(f"""
-        SELECT ss.ticker, ss.company, ss.sector,
+        SELECT ss.ticker, ss.company, ss.sector, ss.industry,
                ss.market_cap, ss.price, ss.change_pct, ss.volume,
                ss.pe_ratio, ss.rsi_14,
                ss.high_52w_pct, ss.low_52w_pct,

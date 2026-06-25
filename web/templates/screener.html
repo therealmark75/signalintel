@@ -200,6 +200,14 @@ tr:hover td{background:rgba(0,212,255,0.03);cursor:pointer;}
         <input type="number" id="f-upside-min" placeholder="e.g. 10" step="1">
     </div>
 
+    <div class="filter-section">
+        <span class="filter-label">Values Screen</span>
+        <label class="rating-check">
+            <input type="checkbox" id="f-exclude-ethical">
+            <span style="font-family:var(--mono);font-size:10px">Values screen (exclude tobacco, gambling, alcohol, fossil-fuel extraction)</span>
+        </label>
+    </div>
+
     <button class="btn-apply" onclick="applyFilters()">Apply Filters</button>
     <button class="btn-reset" onclick="resetFilters()">Reset</button>
 </aside>
@@ -290,7 +298,7 @@ let state = {
     // theme-specific
     momentum_score_min: 0, insider_score_min: 0, volume_min: 0,
     price_min: '', high_52w_pct_max: '', dividend_yield_min: 0,
-    earnings_days: 0, legally_clean: false,
+    earnings_days: 0, legally_clean: false, exclude_ethical: false,
 };
 let totalPages = 1;
 let watchlistSet = new Set();
@@ -342,6 +350,7 @@ function buildParams() {
     if(state.dividend_yield_min) p.set('dividend_yield_min', state.dividend_yield_min);
     if(state.earnings_days)      p.set('earnings_days', state.earnings_days);
     if(state.legally_clean)      p.set('legally_clean', '1');
+    if(state.exclude_ethical)    p.set('exclude_ethical', '1');
     if(state.exchanges.length > 0) p.set('exchange', state.exchanges.join(','));
     p.set('sort', state.sort);
     p.set('dir', state.dir);
@@ -479,6 +488,7 @@ function applyFilters() {
     state.rsi_max   = document.getElementById('f-rsi-max').value;
     state.upside_min = document.getElementById('f-upside-min').value;
     state.short_min = '';
+    state.exclude_ethical = document.getElementById('f-exclude-ethical').checked;
     state.page = 1;
     load();
 }
@@ -495,6 +505,7 @@ function resetState() {
     ['f-pe-min','f-pe-max','f-rsi-min','f-rsi-max','f-upside-min'].forEach(id => {
         document.getElementById(id).value = '';
     });
+    document.getElementById('f-exclude-ethical').checked = false;
     const _ru = new URL(window.location);
     _ru.searchParams.delete('exchange');
     history.replaceState(null, '', _ru);
@@ -505,7 +516,7 @@ function resetState() {
         exchanges:[],
         momentum_score_min:0, insider_score_min:0, volume_min:0,
         price_min:'', high_52w_pct_max:'', dividend_yield_min:0,
-        earnings_days:0, legally_clean:false,
+        earnings_days:0, legally_clean:false, exclude_ethical:false,
         sort:'composite_score', dir:'desc', page:1,
     });
 }
