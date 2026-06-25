@@ -2763,7 +2763,7 @@ def api_backtest_stats():
     try:
         return _api_backtest_stats_inner()
     except Exception as e:
-        logger.error(f"[Backtest] stats endpoint error: {e}", exc_info=True)
+        app.logger.error(f"[Backtest] stats endpoint error: {e}", exc_info=True)
         return jsonify({"stats": [], "recent": [], "sector_comparison": {"note": f"Data temporarily unavailable: {e}"},
                         "message": "Backtest data temporarily unavailable. Check server logs."})
 
