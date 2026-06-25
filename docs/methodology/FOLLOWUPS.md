@@ -303,3 +303,34 @@ skip is gone with the retired test).
   arc and P23 territory (it touches the users table and auth-adjacent surfaces).
   The `earnings_notifications_sent` dedup schema is already keyed per-subscriber,
   so it is shaped for Path B with no migration; only the delivery layer changes.
+
+---
+
+## 25 June 2026 (Part 47 close)
+
+The Values screen shipped as a screener-preset exclusion filter (commit `ee21fbd`,
+`feature/eco-screen`, no scoring change, SCORING_ENGINE_VERSION unchanged at
+0.19.0). Two scoping decisions were banked deliberately rather than forced.
+
+### Values screen v1 scope: only the 4 CLEAN categories
+
+- v1 excludes exactly the four categories whose FinViz industry strings identify
+  them cleanly: tobacco, gambling, alcohol, and fossil-fuel extraction (10
+  industry strings total, exact-match against `screener_snapshots.industry`).
+- Three further categories are DEFERRED pending an external curated list, because
+  current FinViz industry data cannot identify them honestly:
+  - Defence: the `Aerospace & Defense` bucket fuses civilian aviation with
+    weapons makers, so excluding it over-excludes civil aerospace.
+  - Adult entertainment: no industry string exists for it at all.
+  - Predatory lending: the `Credit Services` bucket sweeps in mainstream
+    payments (Visa, Mastercard), so excluding it over-reaches.
+- Action: revisit post-beta if a curated source (curated exclusion list, public
+  ESG dataset, or vendor scores) is chosen.
+
+### Values-screen discovery-theme card deferred
+
+- The Values screen is surfaced as a sidebar toggle only. A discovery-theme card
+  was considered and skipped: the `config/themes.py` schema is positive-inclusion
+  only, and theme counts are computed in `web/app.py` route logic, so an exclusion
+  theme needs both a schema change and route work. Sidebar toggle is the v1
+  surface; the card is a nice-to-have, post-beta.
