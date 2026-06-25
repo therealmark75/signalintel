@@ -1,12 +1,16 @@
 # SignalIntel Session Handoff
 
-**Last updated:** end of Part 46 (19 June 2026)
-**Engine:** SCORING_ENGINE_VERSION 0.19.0, UNCHANGED this session (no scoring change in Part 46).
-**Repo:** branch `feature/watchlist-earnings`. This session's commits sit on the branch ahead of the Part 45 state; `main` is being merged up to the branch at this session's close (see close note). Yahoo arc remains merged to `main` (`2d713c7`).
-**Suite:** 441 passed, 1 skipped, exit 0. The single skip is `fmp_price_targets` (test_data_integrity.py, empty until the 02:30 job first fires).
-**Runtime:** scheduler live as `io.thesignalvault.scheduler`; gunicorn live as `io.thesignalvault.gunicorn` on 5001. Both restarted this session (scheduler for the markets-writer guard, gunicorn for the reader and link fixes). PIDs differ next session.
+**Last updated:** end of Part 47 (25 June 2026)
+**Engine:** SCORING_ENGINE_VERSION 0.19.0, UNCHANGED this session (no scoring change in Part 47).
+**Repo:** branch `feature/eco-screen`, one feature commit `ee21fbd` ahead of `main`, merging to `main` at this close.
+**Suite:** 446 passed, 0 skipped, exit 0. Baseline correction: Part 46 closed reporting 441 passed / 1 skipped; at Part 47 open the suite read 442 passed / 0 skipped (the lone `fmp_price_targets` skip now has data and passes). After the Values screen build: 446 passed / 0 skipped.
+**Runtime:** gunicorn restarted onto the committed feature this session, fresh pid 24056 (was 65239); scheduler untouched this session (still 61983), no scheduler-job change.
 
-## Part 46 work (this session)
+## Part 47 work (this session)
+
+Shipped the Values screen: an exclusion screener-preset (new `exclude_ethical` param on `/api/screener` plus a sidebar toggle) excluding 10 industry strings across 4 categories (tobacco, gambling, alcohol, fossil-fuel extraction), exact-match against `screener_snapshots.industry`, no scoring change, commit `ee21fbd`. Live-verified: 10,940 results unfiltered to 10,768 filtered.
+
+## Part 46 work (prior session)
 
 | Item | Commits | What shipped |
 |---|---|---|
@@ -38,6 +42,10 @@ Part 45 (prior session): watchlist earnings job (`ab63a0d`) + economic_calendar 
 - **PRODUCT: Market State tiles link to TradingView's own chart widget** (third-party surface). Works for beta, but it sends the user off our surface and ties charting to a vendor. Revisit before paid launch (own charting vs embed).
 - **PRE-BETA OPS: the running server currently serves a feature branch in production** (single-machine setup, Cloudflare tunnel to localhost:5001). Before testers land, make `main` the deployed branch so "what's live" has a clean answer (merge-then-restart as the deploy discipline). The Part 46 close merges the branch to main, which begins this.
 - **Eco/ethical screen page (product idea, post-beta):** a curated green/ethical universe (companies that do not harm environment/animals) analysed with the SAME SignalIntel scoring. Scope as a SCREENER-PRESET / filtered universe, NOT a scoring-component change (keep the composite defensible and free of contested moral judgments). The make-or-break is the ethical-data substrate (curated exclusion list vs public ESG dataset vs vendor scores vs SEC-filing signals), resolve that FIRST in a Phase 1 scope before any build. Potential USP: ethical universe + genuine signal intelligence, the intersection most ESG tools and most signal tools each miss.
+
+## Part 47 new FOLLOWUPS (banked, not urgent)
+
+- **Stale invariant-range citations in PROJECT_CONTEXT.md and CLAUDE.md.** Both still cite the old P1-P17 / P1-P15 invariant ranges and the Path A/B framing; `docs/scoring_invariants.md` (P1-P32) is the canonical, current list. Pre-beta doc-cleanup candidate, not done this session.
 
 ## Test accounts (for tier-gated walks)
 
