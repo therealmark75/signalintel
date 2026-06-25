@@ -97,5 +97,5 @@ def scrape_markets(db_path, days=90):
             logger.error(f"[markets] Error fetching {symbol}: {e}")
 
     conn.close()
-    logger.info(f"[markets] Scrape complete — {total} rows total")
+    logger.info(f"[markets] Scrape complete, {total} rows total")
     return total
