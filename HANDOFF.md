@@ -1,12 +1,19 @@
 # SignalIntel Session Handoff
 
-**Last updated:** end of Part 49 (26 June 2026)
-**Engine:** SCORING_ENGINE_VERSION 0.19.0, UNCHANGED this session (no scoring change in Part 49; P18 did not trigger).
-**Repo:** HEAD `0154003` on `feature/penny-winsorization`, NOT yet merged to `main` at time of writing (the merge is Mark's terminal step; if `main` has advanced when you read this, report it, do not assume).
-**Suite:** 457 passed, 0 skipped, exit 0.
-**Runtime:** no runtime change this session (Part 49 is analytics plus backtester work on a feature branch, not merged, not deployed). PIDs differ next session.
+**Last updated:** end of Part 50 (26 June 2026)
+**Engine:** SCORING_ENGINE_VERSION 0.19.0, UNCHANGED this session (Part 50 is analytics only, no scoring path touched; P18 did not trigger).
+**Repo:** `main` advanced to `9c697fd` via a `--no-ff` merge of `feature/car-event-study` (Part 50), pushed, level with origin. The merge sits above `88593c8` and `b382175`, with `5bb81b3` (Part 49) beneath. The branch carried two commits: `b382175` (CAR harness) and `88593c8` (decile stratification).
+**Suite:** 469 passed, 0 unexpected skips, exit 0.
+**Runtime:** no runtime change this session (analytics modules, not loaded by any long-lived process). No gunicorn or scheduler restart required or performed. PIDs differ next session.
 
-## Part 49 work (this session)
+## Part 50 work (this session)
+
+| Item | Commits | What shipped |
+|---|---|---|
+| 1. CAR event-study in-sourced | `b382175` | new `signals/event_study.py`. Analyst-PT events from `analyst_changes` grouped Raises/Maintains/Lowers, per-event 21-trading-day CAR against a computed per-sector per-day benchmark from `screener_snapshots` (source B), reuses `guarded_forward_return` per grid step, mirrors the IC-harness LOW_CONFIDENCE vocabulary. Matured-events-only, grid-clean per-ticker >=21 forward depth, min-constituent floor 5 (armed, did not bite this run). Lower-bound OUT_OF_SUBSTRATE and upper-bound future-date guards added beyond spec. Monotonic ordering replicated the external 25 May study on our own substrate: Raises +2.56% > Maintains +1.06% > Lowers -0.11%, PASS. 6 tests. |
+| 2. Magnitude decile stratification | `88593c8` | new `signals/event_study_strata.py`. Deciles the matured OK cohort by signed PT percent-change (current vs prior target), pooled across actions, reusing `compute_event_car` verbatim. Magnitude-monotonic by RANK: Spearman rho(decile, CAR) 0.92 headline, 0.88 zero-bucket variant; 7 of 9 steps rise; 8.1pp spread (bottom decile -0.61% to top +7.53%). Two trivial middle-decile inversions (D2-D3, D6-D7) fail STRICT adjacency but do not dent the gradient; the honest characterisation is monotone-by-rank, not "monotone NO". Tie-robust (zero-bucket cut agrees, Maintains zero bucket +1.10% neutral midpoint). Label-vs-sign audit clean: 1 contradiction in 8,175 rows, genuine not artefact. Extracted `prepare_substrate` in `event_study.py` (behavior-preserving, headline aggregates byte-identical to `b382175`). 6 tests. |
+
+## Part 49 work (prior session)
 
 | Item | Commits | What shipped |
 |---|---|---|
@@ -76,8 +83,12 @@ Part 45 (prior session): watchlist earnings job (`ab63a0d`) + economic_calendar 
 
 ## Part 49 new FOLLOWUPS (banked, not urgent)
 
-- CAR event-study module: in-source per Mark's call. Opens Part 50 Phase 1 to lock the benchmark source (sector_performance table vs computed sector-average from screener_snapshots).
+- CAR event-study module: in-source per Mark's call. Opens Part 50 Phase 1 to lock the benchmark source (sector_performance table vs computed sector-average from screener_snapshots). [RESOLVED Part 50: source B (computed sector-average from screener_snapshots) locked; CAR harness (b382175) and magnitude decile stratification (88593c8) both shipped.]
 - Penny-winsorization FOLLOWUP (Parts 46/48) is now RESOLVED (Part 49 Item 1): investigated and rejected with evidence; the real distortion was corporate-action artefacts, fixed by the straddle guard.
+
+## Part 50 new FOLLOWUPS (banked, not urgent)
+
+- Emit Spearman rho per decile-cut directly from `signals/event_study_strata.py` output, so the headline rank statistic is self-documenting in the artifact rather than hand-derived at read time. Action when next in this module.
 
 ## Test accounts (for tier-gated walks)
 
@@ -108,4 +119,4 @@ Part 45 (prior session): watchlist earnings job (`ab63a0d`) + economic_calendar 
 
 ## Branch state (for the next fresh chat)
 
-- Part 48 closed with both arcs merged to main (`abf7352` janitorial, `f7b617a` reconciliation), HEAD `f7b617a` pushed to origin and live; local working tree, main, origin, and the live site (thesignalvault.io via the Cloudflare tunnel to localhost:5001) are the same state. There is no separate deploy step; a gunicorn restart on the latest code IS the live deploy (done this arc for the app.py fix). Suite floor 446 passed / 0 skipped.
+- Part 50 closed with `feature/car-event-study` merged to main (`9c697fd`, `--no-ff`), pushed to origin and level; local working tree, main, origin, and the live site (thesignalvault.io via the Cloudflare tunnel to localhost:5001) are the same state. There is no separate deploy step; a gunicorn restart on the latest code IS the live deploy (no restart needed this session, analytics only, no long-lived process loads the new modules). Suite floor 469 passed / 0 skipped.
