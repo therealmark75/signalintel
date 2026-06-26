@@ -50,6 +50,7 @@ import logging
 import sqlite3
 import statistics
 from bisect import bisect_left
+from collections import namedtuple
 
 from signals.backtester import guarded_forward_return
 
@@ -246,13 +247,21 @@ def compute_event_car(ticker: str, event_date: str, sectors: dict[str, str],
     return OK, car
 
 
-# ── Orchestrator ──────────────────────────────────
+# ── Substrate preparation (shared by the orchestrator and stratifiers) ──
 
-def run_event_study(db_path: str, window: int = CAR_WINDOW,
-                    min_constituents: int = MIN_CONSTITUENTS,
-                    actions: tuple = PT_ACTIONS) -> dict:
-    """Run the full analyst-PT CAR study. Read-only; opens and closes its own
-    connection. Returns a structured result dict consumed by format_report."""
+# The priced substrate every CAR is computed against. event_date / event labels
+# are NOT part of it, so any consumer (the headline study, the decile stratifier)
+# builds it once and resolves events against the same guarded returns.
+Substrate = namedtuple(
+    "Substrate", "grid sectors step_ret benchmark reliable counts substrate_max")
+
+
+def prepare_substrate(db_path: str, window: int = CAR_WINDOW,
+                      min_constituents: int = MIN_CONSTITUENTS) -> "Substrate":
+    """Build the grid / sectors / guarded step returns / benchmark / reliability
+    once, read-only. This is the single setup path: both run_event_study and the
+    decile stratifier resolve events through compute_event_car against the
+    Substrate this returns, so neither recomputes a CAR or rebuilds the guard."""
     conn = sqlite3.connect(db_path)
     try:
         grid = build_grid(conn)
@@ -261,14 +270,31 @@ def run_event_study(db_path: str, window: int = CAR_WINDOW,
                 f"price substrate has {len(grid)} grid dates, need >= {window + 1} "
                 f"for a {window}-step CAR"
             )
-        substrate_max = grid[-1]
         sectors = canonical_sectors(conn)
         logger.info("event study: %d grid dates, %d tickers with a sector",
                     len(grid), len(sectors))
         step_ret = precompute_step_returns(conn, grid)
         benchmark, reliable, counts = compute_benchmark(
             grid, sectors, step_ret, min_constituents)
+    finally:
+        conn.close()
+    return Substrate(grid, sectors, step_ret, benchmark, reliable, counts, grid[-1])
 
+
+# ── Orchestrator ──────────────────────────────────
+
+def run_event_study(db_path: str, window: int = CAR_WINDOW,
+                    min_constituents: int = MIN_CONSTITUENTS,
+                    actions: tuple = PT_ACTIONS) -> dict:
+    """Run the full analyst-PT CAR study. Read-only; opens and closes its own
+    connection. Returns a structured result dict consumed by format_report."""
+    sub = prepare_substrate(db_path, window, min_constituents)
+    grid, sectors, step_ret = sub.grid, sub.sectors, sub.step_ret
+    benchmark, reliable, counts = sub.benchmark, sub.reliable, sub.counts
+    substrate_max = sub.substrate_max
+
+    conn = sqlite3.connect(db_path)
+    try:
         event_rows = conn.execute(
             """
             SELECT ticker, event_date, price_target_action
