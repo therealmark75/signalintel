@@ -45,7 +45,7 @@ Part 45 (prior session): watchlist earnings job (`ab63a0d`) + economic_calendar 
 
 ## Part 47 new FOLLOWUPS (banked, not urgent)
 
-- **Stale invariant-range citations in PROJECT_CONTEXT.md and CLAUDE.md.** Both still cite the old P1-P17 / P1-P15 invariant ranges and the Path A/B framing; `docs/scoring_invariants.md` (P1-P32) is the canonical, current list. Pre-beta doc-cleanup candidate, not done this session.
+- (none outstanding; the invariant-citation cleanup shipped in Part 48.)
 
 ## Test accounts (for tier-gated walks)
 
