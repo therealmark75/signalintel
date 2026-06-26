@@ -92,7 +92,7 @@ def test_ticker_metadata_freshness(db):
     assert latest >= cutoff, f"ticker_metadata last updated {row[0]}, older than 72h"
 
 
-def test_no_duplicate_signals_for_latest_run(db, latest_run_date):
+def test_no_duplicate_signals_for_latest_run(scoring_run_complete, db, latest_run_date):
     """Each ticker must appear at most once in the latest scoring run."""
     rows = db.execute(
         "SELECT ticker, COUNT(*) as cnt FROM signal_scores WHERE DATE(scored_at) = ? "
@@ -102,7 +102,7 @@ def test_no_duplicate_signals_for_latest_run(db, latest_run_date):
     assert len(rows) == 0, f"{len(rows)} tickers have duplicate rows: {[r['ticker'] for r in rows[:5]]}"
 
 
-def test_rating_distribution_sane(db, latest_run_date):
+def test_rating_distribution_sane(scoring_run_complete, db, latest_run_date):
     """
     Sanity check: no single outlier rating dominates.
     STRONG_BUY and STRONG_SELL should each be < 500 in any given run.
@@ -115,12 +115,12 @@ def test_rating_distribution_sane(db, latest_run_date):
         assert row[0] < 500, f"{rating} count={row[0]} looks implausibly high"
 
 
-def test_signal_scores_minimum_count(latest_signals):
+def test_signal_scores_minimum_count(scoring_run_complete, latest_signals):
     """There must be at least 1000 signals in the latest run."""
     assert len(latest_signals) >= 1000, f"Only {len(latest_signals)} signals — scorer may have failed"
 
 
-def test_target_price_coverage(db, latest_run_date):
+def test_target_price_coverage(scoring_run_complete, db, latest_run_date):
     """
     Invariant 8: target_price should be non-null for 10,000+ tickers.
     CONDITIONAL — skipped if coverage is 0% (fmp_price_targets not yet populated).
