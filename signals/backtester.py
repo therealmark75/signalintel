@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import logging
 import sqlite3
+from collections import namedtuple
 from datetime import datetime
 from dataclasses import dataclass
 
@@ -190,6 +191,46 @@ def fetch_exit_price(conn: sqlite3.Connection, ticker: str, signal_date: str, ho
     return row[0] if row else None
 
 
+ForwardResult = namedtuple("ForwardResult", "ok entry_price exit_price return_pct error")
+
+
+def guarded_forward_return(conn, ticker, signal_date, hold_days):
+    """The single guarded forward-return contract. Prices a trade's entry and
+    exit through the same-day-straddle-guarded fetch path, then applies the
+    cross-day overnight-split guard, so EVERY consumer (the backtest loop, the
+    validation harness) inherits both guards from one place. No consumer
+    reimplements the cross-day logic.
+
+    Returns a ForwardResult. ok=True carries entry_price/exit_price (rounded) and
+    a raw return_pct. ok=False is a skip with error set to "No entry price",
+    "No exit price at N=...", or a cross-day collapse tag; entry/exit are filled
+    where known so callers can still record them.
+
+    Cross-day rule: a trade that priced through fetch_* has no same-day straddle
+    on either date (else the fetch returned None), so an entry-vs-exit ratio
+    breaching CROSS_DAY_JUMP_RATIO here is an unadjusted overnight corporate
+    action the same-day detector cannot see. Logged on every skip for audit.
+    """
+    entry_price = fetch_entry_price(conn, ticker, signal_date)
+    if not entry_price:
+        return ForwardResult(False, None, None, None, "No entry price")
+    exit_price = fetch_exit_price(conn, ticker, signal_date, hold_days)
+    if not exit_price:
+        return ForwardResult(False, round(entry_price, 2), None, None,
+                             f"No exit price at N={hold_days}")
+    _xr = exit_price / entry_price if entry_price else 0
+    if _xr > CROSS_DAY_JUMP_RATIO or (0 < _xr < 1 / CROSS_DAY_JUMP_RATIO):
+        logger.warning(
+            "Cross-day skip (overnight split): %s entry %.2f exit %.2f "
+            "N=%d ratio %.2f, no same-day straddle on either date",
+            ticker, entry_price, exit_price, hold_days, _xr,
+        )
+        return ForwardResult(False, round(entry_price, 2), round(exit_price, 2), None,
+                             f"Cross-day corporate-action collapse (ratio {_xr:.2f})")
+    return ForwardResult(True, round(entry_price, 2), round(exit_price, 2),
+                         ((exit_price - entry_price) / entry_price) * 100.0, None)
+
+
 # ── Core backtest functions ───────────────────────
 
 def backtest_signals_from_db(
@@ -246,63 +287,27 @@ def backtest_signals_from_db(
         ticker      = sig["ticker"]
         signal_date = sig["signal_date"]
 
-        # Entry price (latest spot on the signal day)
-        entry_price = fetch_entry_price(conn, ticker, signal_date)
-        if not entry_price:
+        # Single guarded contract: same-day straddle guard (in fetch_*) plus the
+        # cross-day overnight-split guard, all inside guarded_forward_return so
+        # the backtester and the validation harness share one guard path.
+        fr = guarded_forward_return(conn, ticker, signal_date, hold_days)
+        if not fr.ok:
             results.append(TradeResult(
                 ticker=ticker, signal_date=signal_date,
                 signal_rating=rating, composite_score=sig["composite_score"],
-                entry_price=0, hold_days=hold_days, error="No entry price",
-            ))
-            continue
-
-        # Exit price (Nth forward trading day)
-        exit_price = fetch_exit_price(conn, ticker, signal_date, hold_days)
-        if not exit_price:
-            results.append(TradeResult(
-                ticker=ticker, signal_date=signal_date,
-                signal_rating=rating, composite_score=sig["composite_score"],
-                entry_price=round(entry_price, 2), hold_days=hold_days,
-                error=f"No exit price at N={hold_days}",
-            ))
-            continue
-
-        return_pct = ((exit_price - entry_price) / entry_price) * 100
-        win        = return_pct > 0
-
-        # Cross-day collapse/jump guard (Phase 2b: SKIPS, was log-only). A
-        # surviving trade has already passed the same-day guard on BOTH its entry
-        # and exit dates (otherwise fetch_entry_price / fetch_exit_price returned
-        # None above and we continued), so amendment condition (b), that neither
-        # date is a same-day straddle, holds by construction here. An extreme
-        # entry-vs-exit ratio at this point is therefore an unadjusted overnight
-        # corporate action the same-day detector cannot see (pre-split entry,
-        # clean post-split exit). SKIP it through the same error-tag exclusion
-        # path the same-day guard uses, and log every skip for audit.
-        _xr = exit_price / entry_price if entry_price else 0
-        if _xr > CROSS_DAY_JUMP_RATIO or (0 < _xr < 1 / CROSS_DAY_JUMP_RATIO):
-            logger.warning(
-                "Cross-day skip (overnight split): %s entry %.2f exit %.2f "
-                "N=%d ratio %.2f, no same-day straddle on either date",
-                ticker, entry_price, exit_price, hold_days, _xr,
-            )
-            results.append(TradeResult(
-                ticker=ticker, signal_date=signal_date,
-                signal_rating=rating, composite_score=sig["composite_score"],
-                entry_price=round(entry_price, 2), hold_days=hold_days,
-                exit_price=round(exit_price, 2),
-                error=f"Cross-day corporate-action collapse (ratio {_xr:.2f})",
+                entry_price=(fr.entry_price if fr.entry_price is not None else 0),
+                hold_days=hold_days, exit_price=fr.exit_price, error=fr.error,
             ))
             continue
 
         results.append(TradeResult(
             ticker=ticker, signal_date=signal_date,
             signal_rating=rating, composite_score=sig["composite_score"],
-            entry_price=round(entry_price, 2),
+            entry_price=fr.entry_price,
             hold_days=hold_days,
-            exit_price=round(exit_price, 2),
-            return_pct=round(return_pct, 2),
-            win=win,
+            exit_price=fr.exit_price,
+            return_pct=round(fr.return_pct, 2),
+            win=fr.return_pct > 0,
         ))
 
     conn.close()
