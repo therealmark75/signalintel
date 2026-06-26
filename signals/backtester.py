@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import logging
 import sqlite3
+from collections import namedtuple
 from datetime import datetime
 from dataclasses import dataclass
 
@@ -43,6 +44,17 @@ try:
 except ImportError:
     YFINANCE_AVAILABLE = False
     logger.warning("yfinance not available (unused by the backtest path).")
+
+
+# Corporate-action straddle guard thresholds (tunable, no scoring impact).
+# Same-day: a date whose intraday MAX/MIN price ratio exceeds this is a split
+# boundary or garbage print; a trade whose entry or exit lands on it is SKIPPED.
+SAME_DAY_STRADDLE_RATIO = 2.0
+# Cross-day: a surviving trade (no same-day straddle on either side, a date the
+# same-day detector cannot flag) whose entry vs exit ratio exceeds this is an
+# unadjusted overnight corporate action. Phase 2b: SKIPPED (was log-only); every
+# skip is logged for audit. Symmetric bound (collapse < 1/ratio, or jump > ratio).
+CROSS_DAY_JUMP_RATIO = 3.0
 
 
 # ── Data classes ──────────────────────────────────
@@ -81,6 +93,28 @@ class BacktestSummary:
 
 # ── Persisted-price lookups (screener_snapshots) ──
 
+def is_straddle_date(conn: sqlite3.Connection, ticker: str, date: str,
+                     threshold: float = SAME_DAY_STRADDLE_RATIO) -> bool:
+    """True if (ticker, date) shows an intraday MAX(price)/MIN(price) ratio above
+    threshold, the signature of a same-day corporate-action split boundary (e.g.
+    KLAC 2026-06-12 carrying both ~241 and ~2411) or a garbage data print. Either
+    fabricates a return if a trade's entry or exit lands on the date, so both are
+    skipped. Rows with NULL or non-positive price are ignored; a date with no
+    priced snapshot returns False (nothing to detect)."""
+    row = conn.execute(
+        """
+        SELECT MIN(price) AS mn, MAX(price) AS mx
+        FROM screener_snapshots
+        WHERE ticker = ? AND DATE(scraped_at) = ?
+          AND price IS NOT NULL AND price > 0
+        """,
+        (ticker, date),
+    ).fetchone()
+    if not row or row[0] is None or row[0] <= 0:
+        return False
+    return (row[1] / row[0]) > threshold
+
+
 def fetch_entry_price(conn: sqlite3.Connection, ticker: str, signal_date: str) -> float | None:
     """
     Entry price for (ticker, signal_date): the latest priced screener snapshot
@@ -88,6 +122,12 @@ def fetch_entry_price(conn: sqlite3.Connection, ticker: str, signal_date: str) -
     with MAX(scraped_at) (latest spot of the day). Returns None if the ticker
     has no priced snapshot on signal_date (unpriceable entry).
     """
+    if is_straddle_date(conn, ticker, signal_date):
+        logger.warning(
+            "Straddle skip (entry): %s %s intraday ratio > %.1f",
+            ticker, signal_date, SAME_DAY_STRADDLE_RATIO,
+        )
+        return None
     row = conn.execute(
         """
         SELECT price
@@ -130,6 +170,12 @@ def fetch_exit_price(conn: sqlite3.Connection, ticker: str, signal_date: str, ho
         return None
 
     nth_date = forward_dates[hold_days - 1][0]
+    if is_straddle_date(conn, ticker, nth_date):
+        logger.warning(
+            "Straddle skip (exit): %s %s N=%d intraday ratio > %.1f",
+            ticker, nth_date, hold_days, SAME_DAY_STRADDLE_RATIO,
+        )
+        return None
     row = conn.execute(
         """
         SELECT price
@@ -143,6 +189,46 @@ def fetch_exit_price(conn: sqlite3.Connection, ticker: str, signal_date: str, ho
         (ticker, nth_date),
     ).fetchone()
     return row[0] if row else None
+
+
+ForwardResult = namedtuple("ForwardResult", "ok entry_price exit_price return_pct error")
+
+
+def guarded_forward_return(conn, ticker, signal_date, hold_days):
+    """The single guarded forward-return contract. Prices a trade's entry and
+    exit through the same-day-straddle-guarded fetch path, then applies the
+    cross-day overnight-split guard, so EVERY consumer (the backtest loop, the
+    validation harness) inherits both guards from one place. No consumer
+    reimplements the cross-day logic.
+
+    Returns a ForwardResult. ok=True carries entry_price/exit_price (rounded) and
+    a raw return_pct. ok=False is a skip with error set to "No entry price",
+    "No exit price at N=...", or a cross-day collapse tag; entry/exit are filled
+    where known so callers can still record them.
+
+    Cross-day rule: a trade that priced through fetch_* has no same-day straddle
+    on either date (else the fetch returned None), so an entry-vs-exit ratio
+    breaching CROSS_DAY_JUMP_RATIO here is an unadjusted overnight corporate
+    action the same-day detector cannot see. Logged on every skip for audit.
+    """
+    entry_price = fetch_entry_price(conn, ticker, signal_date)
+    if not entry_price:
+        return ForwardResult(False, None, None, None, "No entry price")
+    exit_price = fetch_exit_price(conn, ticker, signal_date, hold_days)
+    if not exit_price:
+        return ForwardResult(False, round(entry_price, 2), None, None,
+                             f"No exit price at N={hold_days}")
+    _xr = exit_price / entry_price if entry_price else 0
+    if _xr > CROSS_DAY_JUMP_RATIO or (0 < _xr < 1 / CROSS_DAY_JUMP_RATIO):
+        logger.warning(
+            "Cross-day skip (overnight split): %s entry %.2f exit %.2f "
+            "N=%d ratio %.2f, no same-day straddle on either date",
+            ticker, entry_price, exit_price, hold_days, _xr,
+        )
+        return ForwardResult(False, round(entry_price, 2), round(exit_price, 2), None,
+                             f"Cross-day corporate-action collapse (ratio {_xr:.2f})")
+    return ForwardResult(True, round(entry_price, 2), round(exit_price, 2),
+                         ((exit_price - entry_price) / entry_price) * 100.0, None)
 
 
 # ── Core backtest functions ───────────────────────
@@ -201,38 +287,27 @@ def backtest_signals_from_db(
         ticker      = sig["ticker"]
         signal_date = sig["signal_date"]
 
-        # Entry price (latest spot on the signal day)
-        entry_price = fetch_entry_price(conn, ticker, signal_date)
-        if not entry_price:
+        # Single guarded contract: same-day straddle guard (in fetch_*) plus the
+        # cross-day overnight-split guard, all inside guarded_forward_return so
+        # the backtester and the validation harness share one guard path.
+        fr = guarded_forward_return(conn, ticker, signal_date, hold_days)
+        if not fr.ok:
             results.append(TradeResult(
                 ticker=ticker, signal_date=signal_date,
                 signal_rating=rating, composite_score=sig["composite_score"],
-                entry_price=0, hold_days=hold_days, error="No entry price",
+                entry_price=(fr.entry_price if fr.entry_price is not None else 0),
+                hold_days=hold_days, exit_price=fr.exit_price, error=fr.error,
             ))
             continue
-
-        # Exit price (Nth forward trading day)
-        exit_price = fetch_exit_price(conn, ticker, signal_date, hold_days)
-        if not exit_price:
-            results.append(TradeResult(
-                ticker=ticker, signal_date=signal_date,
-                signal_rating=rating, composite_score=sig["composite_score"],
-                entry_price=round(entry_price, 2), hold_days=hold_days,
-                error=f"No exit price at N={hold_days}",
-            ))
-            continue
-
-        return_pct = ((exit_price - entry_price) / entry_price) * 100
-        win        = return_pct > 0
 
         results.append(TradeResult(
             ticker=ticker, signal_date=signal_date,
             signal_rating=rating, composite_score=sig["composite_score"],
-            entry_price=round(entry_price, 2),
+            entry_price=fr.entry_price,
             hold_days=hold_days,
-            exit_price=round(exit_price, 2),
-            return_pct=round(return_pct, 2),
-            win=win,
+            exit_price=fr.exit_price,
+            return_pct=round(fr.return_pct, 2),
+            win=fr.return_pct > 0,
         ))
 
     conn.close()

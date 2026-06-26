@@ -9,6 +9,7 @@ screener_snapshots, so a backtest run must complete with yfinance unreachable.
 Vocabulary note: ratings here use INTERNAL codes (BUY, STRONG_BUY) because we
 are exercising scorer/query logic, never presentation.
 """
+import logging
 import sqlite3
 import pytest
 
@@ -16,6 +17,7 @@ from signals import backtester
 from signals.backtester import (
     backtest_signals_from_db,
     compute_summary,
+    is_straddle_date,
     run_full_backtest,
 )
 
@@ -245,3 +247,135 @@ def test_run_full_backtest_uses_short_horizons_only(tmp_path, no_yfinance):
     assert set(out["BUY"].keys()) == {1, 5}
     assert 20 not in out["BUY"]
     assert out["BUY"][1]["summary"].total_trades == 1
+
+
+# ── Corporate-action straddle guard (Part 49 Item 1) ──
+
+def test_same_day_straddle_exit_is_skipped_not_fabricated(tmp_path, no_yfinance):
+    """
+    KLAC-shape: the N=1 exit date carries both a pre-split (~2411) and post-split
+    (~241) snapshot (intraday ratio ~10). The guard must return None for the exit
+    so the trade carries an error and is EXCLUDED from aggregates, never a
+    fabricated -89% return.
+
+    Catches: a straddle exit date producing a fabricated return_pct instead of
+    being dropped (the original KLAC bug).
+    Ignores: the entry side (single price here) and the cross-day backstop; the
+    exit-side same-day skip is the one behaviour under test.
+    """
+    signals = [("2026-06-11T17:00:00", "KLAC", "BUY", 70.0, "0.17.0")]
+    snaps = [
+        ("2026-06-11T07:00:00", "KLAC", 2305.86),   # clean entry day (ratio 1.0)
+        ("2026-06-12T07:00:00", "KLAC", 2411.64),   # exit day, pre-split print
+        ("2026-06-12T16:30:00", "KLAC", 241.16),    # exit day, post-split -> STRADDLE
+    ]
+    db = _make_db(tmp_path, signals, snaps)
+
+    res = backtest_signals_from_db(db, "0.17.0", rating="BUY", hold_days=1, min_score=60.0)
+    assert len(res) == 1
+    t = res[0]
+    assert t.return_pct is None, "straddle exit must not fabricate a return"
+    assert t.error is not None
+    assert compute_summary(res, "BUY", 1).total_trades == 0, "must be excluded from aggregates"
+
+
+def test_real_penny_doubling_is_kept(tmp_path, no_yfinance):
+    """
+    FATN-shape: 3.78 on the entry day, 8.30 on the N=1 exit day, neither a
+    same-day straddle. This is a real micro-cap move and must be KEPT with its
+    +119.58% return, the guard must not over-fire on genuine volatility.
+
+    Catches: the guard wrongly skipping a legitimate large move (over-firing).
+    Ignores: the cross-day warning (ratio 2.20 is below the 3.0 backstop, and the
+    backstop never skips anyway).
+    """
+    signals = [("2026-05-25T17:00:00", "FATN", "BUY", 70.0, "0.17.0")]
+    snaps = [
+        ("2026-05-25T07:00:00", "FATN", 3.78),   # entry day, single price
+        ("2026-05-26T07:00:00", "FATN", 8.30),   # N=1 exit day, single price
+    ]
+    db = _make_db(tmp_path, signals, snaps)
+
+    res = backtest_signals_from_db(db, "0.17.0", rating="BUY", hold_days=1, min_score=60.0)
+    t = res[0]
+    assert t.error is None
+    assert t.return_pct == 119.58
+    assert compute_summary(res, "BUY", 1).total_trades == 1
+
+
+def test_is_straddle_date_predicate(tmp_path, no_yfinance):
+    """
+    is_straddle_date returns True when a date's intraday MAX/MIN ratio exceeds the
+    threshold (split boundary) and False for a normal volatile day (ratio 1.4).
+
+    Catches: the predicate mis-thresholding (firing on normal volatility or
+    missing a true split), and that the threshold argument is tunable.
+    Ignores: which downstream function consumes it; this asserts the detector in
+    isolation.
+    """
+    snaps = [
+        ("2026-06-12T07:00:00", "SPLIT", 2411.64),
+        ("2026-06-12T16:30:00", "SPLIT", 241.16),   # ratio ~10.0
+        ("2026-06-13T07:00:00", "VOL", 100.0),
+        ("2026-06-13T16:30:00", "VOL", 140.0),      # ratio 1.4
+    ]
+    db = _make_db(tmp_path, [], snaps)
+    conn = sqlite3.connect(db)
+    assert is_straddle_date(conn, "SPLIT", "2026-06-12") is True
+    assert is_straddle_date(conn, "VOL", "2026-06-13") is False
+    # tunable: a lower threshold flags the 1.4 day too
+    assert is_straddle_date(conn, "VOL", "2026-06-13", threshold=1.3) is True
+    conn.close()
+
+
+def test_cross_day_collapse_logs_and_skips(tmp_path, no_yfinance, caplog):
+    """
+    KLAC-overnight-shape: entry on a clean pre-split day (2305.86), exit on a
+    clean post-split day (254.84), neither date a same-day straddle, ratio 0.11.
+    Phase 2b escalates the cross-day check from log-only to SKIP, so this trade
+    must be EXCLUDED from aggregates AND emit a WARNING for audit.
+
+    Catches: a regression to log-only (the fabricated -89% surviving), or the skip
+    not routing through the error-tag exclusion path (return_pct must be None).
+    Ignores: same-day straddles (handled by the same-day guard) and the exact
+    return magnitude; this asserts the overnight collapse is dropped.
+    """
+    signals = [("2026-06-11T17:00:00", "KLAC", "BUY", 70.0, "0.17.0")]
+    snaps = [
+        ("2026-06-11T07:00:00", "KLAC", 2305.86),   # clean pre-split entry day
+        ("2026-06-18T07:00:00", "KLAC", 254.84),    # clean post-split exit day, ratio 0.11
+    ]
+    db = _make_db(tmp_path, signals, snaps)
+
+    with caplog.at_level(logging.WARNING, logger="signals.backtester"):
+        res = backtest_signals_from_db(db, "0.17.0", rating="BUY", hold_days=1, min_score=60.0)
+
+    assert len(res) == 1
+    assert res[0].return_pct is None, "overnight collapse must not fabricate a return"
+    assert res[0].error is not None
+    assert compute_summary(res, "BUY", 1).total_trades == 0, "must be excluded from aggregates"
+    assert "Cross-day skip" in caplog.text
+
+
+def test_normal_cross_day_move_is_kept(tmp_path, no_yfinance):
+    """
+    A real cross-day move inside the keep band [1/3, 3] (here +40%, ratio 1.4)
+    must NOT be skipped by the cross-day guard; only extreme collapses/jumps
+    outside the band are corporate-action suspects.
+
+    Catches: the cross-day skip over-firing on legitimate volatility (a genuine
+    winner wrongly excluded), which would bias the aggregates.
+    Ignores: the same-day path and the warning log; only kept-vs-skipped matters.
+    """
+    signals = [("2026-06-01T17:00:00", "REAL", "BUY", 70.0, "0.17.0")]
+    snaps = [
+        ("2026-06-01T07:00:00", "REAL", 10.0),   # entry
+        ("2026-06-02T07:00:00", "REAL", 14.0),   # N=1 exit, ratio 1.4 (inside keep band)
+    ]
+    db = _make_db(tmp_path, signals, snaps)
+
+    res = backtest_signals_from_db(db, "0.17.0", rating="BUY", hold_days=1, min_score=60.0)
+    t = res[0]
+    assert t.error is None
+    assert t.return_pct == 40.0
+    assert compute_summary(res, "BUY", 1).total_trades == 1

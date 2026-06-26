@@ -249,8 +249,21 @@ module; mapping occurs at read-time, not write-time, preserving raw data.
 target-price work function, called inline by job_generate_signals (the
 trailing job_compute_target_prices cron wrapper was removed 9 May 2026).
 
+`signals/backtester.py` and `signals/validation.py`: the validation stack.
+backtester.py prices fixed-N forward returns off persisted screener_snapshots
+(N=1/N=5 directional, version-scoped) through `guarded_forward_return`, the
+single corporate-action straddle guard contract (same-day intraday-ratio plus
+cross-day overnight-split, both SKIP). validation.py is the per-component IC
+surface: Spearman rank correlation of each of the 12 component scores plus
+composite against forward return, every result carrying its N and a
+LOW_CONFIDENCE flag. Both consumers inherit the one guard contract, so neither
+can read a fabricated split return. The screener-snapshot backtester path is the
+canonical validation surface (the /backtest web page's rating_changes path is a
+separate, not-yet-reconciled surface). Read-only analytics, no scoring math, no
+SCORING_ENGINE_VERSION change.
+
 `config/constants.py`: TRACKED. SCORING_ENGINE_VERSION (currently
-0.17.0), DATABASE_PATH, SECTORS, SCREENER_SCRAPE_TIMES,
+0.19.0), DATABASE_PATH, SECTORS, SCREENER_SCRAPE_TIMES,
 NEWS_SCRAPE_TIMES, INSIDER_SCRAPE_TIMES, MIN_PRICE_FOR_SIGNAL,
 ALERT_MIN_COMPOSITE_SCORE, REQUEST_DELAY_SECONDS.
 
