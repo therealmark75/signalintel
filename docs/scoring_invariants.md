@@ -2,6 +2,8 @@
 
 These invariants must hold after every scoring run. Any change to scoring logic must preserve them.
 
+Scope: this document carries detailed rationale for the invariants worth elaborating. It is partial by design and does not mirror the full registry. The canonical, complete P1-P32 process-invariant registry lives in PROJECT_CONTEXT.md; reference invariants by ID from there. This file explains the why for selected rules; it is not the list of record.
+
 ---
 
 ## 1. Legal Risk Distribution

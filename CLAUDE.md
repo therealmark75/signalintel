@@ -7,7 +7,7 @@
 
 # SignalIntel, Project Context for Claude Code
 
-> **Before making changes, consult `docs/scoring_invariants.md`** for both data correctness rules (invariants 1 to 11) and development process rules (P1 to P32). These rules apply to every change made in this project.
+> **Before making changes, consult `docs/scoring_invariants.md`** for data correctness rules (invariants 1 to 11) and for rationale on selected process invariants; the canonical P1-P32 process-invariant registry is in PROJECT_CONTEXT.md. These rules apply to every change made in this project.
 >
 > **For any migration, refactor, or multi-surface change, apply P1.1 (inventory before edit), P1.2 (verify by absence), and P1.3 (audit table, not narrative). These are not optional.**
 >

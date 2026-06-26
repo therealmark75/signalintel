@@ -258,7 +258,7 @@ ALERT_MIN_COMPOSITE_SCORE, REQUEST_DELAY_SECONDS.
 TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, FMP_API_KEY. Imports from
 constants.py for any non-secret values.
 
-`docs/scoring_invariants.md`: process invariants (P1-P32).
+`docs/scoring_invariants.md`: detailed rationale for selected process invariants (partial; the P1-P32 registry is in this file's PROCESS INVARIANTS section).
 
 `docs/tier_matrix.md`: canonical tier-feature mapping.
 
@@ -521,10 +521,12 @@ The 13 May VACUUM did NOT bump the version, storage reclamation only.
 
 ---
 
-## PROCESS INVARIANTS: DOCS/SCORING_INVARIANTS.MD
+## PROCESS INVARIANTS (P1-P32 REGISTRY)
 
 Mark has codified 32 invariants from real failures. Reference these by
-ID when relevant.
+ID when relevant. See docs/scoring_invariants.md for detailed rationale on
+selected invariants; that doc is partial and this table is the registry of
+record.
 
 | ID  | Rule |
 |-----|------|
