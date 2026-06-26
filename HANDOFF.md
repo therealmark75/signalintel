@@ -1,12 +1,19 @@
 # SignalIntel Session Handoff
 
-**Last updated:** end of Part 48 (26 June 2026)
-**Engine:** SCORING_ENGINE_VERSION 0.19.0, UNCHANGED this session (no scoring change in Part 48; P18 did not trigger).
-**Repo:** HEAD `f7b617a` on `main`, pushed to origin, live. Part 48 shipped two merges: `abf7352` (janitorial A-D) and `f7b617a` (registry reconciliation).
-**Suite:** 446 passed, 0 skipped, exit 0.
-**Runtime:** gunicorn restarted onto `main` during the arc (for the app.py app.logger fix); scheduler untouched, no scheduler-job change. PIDs differ next session.
+**Last updated:** end of Part 49 (26 June 2026)
+**Engine:** SCORING_ENGINE_VERSION 0.19.0, UNCHANGED this session (no scoring change in Part 49; P18 did not trigger).
+**Repo:** HEAD `0154003` on `feature/penny-winsorization`, NOT yet merged to `main` at time of writing (the merge is Mark's terminal step; if `main` has advanced when you read this, report it, do not assume).
+**Suite:** 457 passed, 0 skipped, exit 0.
+**Runtime:** no runtime change this session (Part 49 is analytics plus backtester work on a feature branch, not merged, not deployed). PIDs differ next session.
 
-## Part 48 work (this session)
+## Part 49 work (this session)
+
+| Item | Commits | What shipped |
+|---|---|---|
+| 1. Corporate-action straddle guard | `6dcb8b6` | fix(backtester): same-day intraday-ratio guard (MAX/MIN > 2.0) plus cross-day overnight-split guard (ratio breach 3.0 symmetric), both SKIP, routed through one contract. Penny winsorization was investigated FIRST and rejected (penny names 2.08% of cohort, headline aggregates move <=0.07pp; the real distortion was corporate-action artefacts, not the penny band). Three KLAC split artefacts retired: N=1 worst -89.26 to -33.04, N=5 worst -88.95 to -43.0. Engine unchanged. 5 tests. |
+| 2. Per-component IC harness (Item 2 Part 1) | `0154003` | feat(validation): new signals/validation.py. Canonical validation surface LOCKED as the screener-snapshot fixed-N backtester path (NOT the rating_changes web path). Straddle guard unified into one guarded_forward_return contract that both backtester and validation inherit (cross-day guard relocated from the backtester loop into the shared contract; backtester aggregates byte-identical to 6dcb8b6). Spearman IC at N=1/N=5 over 12 components plus composite, every result carries N and a LOW_CONFIDENCE flag. Engine unchanged. 6 tests. |
+
+## Part 48 work (prior session)
 
 Two-arc cleanup session (janitorial A-D + registry reconciliation), engine unchanged at 0.19.0.
 
@@ -43,13 +50,16 @@ Part 45 (prior session): watchlist earnings job (`ab63a0d`) + economic_calendar 
 3. **Components 15/16 (News Sentiment, Options Flow)**, deferred, dashboard-only.
 4. **Production Stripe flip** (P32), queued.
 5. **Future Path B: per-subscriber earnings delivery** (needs `users.telegram_chat_id` plus bot linking, P23).
+6. **Part 49 open question: negative component IC.** `sector_strength_score` and `composite_score` read NEGATIVE IC within the v0.17.0 BUY cohort (sector_strength t=-20 at N=5). One-month / 47-date restricted-range within-cohort window, NOT a scoring verdict. P29-gated: no reweight off this run. Re-examine on a fuller cross-version substrate when 0.18/0.19 forward depth clears.
+7. **Part 49 carry: /backtest page reconciliation.** The web page computes returns live from `rating_changes` transition pairs, a DIFFERENT surface from the now-canonical screener-snapshot backtester. Reconcile so the page reads the canonical engine. Touches P23-protected `web/app.py`. Sequenced AFTER the harness core proves out.
+8. **Part 49 carry: run_at accretion.** `backtest_results` / `backtest_trades` are append-only (`save_backtest_results` INSERTs). Resolved as leave-append-only; reads key by scoring_version plus MAX(run_at). No leak today (web `/api/backtest/stats` does not read these tables, only CLI `backtest.py --show` does, via MAX(run_at)). Purge of stale same-version runs is a later nicety.
 
 ## Part 46 new FOLLOWUPS (banked, not urgent)
 
 - **test_data_integrity.py content tests have no mid-scoring-cycle guard:** any pytest run roughly 14:00-15:20 BST shows phantom failures because the content gates snapshot a half-written scoring run. Skip-guard when `latest_run_date` scoring is incomplete. (Surfaced at Part 46 open when a 15:23 run showed 2 false failures.) [RESOLVED Part 48: scoring_run_complete fixture]
 - **markets_scraper.py line ~100 carries a pre-existing em-dash** in a log string (the `Scrape complete` line). One-character dash-sweep when convenient. [RESOLVED Part 48]
 - **app.py ~line 2744 references a `logger` not defined at module scope:** latent NameError on the backtest-stats error path. Pre-existing, not triggered normally. [RESOLVED Part 48: app.logger fix]
-- **Backtester penny-name spot-price tails:** unadjusted intraday spot on thin names produces noise outliers (e.g. a +95.9 pct one-day move). Consider a price-floor or winsorization filter before trusting tail stats; separate decision, own evidence.
+- **Backtester penny-name spot-price tails:** unadjusted intraday spot on thin names produces noise outliers (e.g. a +95.9 pct one-day move). Consider a price-floor or winsorization filter before trusting tail stats; separate decision, own evidence. [RESOLVED Part 49 Item 1: winsorization investigated and rejected; penny band is 2.08% of cohort moving headline <=0.07pp, the real distortion was corporate-action straddle artefacts, fixed by the guard 6dcb8b6]
 - **PRODUCT: Market State tiles link to TradingView's own chart widget** (third-party surface). Works for beta, but it sends the user off our surface and ties charting to a vendor. Revisit before paid launch (own charting vs embed).
 - **PRE-BETA OPS: the running server currently serves a feature branch in production** (single-machine setup, Cloudflare tunnel to localhost:5001). Before testers land, make `main` the deployed branch so "what's live" has a clean answer (merge-then-restart as the deploy discipline). The Part 46 close merges the branch to main, which begins this. [SATISFIED: main is the deployed branch, live]
 - **Eco/ethical screen page (product idea, post-beta):** a curated green/ethical universe (companies that do not harm environment/animals) analysed with the SAME SignalIntel scoring. Scope as a SCREENER-PRESET / filtered universe, NOT a scoring-component change (keep the composite defensible and free of contested moral judgments). The make-or-break is the ethical-data substrate (curated exclusion list vs public ESG dataset vs vendor scores vs SEC-filing signals), resolve that FIRST in a Phase 1 scope before any build. Potential USP: ethical universe + genuine signal intelligence, the intersection most ESG tools and most signal tools each miss.
@@ -60,9 +70,14 @@ Part 45 (prior session): watchlist earnings job (`ab63a0d`) + economic_calendar 
 
 ## Part 48 new FOLLOWUPS (banked, not urgent)
 
-- Penny-name winsorization in the backtester (tail outliers). Needs its own evidence and a real filter-design decision. See the Part 46 penny-name FOLLOWUP for the same ground.
+- Penny-name winsorization in the backtester (tail outliers). Needs its own evidence and a real filter-design decision. See the Part 46 penny-name FOLLOWUP for the same ground. [RESOLVED Part 49 Item 1: rejected with evidence; real fix was the corporate-action straddle guard, not a penny filter]
 - Eco follow-ons: curated list for defence / adult / predatory-lending exclusion categories; positive green-screen product. Parked.
 - Optional: wholesale em/en-dash sweep of docs/scoring_invariants.md body (pre-existing dashes, harmless but inconsistent now its header is glyph-clean).
+
+## Part 49 new FOLLOWUPS (banked, not urgent)
+
+- CAR event-study module: in-source per Mark's call. Opens Part 50 Phase 1 to lock the benchmark source (sector_performance table vs computed sector-average from screener_snapshots).
+- Penny-winsorization FOLLOWUP (Parts 46/48) is now RESOLVED (Part 49 Item 1): investigated and rejected with evidence; the real distortion was corporate-action artefacts, fixed by the straddle guard.
 
 ## Test accounts (for tier-gated walks)
 
