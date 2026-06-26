@@ -31,7 +31,7 @@ Part 45 (prior session): watchlist earnings job (`ab63a0d`) + economic_calendar 
 3. **Components 15/16 (News Sentiment, Options Flow)**, deferred, dashboard-only.
 4. **Production Stripe flip** (P32), queued.
 5. **Future Path B: per-subscriber earnings delivery** (needs `users.telegram_chat_id` plus bot linking, P23).
-6. **feature/watchlist-earnings merge to main**: being done at THIS session's close (see close note); update next session to reflect the merged state.
+6. feature/eco-screen merged to main at Part 47 close (merge commit 4dbdbf5); main is live (no separate deploy step, deploy = gunicorn restart on main). Suite floor 446 passed / 0 skipped.
 
 ## Part 46 new FOLLOWUPS (banked, not urgent)
 
@@ -76,4 +76,4 @@ Part 45 (prior session): watchlist earnings job (`ab63a0d`) + economic_calendar 
 
 ## Branch state (for the next fresh chat)
 
-- Part 46 closes by merging `feature/watchlist-earnings` into `main` and restarting gunicorn on `main`, so local working tree, `main`, and the live site (thesignalvault.io via the Cloudflare tunnel to localhost:5001) are all the same state. There is no separate deploy step; a gunicorn restart on the latest code IS the live deploy.
+- Part 47 closes by merging feature/eco-screen into main (merge commit 4dbdbf5) and restarting gunicorn on main, so local working tree, main, and the live site (thesignalvault.io via the Cloudflare tunnel to localhost:5001) are the same state. There is no separate deploy step; a gunicorn restart on the latest code IS the live deploy. Suite floor 446 passed / 0 skipped.

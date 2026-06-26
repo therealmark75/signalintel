@@ -1,17 +1,17 @@
 > **Session bootstrap.** At the start of any session, read these two files in order before doing anything else:
 >
-> 1. `PROJECT_CONTEXT.md` — stable project context (Athena's role, SignalIntel overview, 7-tier rating system, P1-P17 invariants, communication norms, roadmap). Rarely changes.
-> 2. `HANDOFF.md` — current session state (what's running, inflight, queued, recent session log). Updated every session.
+> 1. `PROJECT_CONTEXT.md`, stable project context (Athena's role, SignalIntel overview, 7-tier rating system, P1-P32 invariants, communication norms, roadmap). Rarely changes.
+> 2. `HANDOFF.md`, current session state (what's running, inflight, queued, recent session log). Updated every session.
 >
 > `HANDOFF.md` contains its own update instructions. When Mark says "update the handoff" or similar, follow those instructions exactly. Do not modify `PROJECT_CONTEXT.md` or this file unless explicitly told to.
 
-# SignalIntel — Project Context for Claude Code
+# SignalIntel, Project Context for Claude Code
 
-> **Before making changes, consult `docs/scoring_invariants.md`** for both data correctness rules (invariants 1–11) and development process rules (P1–P15). These rules apply to every change made in this project.
+> **Before making changes, consult `docs/scoring_invariants.md`** for both data correctness rules (invariants 1 to 11) and development process rules (P1 to P32). These rules apply to every change made in this project.
 >
 > **For any migration, refactor, or multi-surface change, apply P1.1 (inventory before edit), P1.2 (verify by absence), and P1.3 (audit table, not narrative). These are not optional.**
 >
-> **When writing tests, apply P15 — every test must articulate what it catches AND what it intentionally ignores. Both examples go in the test docstring.**
+> **When writing tests, apply P15, every test must articulate what it catches AND what it intentionally ignores. Both examples go in the test docstring.**
 >
 > **When auditing a config-touching commit for secrets leakage, grep against `docs/config_variable_classification.md` FIRST, not against literal patterns like `TOKEN|API_KEY|PASSWORD|SECRET|CHAT_ID`. Pattern greps miss variables whose names contain none of those keywords (e.g. `ALERT_CONFIG` holds smtp credentials but matches no standard pattern). The classification file is the authoritative enumeration of every tracked config variable and its SECRET/NON_SECRET status.**
 
@@ -81,11 +81,11 @@ trading-system/
 
 ## Composite Score Components
 The composite score is built from these sub-scores:
-- **MOMENTUM** — price momentum, RSI, SMA signals
-- **QUALITY** — fundamentals (P/E, EPS, sector comparison)
-- **INSIDER** — insider trade signals
-- **REVERSION** — mean reversion signals
-- **LEGAL** — SEC EDGAR risk penalty (6-tier classification)
+- **MOMENTUM**: price momentum, RSI, SMA signals
+- **QUALITY**: fundamentals (P/E, EPS, sector comparison)
+- **INSIDER**: insider trade signals
+- **REVERSION**: mean reversion signals
+- **LEGAL**: SEC EDGAR risk penalty (6-tier classification)
 
 Rating changes are detected and logged immediately after every signal generation run (not as a separate job).
 
@@ -101,16 +101,16 @@ Rating changes are detected and logged immediately after every signal generation
 - **FinViz individual ticker page scraping** (`finviz.com/quote.ashx?t=TICKER`) is used for high-priority tickers (watchlist + top signals) for data not available in bulk screener views (e.g. analyst recommendations)
 
 ## Planned Integrations (not yet built)
-- **SendGrid** — email alerts
-- **Stripe** — paywall and subscription management
-- **Unusual Whales** — options flow data
-- **SEC EDGAR** — legal risk scoring (scraper built, wiring in progress)
+- **SendGrid**: email alerts
+- **Stripe**: paywall and subscription management
+- **Unusual Whales**: options flow data
+- **SEC EDGAR**: legal risk scoring (scraper built, wiring in progress)
 
 ## Business Model (Roadmap)
 - 7-day full-access trial → hard paywall. No permanent free tier.
 - Two tiers at launch (locked 25 May 2026): **Pro** and **Elite**. Starter is dropped; B2B / white-label deferred to Phase 3.
-  - **Pro**: $29 / £24.99 per month — full signals, alerts, tournaments, 5 watchlists (capped)
-  - **Elite**: $79 / £74.99 per month — Pro + API access + unlimited watchlists + penny-stock signals
+  - **Pro**: $29 / £24.99 per month, full signals, alerts, tournaments, 5 watchlists (capped)
+  - **Elite**: $79 / £74.99 per month, Pro + API access + unlimited watchlists + penny-stock signals
 - Geo-based dual currency (UK = GBP, rest = USD). Explicit per-currency prices, not live FX conversion.
 - Annual billing at 25% discount
 - Monthly paper trading tournaments with prize pool (% of subscription revenue)
@@ -154,9 +154,9 @@ Margin call mechanic:
 - Busted portfolios stay visible on leaderboard (💀 marker)
 
 ## Key Differentiators
-1. Verified public performance record — all signals logged with date + price, wins AND losses visible
+1. Verified public performance record, all signals logged with date + price, wins AND losses visible
 2. Monthly paper trading tournaments with real prizes
-3. Short squeeze detector — high short interest + STRONG_BUY confluence
+3. Short squeeze detector, high short interest + STRONG_BUY confluence
 4. Legal risk scoring via SEC EDGAR feeds into composite score as penalty
 
 ## Scoring Engine Versioning
@@ -175,7 +175,7 @@ Margin call mechanic:
 
 ## Signal Universe Constraints
 - **`MIN_PRICE_FOR_SIGNAL = 1.00`** (defined in `config/constants.py`)
-- Tickers below this price are excluded from new signal scoring. The filter lives in `signals/scorer.py` — tickers with `price < MIN_PRICE_FOR_SIGNAL` are skipped before any sub-score is computed.
+- Tickers below this price are excluded from new signal scoring. The filter lives in `signals/scorer.py`, tickers with `price < MIN_PRICE_FOR_SIGNAL` are skipped before any sub-score is computed.
 - Existing watchlist entries that fall below threshold are **mark-and-hold**: visible on the watchlist with a greyed "BELOW $1" badge, no new signals generated.
 - Rationale: sub-$1 percentage returns are mathematically distorting (penny-stock asymmetry). VEEE at $0.15 was producing +4,380% theoretical returns that are untradeable due to bid-ask spreads and liquidity.
 - Threshold is provisional and may be raised. To change it: update `MIN_PRICE_FOR_SIGNAL` in `config/constants.py`, then re-run `scripts/purge_sub_threshold_rating_changes.py` to clean historical data, then re-run `scripts/rebuild_rating_changes.py` to regenerate transitions.
@@ -196,7 +196,7 @@ STRONG_BUY  BUY  STRONG_HOLD  HOLD  WEAK_HOLD  SELL  STRONG_SELL
 ```
 Very Strong  Strong  Stable  Neutral  Soft  Bearish  Very Bearish
 ```
-- User-facing only — appear in templates, Telegram alerts, and JSON responses to the frontend
+- User-facing only, appear in templates, Telegram alerts, and JSON responses to the frontend
 - Translated from internal codes via `signals/signal_labels.py`:
   - `tier_label(rating)` → full label e.g. "Very Strong Signal"
   - `tier_short(rating)` → short label e.g. "Very Strong"
@@ -211,15 +211,15 @@ Very Strong  Strong  Stable  Neutral  Soft  Bearish  Very Bearish
 - `watchlists_meta.alerts_enabled` (INTEGER, DEFAULT 1) controls whether Telegram alerts fire for a watchlist.
 - Users toggle it via `POST /api/watchlists/<id>/toggle_alerts`; the watchlist page shows a 🔔/🔕 bell inline in each tab.
 - `get_watchlist_tickers(db_path, alerts_only=True)` returns only tickers from watchlists where `alerts_enabled = 1`. OR semantics: a ticker on multiple watchlists fires alerts if **any** of its containing watchlists has alerts on.
-- `get_watchlist_tickers(alerts_only=False)` (default) returns all tickers regardless of alert state — used for non-alert UI surfaces.
+- `get_watchlist_tickers(alerts_only=False)` (default) returns all tickers regardless of alert state, used for non-alert UI surfaces.
 - If all watchlists are muted, `alerts_only=True` returns an empty set and no Telegram alerts fire.
 
 ## Watchlist-Add UX: Picker
 
-- Watchlist-add is via a shared dropdown picker (`_watchlist_picker.html`), included once in `_nav.html` — available on every page.
+- Watchlist-add is via a shared dropdown picker (`_watchlist_picker.html`), included once in `_nav.html`, available on every page.
 - Trigger: any element with class `wl-picker-btn` calling `WlPicker.open(el, ticker)`. Clicking outside or pressing Escape closes it. Only one picker open at a time.
 - Picker lists the user's watchlists with per-watchlist checked/unchecked state; each click is an immediate add or remove. Inline "Create new watchlist" expands a form in-place.
-- `POST /api/watchlists` accepts an optional `add_ticker` body param — creates the watchlist and adds the ticker in one round trip.
+- `POST /api/watchlists` accepts an optional `add_ticker` body param, creates the watchlist and adds the ticker in one round trip.
 - `GET /api/watchlists/membership?ticker=<TICKER>` returns per-watchlist membership for a single ticker.
 - **Watchlist membership set:** pages load a `window._wlAllTickers` Set (either from server-passed JSON or via `GET /api/watchlists/all-tickers`). Picker mutations update this set in-place so re-rendered tables reflect the current state without a reload.
 - **Surfaces with WL column:** Screener, Penny Screener, Dashboard (All Signals, Sector drilldown, Insiders, Today's Top 10). Ticker detail page has its own dedicated WL button.
@@ -303,14 +303,14 @@ controlling terminal. This is intentional. The flow is:
    pending acknowledgement. Surfacing means showing the diff, not
    summarising it.
 3. After explicit approval, commit with `git commit --no-verify`.
-   The `--no-verify` flag is the audit signal — its presence in
+   The `--no-verify` flag is the audit signal, its presence in
    shell history marks the commit as having bypassed the gate by
    design, not by accident.
 4. Never default to `--no-verify` for auth-adjacent commits. The
    decision to bypass comes from Mark, not from CC. **"The diff is
    clean" is NOT a CC self-justification for `--no-verify`** (25 May
    2026 lesson). The hook fires on path-match precisely because P23
-   exists for a human to render the verdict — CC reasoning its own
+   exists for a human to render the verdict, CC reasoning its own
    way past the hook is the enforcement layer running backwards. On
    a hook trip, CC's job is to surface the trip and the staged diff
    and wait for Mark's clearance, not to self-clear because the diff
@@ -329,7 +329,7 @@ the correctness layer.
 **Installation**
 
 Run `scripts/install-hooks.sh` once after clone. Idempotent. The
-hook is symlinked, not copied — updates to
+hook is symlinked, not copied, updates to
 `scripts/git-hooks/pre-commit` take effect immediately without
 reinstallation.
 
@@ -338,7 +338,7 @@ reinstallation.
 `--no-verify` is the *only* bypass. It is loud (visible in shell
 history; visible in the absence of any hook-trace in commit
 metadata). Adding a path-exception list to the hook itself is
-**not** an acceptable evolution — exceptions belong in audit-table
+**not** an acceptable evolution, exceptions belong in audit-table
 review, not in the gate's source code.
 
 ## Session ergonomics
@@ -354,7 +354,7 @@ review, not in the gate's source code.
 - Always activate the venv before running Python scripts
 - SQLite DB path is relative: `data/trading_system.db` from project root
 - Flask runs on port 5001
-- When editing scrapers, be mindful of FinViz rate limits — add delays between requests
+- When editing scrapers, be mindful of FinViz rate limits, add delays between requests
 - `rating_changes` table should be populated via `detect_rating_changes()` called after every signal run, not as a standalone job
 - Check `config/constants.py` before hardcoding any values
 - **Ratings Guide has been removed.** The "Ratings Guide" modal and button no longer exist in the nav. `/ratings` (Rating Tiers page) is the single reference for all rating and scoring information. Do not re-add a Ratings Guide button or modal.

@@ -375,6 +375,10 @@ Bad pattern (avoid): `assert "Strong Buy" not in template.lower()`
 
 When writing or reviewing a test, the test docstring must include both a *Catches* example and an *Ignores* example for any pattern-matching or grep-based check. If the author cannot produce both, the test is not ready to commit.
 
+## P16 - Audit Entries Cite Specific Evidence; Hedge-Words Flag Unverified Claims
+
+Audit table entries must cite a specific test, grep, or inspection with an empirical result. Hedge-words (should, likely, seems, by design, appears to) flag an entry as unverified. This applies equally to FOLLOWUPS in our own docs (12 May 2026 lesson).
+
 ## P17 — Full enumeration of effects in audits
 
 Audit entries describing a function's behaviour must enumerate the function's complete set of effects: reads, writes, mutations, side effects, and external calls. A description that is technically true while concealing material behaviour is an audit failure.

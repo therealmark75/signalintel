@@ -140,13 +140,13 @@ re-introducing schema-init code that resurrects dropped state.
 overview route per `docs/mockups/dashboard_restructure_v1.html` design
 contract. Above-fold 3×2 grid (Daily Summary / Top 5 Strong / Top 5
 Bearish / Market State / Watchlist Preview / Discovery Themes),
-full-width Elite-only Penny Stock spotlight (server-side tier gate —
+full-width Elite-only Penny Stock spotlight (server-side tier gate,
 non-Elite clients receive no pick data), below-fold 3×2 grid (Earnings
 / Dividends / Sector Performance / Rating Changes / Insider / News).
 Logged-in `/` redirects to /dashboard; logged-out hits the legacy
 index() flow (preserved as dead code under the redirect). Three helper
-extractions accompanied the route — `_get_sector_performance`,
-`_get_penny_pick_full`, `_compute_theme_counts` — each is a
+extractions accompanied the route, `_get_sector_performance`,
+`_get_penny_pick_full`, `_compute_theme_counts`, each is a
 behaviour-preserving refactor: the original `/api/sector-performance`,
 `/api/penny/stock-of-day`, and `/api/theme-counts` JSON endpoints still
 exist and still return the same payloads; the dashboard route calls
@@ -157,7 +157,7 @@ the new navy/green Option C palette (navy-950 ground, green-400 accent,
 gold reserved for Elite spotlight, Fraunces/Inter Tight/JetBrains Mono).
 The rest of the site (`/signals`, `/screener`, `/markets`, `/ticker/...`,
 etc.) still renders the old cyan/_nav.html system. Sitewide migration
-is deferred and queued in FOLLOWUPS — visible seam is expected until
+is deferred and queued in FOLLOWUPS, visible seam is expected until
 the new `_nav.html` + `_footer.html` partials roll out across all
 templates.
 
@@ -258,7 +258,7 @@ ALERT_MIN_COMPOSITE_SCORE, REQUEST_DELAY_SECONDS.
 TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, FMP_API_KEY. Imports from
 constants.py for any non-secret values.
 
-`docs/scoring_invariants.md`: process invariants (P1-P19).
+`docs/scoring_invariants.md`: process invariants (P1-P32).
 
 `docs/tier_matrix.md`: canonical tier-feature mapping.
 
@@ -269,7 +269,7 @@ ProgramArguments: gunicorn binary, -w, 1, -b, 127.0.0.1:5001,
 web.app:app. WorkingDirectory `/Users/markn/signalintel`. UserName
 markn (LaunchAgent runs as user, not root). Survives logout and reboot.
 Logs to `~/signalintel/logs/gunicorn.{out,err}.log`. Does NOT run from
-under ~/Documents/ — macOS TCC restrictions block launchd-spawned
+under ~/Documents/, macOS TCC restrictions block launchd-spawned
 processes from reading project files under that path, which was the
 core blocker behind the Phase 2c project tree migration (15 May 2026).
 
@@ -279,7 +279,7 @@ thesignalvault.io to localhost:5001 via Cloudflare Tunnel. Config at
 `/etc/cloudflared/config.yml`. Path-agnostic relative to the
 SignalIntel project tree; unaffected by Phase 2c migration. Installed
 via `sudo cloudflared service install` plus manual plist correction
-(default install omits the `tunnel run` arguments — 15 May 2026
+(default install omits the `tunnel run` arguments, 15 May 2026
 lesson).
 
 `/etc/cloudflared/config.yml`: Cloudflare Tunnel ingress configuration.
@@ -422,7 +422,7 @@ IN ('up', 'init'), -1.0 for action='down', and 0.0 for everything else
 downgrades). The v0.16.0 soft-action PT folding (main/reit Raises=+0.25,
 Lowers=-0.25) was REMOVED after failing external event-study validation
 on 25 May 2026: real-cohort Raises-minus-Lowers 21d CAR spread came back
-at -0.79% (t=-3.64, p=2.7e-04) — wrong sign, monotonicity inverted,
+at -0.79% (t=-3.64, p=2.7e-04), wrong sign, monotonicity inverted,
 robust across 5/7 years, 10/11 sectors, 9/10 firms; survived beta
 adjustment with comparable magnitude. Placebo cohort showed the
 expected positive ordering, proving the inversion was event-driven, not
@@ -431,7 +431,7 @@ provisional weight that fails validation is pulled to neutral, NOT
 sign-flipped on the same test that disproved the priors. Event-fade as
 a separate component (Bernard-Thomas drift; its own theory, its own
 provisional weight, its own OOS validation) is logged as a future
-candidate — never folded back into analyst_mom. The scorer's float
+candidate, never folded back into analyst_mom. The scorer's float
 ladder + ±0.5 neutral band at signals/scorer.py stays correct on
 integer net_momentum (the band is the neutral-tier rule on integers,
 not v0.16-specific dead code). Coverage trade-off accepted: less
@@ -467,15 +467,15 @@ Version history:
   piotroski, inst_own, analyst_mom, altman_penalty); composite
   rebalanced to 9-component / 1.60-sum; Altman penalty additive;
   first prod rows 14 May 2026 14:19 BST.
-- 0.14.0: Altman methodology switch — classic Z (1968 manufacturing)
+- 0.14.0: Altman methodology switch, classic Z (1968 manufacturing)
   to Z'' (1995 non-manufacturing). Empirical distribution analysis
   (3,631 tickers): classic penalised 62.9% → Z'' 47.8%. Penalty
   magnitudes (-10/-30/-60) preserved. First prod rows 18 May 2026.
-- 0.15.0: inst_own recalibration — full-universe re-scrape (0.35% →
+- 0.15.0: inst_own recalibration, full-universe re-scrape (0.35% →
   97.3% pct_out fill) + quartile-anchored cuts (>=48→75, >=34→60,
   >=12→45, <12→30) + >100 implausibility guard → neutral 50.
   Coverage 0% → 50.8%. First prod rows 21 May 2026.
-- 0.16.0: analyst_mom widening — fold price-target direction. SQL
+- 0.16.0: analyst_mom widening, fold price-target direction. SQL
   CASE in `get_analyst_momentum_map` produces float net_momentum;
   scorer uses float ladder with ±0.5 neutral band. Hard rating
   actions unchanged (±1); soft actions contribute ±0.25 on
@@ -523,7 +523,7 @@ The 13 May VACUUM did NOT bump the version, storage reclamation only.
 
 ## PROCESS INVARIANTS: DOCS/SCORING_INVARIANTS.MD
 
-Mark has codified 19 invariants from real failures. Reference these by
+Mark has codified 32 invariants from real failures. Reference these by
 ID when relevant.
 
 | ID  | Rule |
@@ -551,17 +551,17 @@ ID when relevant.
 | P18 | Substantive scoring substrate changes require MINOR version bump |
 | P19 | Schema migration inventory enumerates every CRUD path against the modified table (read, write, init, ORM), not just init code. The 9 May column drop caught the ADD COLUMN guard in web/app.py but missed the INSERT in database/db.py, silent for 48 hours until pytest freshness tests caught it on 11 May. Phase 1 for any schema-affecting work must enumerate: init/migration code, ORM definitions, raw SQL INSERTs/UPDATEs/DELETEs, SELECT projections, and any place the column name appears as a string literal |
 | P20 | Analyst completeness gate. When two paths diverge on what an analyst making a buy/sell/hold decision receives, the analytically-stronger path wins regardless of engineering cost. Engineering cost is a tiebreaker between analytically-equivalent paths only |
-| P21 | Profile coverage matrices in Phase 2 prompts require explicit per-row verification gates confirming each matrix row produced the expected rating — not just that the total ticker count matches. Total-count agreement does not imply per-row correctness; synthetic inputs designed for "deep bearish" can inadvertently maximise a reversion scorer and route through HOLD before STRONG_SELL (14 May 2026, SS07 diagnosis B) |
+| P21 | Profile coverage matrices in Phase 2 prompts require explicit per-row verification gates confirming each matrix row produced the expected rating, not just that the total ticker count matches. Total-count agreement does not imply per-row correctness; synthetic inputs designed for "deep bearish" can inadvertently maximise a reversion scorer and route through HOLD before STRONG_SELL (14 May 2026, SS07 diagnosis B) |
 | P22 | Session date is empirical context, not conversation-primed context. Any session involving "yesterday / today / tonight / overnight" temporal reasoning must ground on the actual current date stated explicitly at session start. Both CC and Athena are subject to date-blindness from primed context; the discipline is symmetric |
 | P23 | Auth-adjacent side-effects require explicit escalation in audit, not just disclosure. Commits that add or modify side-effects in auth-adjacent functions (`current_user()`, login, logout, session handling, tier checks) must flag the change in the audit table with "AUTH SIDE-EFFECT — REQUIRES REVIEW" or equivalent. Disclosure in a commit-message bullet is necessary but not sufficient. The 7 May 2026 BUG-001-REOPENED backdoor was introduced in commit 9e02e7d (May 6 18:26), disclosed in that commit's bullet, then misdescribed in commit 7949805 the next morning — neither instance flagged the side-effect for review. P17 would not have caught this; the function was named, just not escalated. The pre-commit hook for auth-adjacent diff review (`scripts/git-hooks/pre-commit`, installed via `scripts/install-hooks.sh`, see CLAUDE.md) is the mechanical enforcement layer for P23, live on origin since 18 May 2026 (commits 0851963 + 8fe91a0 + 851221a). |
-| P24 | Doc-file header text is descriptive metadata, never standing permission for CC to write. Headers such as "Updated end of each session" describe the file's intended use, not an instruction CC may act on. CC must not self-initiate edits to HANDOFF.md or PROJECT_CONTEXT.md. Editing instructions must come from Mark or Athena in-turn. Implementation prompts spanning multiple commits are the highest-risk pattern — CC reaches for end-of-session housekeeping when the implementation work concludes. Mitigation: include "do not modify HANDOFF.md or PROJECT_CONTEXT.md" on all implementation prompts regardless of stated scope |
+| P24 | Doc-file header text is descriptive metadata, never standing permission for CC to write. Headers such as "Updated end of each session" describe the file's intended use, not an instruction CC may act on. CC must not self-initiate edits to HANDOFF.md or PROJECT_CONTEXT.md. Editing instructions must come from Mark or Athena in-turn. Implementation prompts spanning multiple commits are the highest-risk pattern, CC reaches for end-of-session housekeeping when the implementation work concludes. Mitigation: include "do not modify HANDOFF.md or PROJECT_CONTEXT.md" on all implementation prompts regardless of stated scope |
 | P25 | macOS TCC restricts launchd-spawned processes from reading files under ~/Documents/, ~/Desktop, ~/Downloads, and other protected paths, even after granting Full Disk Access to /sbin/launchd in System Settings. Service-managed processes (LaunchDaemons, LaunchAgents) MUST run from non-protected paths. SignalIntel lives at ~/signalintel as a result. Pattern recognition: a "PermissionError: [Errno 1] Operation not permitted" on a file under ~/Documents/ from a launchd-spawned process is TCC restriction, not Unix permissions. Granting FDA to launchctl in System Settings does NOT resolve the underlying TCC scope. The 15 May 2026 session burned ~90 minutes diagnosing this before the path migration; future deployments should default to home-root paths (~/signalintel, ~/my-project) rather than ~/Documents/. |
-| P26 | XML content in shell heredocs is corrupted by chat renderers — angle-bracket tags (`<string>`, `<key>`) are interpreted as HTML and stripped during copy-paste from the chat interface to terminal. Use Python plistlib (or equivalent) to write plist files programmatically, then verify the contents via `/usr/libexec/PlistBuddy -c "Print :ProgramArguments" <path>` before installing. The 15 May 2026 LaunchAgent diagnosis cycle confirmed this: three identical-looking heredoc rewrites all lost the `-w` flag because `<string>-w</string>` rendered as an HTML attribute and disappeared. PlistBuddy verification on disk is empirical and unambiguous. |
+| P26 | XML content in shell heredocs is corrupted by chat renderers, angle-bracket tags (`<string>`, `<key>`) are interpreted as HTML and stripped during copy-paste from the chat interface to terminal. Use Python plistlib (or equivalent) to write plist files programmatically, then verify the contents via `/usr/libexec/PlistBuddy -c "Print :ProgramArguments" <path>` before installing. The 15 May 2026 LaunchAgent diagnosis cycle confirmed this: three identical-looking heredoc rewrites all lost the `-w` flag because `<string>-w</string>` rendered as an HTML attribute and disappeared. PlistBuddy verification on disk is empirical and unambiguous. |
 | P27 | Beta tester confusion is a positioning audit, not a user-fit observation. When a beta tester struggles with a product whose tagline explicitly promises to serve them (here: "institutional-grade tools for non-institutional traders"), Athena's first move must be to audit whether the tagline still matches the surface, not to dismiss the tester as "outside the target user." Dismissing the tester is a positioning failure dressed up as taste. Logged 18 May 2026 from Guy's feedback session. Future Athena: when reflex is to frame a tester as wrong-user, check the tagline first. |
 | P28 | Locked design patterns require at least a smoke-test invocation before being treated as ground truth. The Phase 1 + Phase 2 pattern produces design decisions that lock specific values, helper patterns, and snippets of code (regexes, shell idioms, FD redirections, SQL fragments). On-paper review can miss bugs that only surface on first execution. The 18 May 2026 auth-adjacent pre-commit hook ship surfaced this: the locked `exec 3</dev/tty 2>/dev/null` pattern from Phase 1 passed design review but silently redirected stderr for the rest of the shell on the success path, killing the user-facing "Commit aborted" message. Fix was one line (`{ exec 3</dev/tty; } 2>/dev/null` to scope the redirect) but the bug only emerged in the empirical verification walk. Discipline: when Phase 1 locks a non-trivial code pattern, Phase 2 prompts must include an explicit smoke-test step that exercises the pattern in isolation before it's integrated into the full implementation. Generalisation of P3 (verify in browser, not just tests) to design-phase decisions. |
 | P29 | Scoring-substrate methodology changes are gated by empirical distribution evidence on the production universe, not theoretical reasoning. The 18 May 2026 Altman Z → Altman Z'' switch (v0.13.0 → v0.14.0) was authorised only after a read-only distribution analysis (scripts/altman_distribution_analysis.py) computed Z and Z'' for 3,631 tickers and showed classic Z penalised 62.9% of the universe vs Z'' at 47.8%. Decision shape was locked before script ran: three outcomes (calibration holds / grey-zone cluster / bimodal) with sub-decisions for each, all framed in version-bump-policy (P18) terms. The empirical step is non-negotiable for any future scoring substrate change (Piotroski tier recalibration, Sector strength magnitude tuning, new component weight integration). Pattern: Phase 1 inventory → Phase 2a helper extraction (behaviour-preserving) → Phase 2b analysis script → Phase 2c decision lock with empirical evidence → Phase 2d implementation with version bump. Six gates, zero rework. |
 | P30 | Tests ship with the behaviour they describe (21 May 2026). A commit that changes scoring output OR a route's response contract MUST update its tests in the SAME commit. Twice on 21 May a behaviour change shipped with stale tests left red: inst_own v0.15.0 recalibration (175bbf7) shipped without updating its unit tests or regenerating the scorer snapshot; the dashboard redirect (db38c56) shipped without updating the smoke tests' PAGE_ROUTES 200-expectation. Both pushed before the staleness was noticed (caught only when an unrelated task happened to run pytest). A red suite masks the next regression. Verification gates that check live output do NOT substitute for updating the unit/snapshot tests that assert intended behaviour. |
-| P31 | Long-running DB writers must tolerate lock contention (21 May 2026). SQLite serialises writers; the scheduler is a near-constant background writer (screener scrapes are ~54-min DB writers, plus signal_generation, insider, Yahoo jobs). Any long-running manual or bulk writer that overlaps a scheduled job WILL eventually hit "database is locked". On 21 May the analyst bulk job crashed on exactly this — a single unhandled OperationalError killed a ~90-min run at 1,545/~6,000 tickers. Lock errors are transient (the other writer finishes in seconds), so bulk writers must retry-with-backoff on OperationalError rather than dying. This applies to any job registered on the scheduler too: `job_yahoo_analyst_bulk` (Wed 04:00) needs this before it can be trusted unattended. |
+| P31 | Long-running DB writers must tolerate lock contention (21 May 2026). SQLite serialises writers; the scheduler is a near-constant background writer (screener scrapes are ~54-min DB writers, plus signal_generation, insider, Yahoo jobs). Any long-running manual or bulk writer that overlaps a scheduled job WILL eventually hit "database is locked". On 21 May the analyst bulk job crashed on exactly this, a single unhandled OperationalError killed a ~90-min run at 1,545/~6,000 tickers. Lock errors are transient (the other writer finishes in seconds), so bulk writers must retry-with-backoff on OperationalError rather than dying. This applies to any job registered on the scheduler too: `job_yahoo_analyst_bulk` (Wed 04:00) needs this before it can be trusted unattended. |
 | P32 | Live-DB browser fixtures: stage via canonical helper, walk, remove same session. For irreversible-money verifications, test-client coverage is not sufficient; eyes-on against the live app + live DB is required. (4 June 2026 cancelled-and-elapsed walk for the Stripe production-key flip.) |
 
 ---
@@ -580,7 +580,7 @@ unverified:
 - "Pretty sure" / "Fairly confident"
 - "Looks right" / "Seems correct"
 - "Spotted issue with X" / "Appeared to" / "Appears to" without empirical
-  proof — same hedge category as "looks right". 16 May P21 audit lesson:
+  proof, same hedge category as "looks right". 16 May P21 audit lesson:
   CC's hedge that SS07 "appeared to" route STRONG_SELL was verified by
   empirical sweep, which confirmed correct routing. Apply the same
   vigilance whenever CC frames a verification as observation rather
@@ -791,9 +791,9 @@ modify code outside the prompt's explicit scope.
 ✅ Volume + avg_volume NULL fix (12 May 2026, commits 164b6fb Fix A, 6714509 Fix B, 329dfee comment fix; empirically verified 13 May with baseline-and-comparison plus FinViz spot-checks)
 ✅ Data-freshness test expansion (12 May 2026, commit e31b79d; insider_trades, legal_risk, ticker_metadata added at 72h threshold; 191 → 194 tests)
 ✅ VACUUM screener database (13 May 2026; 35MB reclaimed, 363MB → 328MB, no row loss, integrity verified; closes the 9 May column-drop residue)
-✅ Phase 2a — Flask production hardening (15 May 2026, 6 commits, pushed): SECRET_KEY moved from tracked source to FLASK_SECRET_KEY in config/settings.py, ProxyFix middleware for Cloudflare Tunnel HTTPS termination, SESSION_COOKIE_SECURE/HTTPONLY/SAMESITE=Lax hardening, gunicorn 23.0.0 added (single worker for in-memory flask-limiter compatibility), flask-limiter 10/min on POST /login, debug=False in __main__ block. Pytest 231 passing + 4 skipped + 1 pre-existing SB01 failure (carried over). End commit: bd31b99.
-✅ Phase 2b — Cloudflare Tunnel deployment (15 May 2026): cloudflared installed via Homebrew, named tunnel `signalintel`, ingress for apex and www, GoDaddy nameservers swapped to Cloudflare (anahi.ns + craig.ns), DNSSEC confirmed off, propagation completed in ~75 minutes, cloudflared installed as LaunchDaemon with correct ProgramArguments (initial install omitted `tunnel run` args, fixed via plist rewrite). End state: thesignalvault.io live over HTTPS via Cloudflare proxy, four edge connections to London (lhr10/13/13/18). No code commits; operational config only.
-✅ Phase 2c — Project tree migration out of ~/Documents/ (15 May 2026, 2 commits, pushed): Project moved from ~/Documents/trading-system to ~/signalintel to bypass macOS TCC restrictions on launchd-spawned processes. Venv recreated at new path (pip install -r requirements.txt). Five one-off legal-risk scripts and CLAUDE.md updated for path strings (commit 7eb0899). Tracked .pyc files and web/.DS_Store removed, .gitignore patterns added (commit ab8eca1). Gunicorn now under LaunchAgent at ~/Library/LaunchAgents/io.thesignalvault.gunicorn.plist, surviving reboot. Old path retained at ~/Documents/trading-system.OLD for 24-hour safety window (delete after 16 May 2026 16:49 BST if stable).
+✅ Phase 2a, Flask production hardening (15 May 2026, 6 commits, pushed): SECRET_KEY moved from tracked source to FLASK_SECRET_KEY in config/settings.py, ProxyFix middleware for Cloudflare Tunnel HTTPS termination, SESSION_COOKIE_SECURE/HTTPONLY/SAMESITE=Lax hardening, gunicorn 23.0.0 added (single worker for in-memory flask-limiter compatibility), flask-limiter 10/min on POST /login, debug=False in __main__ block. Pytest 231 passing + 4 skipped + 1 pre-existing SB01 failure (carried over). End commit: bd31b99.
+✅ Phase 2b, Cloudflare Tunnel deployment (15 May 2026): cloudflared installed via Homebrew, named tunnel `signalintel`, ingress for apex and www, GoDaddy nameservers swapped to Cloudflare (anahi.ns + craig.ns), DNSSEC confirmed off, propagation completed in ~75 minutes, cloudflared installed as LaunchDaemon with correct ProgramArguments (initial install omitted `tunnel run` args, fixed via plist rewrite). End state: thesignalvault.io live over HTTPS via Cloudflare proxy, four edge connections to London (lhr10/13/13/18). No code commits; operational config only.
+✅ Phase 2c, Project tree migration out of ~/Documents/ (15 May 2026, 2 commits, pushed): Project moved from ~/Documents/trading-system to ~/signalintel to bypass macOS TCC restrictions on launchd-spawned processes. Venv recreated at new path (pip install -r requirements.txt). Five one-off legal-risk scripts and CLAUDE.md updated for path strings (commit 7eb0899). Tracked .pyc files and web/.DS_Store removed, .gitignore patterns added (commit ab8eca1). Gunicorn now under LaunchAgent at ~/Library/LaunchAgents/io.thesignalvault.gunicorn.plist, surviving reboot. Old path retained at ~/Documents/trading-system.OLD for 24-hour safety window (delete after 16 May 2026 16:49 BST if stable).
 
 [x] Yahoo Finance pipeline + components 9-13 (DONE and LIVE: pipeline and components 9-13 were already built/live pre-Part-43; Part 43 reconciled them, shipped the Piotroski P5 fix on 0.18.0, and surfaced the Elite sub-scores on the ticker page)
 [ ] Component 14 (FINRA short-interest): next net-new build, probe-first, correlation gate (|r| >= 0.6 stop-and-discuss), own version bump
@@ -832,7 +832,7 @@ territory (it touches the users table and auth-adjacent surfaces).
 - Tier gating decision for Telegram alerts (Starter+ or all tiers?
   Update `docs/tier_matrix.md`)
 - SendGrid email alerts (already on backlog; bundle here so users
-  without Telegram aren't excluded — most UK non-tech users)
+  without Telegram aren't excluded, most UK non-tech users)
 - UI surfaces: profile/settings page (link/unlink Telegram +
   email preferences), watchlist page (already has alert bells),
   virtual portfolio page, ticker page (alert-me affordance)
@@ -846,7 +846,7 @@ Triggered by Guy (beta tester, 18 May) bouncing off product
 density and asking about UK stocks. Tagline "institutional-grade
 tools for non-institutional traders" only earns its keep if the
 surface is accessible to non-power-users. Lite is a learning ramp
-plus a TAM expansion — current Power view stays for users who want
+plus a TAM expansion, current Power view stays for users who want
 the density, Lite is the default for new signups.
 
 LSE + HK market addition (must land before paywall):
@@ -864,7 +864,7 @@ LSE + HK market addition (must land before paywall):
 Lite mode (renderer addition, not parallel scoring path):
 - Lite ticker page: composite as single 0-100 dial + plain-English
   one-line summary per component. Reads same component registry
-  as Power view — registry refactor on 11 May already supports
+  as Power view, registry refactor on 11 May already supports
   parallel renderers.
 - Lite dashboard: top 5 signals with one-sentence rationale each
 - Profile toggle: Lite / Power view, Lite default for new signups,
@@ -917,7 +917,7 @@ Estimate: 6-10 weeks core engineering + 30-50 hours video production.
 ### PRICING (locked 25 May 2026)
 
 This is product spec, not a sketch. The earlier "Starter / Pro / Elite"
-draft is superseded — Starter is dropped, B2B / white-label moves to
+draft is superseded, Starter is dropped, B2B / white-label moves to
 Phase 3, two tiers ship at launch.
 
 **What customers buy**
@@ -950,7 +950,7 @@ Phase 3, two tiers ship at launch.
   Signals floor at $1.00 (existing `MIN_PRICE_FOR_SIGNAL`); SEC penny
   ceiling at $5.
 - Gate the SIGNAL, not ticker existence. Penny tickers stay visible
-  in search, screener, watchlist, ticker pages — the score / rating
+  in search, screener, watchlist, ticker pages, the score / rating
   panel renders LOCKED with an Elite upgrade prompt for Pro / trial
   users. **Never hide tickers or strip rows.** That's the discovery
   surface; locking it is a positioning failure. The upgrade prompt is
@@ -962,7 +962,7 @@ Phase 3, two tiers ship at launch.
 **Tournament placement** (deliberate)
 
 - Tournaments are a **Pro** feature, not Elite-only. They're the
-  acquisition / funnel hook — let the bigger tier audience play, build
+  acquisition / funnel hook, let the bigger tier audience play, build
   the leaderboard density, drive social referral and engagement.
   Reserving them for Elite would gut the participation that makes the
   feature work.
@@ -976,10 +976,10 @@ Phase 3, two tiers ship at launch.
 
 - Geo-based via Stripe, **explicit per-currency prices** (not live FX).
   UK customers see GBP, rest of world sees USD. GBP set at rough
-  parity with USD per-tier — the FX delta is absorbed into the
+  parity with USD per-tier, the FX delta is absorbed into the
   product, not pushed onto the customer per-billing-cycle.
 
-**Referral programme** — carry the earlier 1-month-free-per-referral
+**Referral programme**, carry the earlier 1-month-free-per-referral
 shape; exact mechanics defer to paywall Phase 1.
 
 **OPEN questions** (deferred to paywall Phase 1, non-blocking for
@@ -992,7 +992,7 @@ pricing lock):
 - Tournament prize pool as % of revenue. Has to scale with subscriber
   count without writing cheques against unproven revenue.
 - Exact Elite API scope: rate limits, historical depth, raw scores vs
-  signals-only payloads. Scoped during paywall Phase 1 design — the
+  signals-only payloads. Scoped during paywall Phase 1 design, the
   question is what API access is worth $50/mo over Pro, not just
   "does API exist."
 
@@ -1007,16 +1007,16 @@ Privacy/Terms/Disclaimer already on website. Stripe account active.
 ### PHASE 2 BASELINE: PAYWALL ENFORCEMENT + BILLING (complete 29 May 2026)
 
 Both halves of the application-layer arc are shipped and form the
-new permanent baseline. PATH A is no longer an active arc — it's
+new permanent baseline. PATH A is no longer an active arc, it's
 state.
 
-- **Step 3 — Enforcement** (commits 8382004 → cafe6a3, 26-27 May
+- **Step 3, Enforcement** (commits 8382004 → cafe6a3, 26-27 May
   2026): tier model collapsed to two-tier + floor; trial overlay
   resolver in `config/entitlements.py`; 10 ungated endpoints sealed;
   locked-teaser UX across dashboard Panel 7, `/penny`,
   `/penny/screener`, `/backtest`, `/ticker`; schema columns added
   for the Stripe handoff.
-- **Phase 2 — Billing** (commits aa88847 → 41dd275, 27-29 May
+- **Phase 2, Billing** (commits aa88847 → 41dd275, 27-29 May
   2026): `subscription_events` idempotency table;
   signature-verified `POST /webhooks/stripe` route; `GET /upgrade`
   endpoint with geo-resolved currency; 2 Products + 8 Prices in
@@ -1047,7 +1047,7 @@ state.
   integration already on the planned-integrations list).
 - Referral programme.
 
-**Next major arc candidate: PATH B — engine + data substrate.**
+**Next major arc candidate: PATH B, engine + data substrate.**
 FINRA short-interest composite, event-fade as its own component,
 components 9-16, the graduating-bar checkpoint at ~6 months, plus
 the Yahoo Finance pipeline broadening originally queued under
@@ -1064,7 +1064,7 @@ dependency.
 Multi-session design work driving the post-restructure of SignalIntel toward a polished, brand-coherent product. Brief locked across four sections in a single session. Implementation follows in subsequent sessions via frontend-design mockup pass → review → CC implementation per page.
 
 Aesthetic split locked:
-- Marketing homepage (public): Public.com / Robinhood lineage — clean, generous whitespace, hero-first
+- Marketing homepage (public): Public.com / Robinhood lineage, clean, generous whitespace, hero-first
 - Logged-in app: Trade-Ideas / Trading Central density, refined toward institutional via Option C palette alignment
 
 ---
@@ -1081,21 +1081,21 @@ Admin-only (not in nav, direct URL or admin link):
 /system
 
 Full page inventory:
-- / (public) — NEW. Marketing homepage. Public-Robinhood aesthetic. Hero + differentiators + sign-up CTA.
-- /dashboard — RESTRUCTURED. Overview panel. Trade-Ideas density aesthetic. 13-panel grid. **[SHIPPED 21 May 2026 — commit db38c56; design contract banked at `docs/mockups/dashboard_restructure_v1.html`; greenfield route + template; Elite-gated Penny spotlight (server-side); legacy index() body preserved as dead code under the / → /dashboard redirect.]**
-- /signals — NEW (extracted). Top Signals (full) + Discovery Themes (full) + tier breakdown.
-- /screener — UNCHANGED. Full 33-column screener with filter sidebar.
-- /markets — UNCHANGED. Global markets overview. Major Indices / S&P Sectors / Currencies / Crypto.
-- /watchlist — UNCHANGED.
-- /penny — UNCHANGED structure, ENHANCED gating. Visible in top nav for all tiers; content gated to Elite.
-- /penny/screener — UNCHANGED. Same gating as /penny.
-- /ticker/<symbol> — ENHANCED. New folded-in sections: Upcoming Earnings, Dividend Profile, per-ticker Economic Events.
-- /earnings — DEMOTED. Out of top nav. Accessed via Dashboard panel "View full calendar →" CTA.
-- /dividends — DEMOTED. Out of top nav. Accessed via Dashboard panel "View full dividends →" CTA.
-- /methodology — RENAMED + EXPANDED. Tabs: Definitions / Score Components / Backtest Performance / Current Distribution. Replaces /ratings.
-- /backtest — FOLDED. Now lives as a tab inside /methodology.
-- /system — DEMOTED. Removed from top nav. Footer-link or admin-only.
-- /login — UNCHANGED for now.
+- / (public), NEW. Marketing homepage. Public-Robinhood aesthetic. Hero + differentiators + sign-up CTA.
+- /dashboard, RESTRUCTURED. Overview panel. Trade-Ideas density aesthetic. 13-panel grid. **[SHIPPED 21 May 2026, commit db38c56; design contract banked at `docs/mockups/dashboard_restructure_v1.html`; greenfield route + template; Elite-gated Penny spotlight (server-side); legacy index() body preserved as dead code under the / → /dashboard redirect.]**
+- /signals, NEW (extracted). Top Signals (full) + Discovery Themes (full) + tier breakdown.
+- /screener, UNCHANGED. Full 33-column screener with filter sidebar.
+- /markets, UNCHANGED. Global markets overview. Major Indices / S&P Sectors / Currencies / Crypto.
+- /watchlist, UNCHANGED.
+- /penny, UNCHANGED structure, ENHANCED gating. Visible in top nav for all tiers; content gated to Elite.
+- /penny/screener, UNCHANGED. Same gating as /penny.
+- /ticker/<symbol>, ENHANCED. New folded-in sections: Upcoming Earnings, Dividend Profile, per-ticker Economic Events.
+- /earnings, DEMOTED. Out of top nav. Accessed via Dashboard panel "View full calendar →" CTA.
+- /dividends, DEMOTED. Out of top nav. Accessed via Dashboard panel "View full dividends →" CTA.
+- /methodology, RENAMED + EXPANDED. Tabs: Definitions / Score Components / Backtest Performance / Current Distribution. Replaces /ratings.
+- /backtest, FOLDED. Now lives as a tab inside /methodology.
+- /system, DEMOTED. Removed from top nav. Footer-link or admin-only.
+- /login, UNCHANGED for now.
 
 Routing logic for public/private boundary:
 - Logged-out user visits / → marketing homepage
@@ -1163,7 +1163,7 @@ Panel 7: Penny Stock of the Day (Elite-only, full-width)
 - Purpose: daily curated penny pick with deep context.
 - Tier gate: Elite only. Non-Elite users do not see this panel at all.
 - Data sources: existing /penny "Stock of the Day" logic.
-- Content: ticker spotlight card matching /penny Stock of the Day layout — ticker, company, price, composite breakdown (Momentum / Quality / Insider), legal risk badge, "why we're watching this" bullet points.
+- Content: ticker spotlight card matching /penny Stock of the Day layout, ticker, company, price, composite breakdown (Momentum / Quality / Insider), legal risk badge, "why we're watching this" bullet points.
 - Interaction: full panel click → ticker page.
 - CTA: "Open Penny Stock Hub →" routes to /penny.
 
@@ -1209,13 +1209,13 @@ Panel 13: News Headlines (bottom-row-2-right)
 - Data sources: news scraper feed.
 - Content: 5-7 latest headlines: source, headline, relative time, optional ticker tag.
 - Interaction: headline click → external news URL in new tab.
-- CTA: "More news →" expands panel or opens modal (News does not get its own page — Option B locked).
+- CTA: "More news →" expands panel or opens modal (News does not get its own page, Option B locked).
 
 ---
 
 ### SECTION 3: MARKETING HOMEPAGE SPEC
 
-Aesthetic: Public/Robinhood lineage — clean, generous whitespace, restrained colour, hero-first. Distinct from logged-in app density but visually compatible (same brand colours, same typeface family).
+Aesthetic: Public/Robinhood lineage, clean, generous whitespace, restrained colour, hero-first. Distinct from logged-in app density but visually compatible (same brand colours, same typeface family).
 
 Audience: serious independent traders. Not institutional, not casual.
 
@@ -1248,7 +1248,7 @@ Section 4: Discovery themes
 - Headline: "Find what matters today."
 - Subhead: "Curated discovery themes surface what's interesting without requiring you to build screeners from scratch."
 - Visual: 4-6 theme cards using live data from system: Top Signal Momentum, Dividend Powerhouses, Oversold Signals, Earnings This Week, Insider Accumulation, Undervalued.
-- Note: live data not screenshots — makes the homepage feel current.
+- Note: live data not screenshots, makes the homepage feel current.
 
 Section 5: Live proof (numbers, not testimonials)
 - Headline: "Live as you read this."
@@ -1260,7 +1260,7 @@ Section 6: Pricing (Beta-marked, Option B from earlier lock)
 - Subhead: "Free during beta. Full pricing rolls out at general launch."
 - 3-column pricing table matching config/tiers.py (2-tier + floor launch
   model, post-Step-3): Free (unpaid floor) / Pro / Elite. Starter is a
-  DEAD tier — removed at Step 0 of the paywall arc; any legacy stored
+  DEAD tier, removed at Step 0 of the paywall arc; any legacy stored
   value coerces to 'free' via get_tier's default branch.
 - Each column: feature checklist (3-5 lines), "Free during beta" marker, sign-up CTA.
 - Bottom line: "All paid tiers free during beta. Pricing announced before general launch."
@@ -1287,7 +1287,7 @@ Open visual question for frontend-design: anchored top nav for logged-out visito
 
 Parent brand: The Signal Vault
 - Wordmark: Trajan Pro / serif equivalent, navy
-- Mark: vault wheel — V centred in concentric rings, navy + gold
+- Mark: vault wheel, V centred in concentric rings, navy + gold
 - Palette: navy (#1a2a3f range), gold (#c8a04a range), white
 - Tone: institutional, heritage, trustworthy
 - Asset: docs/brand/The Signal Vault Logos.PNG (committed 17 May 2026, 67278de)
@@ -1314,15 +1314,15 @@ Logged-in app palette refinement (Option C locked):
 - Soften grid pattern
 - Refine chart palette to brand colours
 - Background may stay black or shift to very dark navy (frontend-design decision)
-- Not a full rebrand — palette alignment only
+- Not a full rebrand, palette alignment only
 
 Implementation sequence (multi-session):
 
-Mockup pass — status as of 18 May 2026:
+Mockup pass, status as of 18 May 2026:
 - ✅ Marketing homepage Hero v3 (banked 17 May 2026, commit 3d4ca9a)
 - ✅ Marketing homepage Section 2 / Transparency v1 (banked 18 May 2026, commit 7f8014d)
 - ✅ Marketing homepage Section 3 / Methodology v2 (banked 18 May 2026, commit 7f8014d)
-- ⏭️ NEXT: Dashboard restructure mockup (13-panel grid per brief Section 2 — above-the-fold 3x2 core, Elite-only Penny Stock spotlight full-width, below-the-fold 3x2). Highest-leverage next design problem because (a) Dashboard is the most-visited logged-in page once paywall lands, (b) it tests whether the Hybrid C palette refinement works in the dense, dark, monospace logged-in environment (only the light Public.com aesthetic has been proven so far), (c) the 13-panel grid is the hardest remaining design problem in the brief and better solved while context is fresh.
+- ⏭️ NEXT: Dashboard restructure mockup (13-panel grid per brief Section 2, above-the-fold 3x2 core, Elite-only Penny Stock spotlight full-width, below-the-fold 3x2). Highest-leverage next design problem because (a) Dashboard is the most-visited logged-in page once paywall lands, (b) it tests whether the Hybrid C palette refinement works in the dense, dark, monospace logged-in environment (only the light Public.com aesthetic has been proven so far), (c) the 13-panel grid is the hardest remaining design problem in the brief and better solved while context is fresh.
 - Pending: Marketing homepage Sections 4-8 (Discovery themes, Live proof stats, Pricing, Final CTA, Footer). Each is a variation on the now-locked design language; can be drafted as a batch later when ready to ship the full homepage to CC for implementation.
 - Pending: Methodology page mockup (Section 1 detail). Replaces /ratings, folds in /backtest as a tab.
 
@@ -1349,7 +1349,7 @@ Per-page CC implementation: 1-2 sessions per page after mockups locked. Total su
 - Validate everything reflexively
 - Skip pushback because the conversation is going well
 - Front-load every response with restating his question
-- Use em-dashes (—). Use commas or brackets.
+- Use em-dashes (U+2014). Use commas or brackets.
 - Pretend uncertainty when you're confident, or vice versa
 - Defer on technical decisions where you have a real opinion
 - Suggest "let's pick this up tomorrow" or pace the session
@@ -1388,7 +1388,7 @@ locked atomically between phases (each Phase 2 starts from a frozen
 set of decisions, no decision drift mid-implementation). The same day
 also surfaced two pattern stress points: a misread file comment that
 sent Phase 2A to a wrong pin date (recovered via empirical sweep
-during Phase 2 — STOP-and-surface worked), and a freshness test red
+during Phase 2, STOP-and-surface worked), and a freshness test red
 on first run that the by-design rule (P26) tells us to commit anyway.
 
 Phase 1 diagnostic must inventory NOT just current read/write paths
@@ -1594,7 +1594,7 @@ empirically: classic Z penalised 62.9% of the 3,631 computable
 tickers (1,691 distress, 594 grey, 2,285 total any-penalty).
 Healthcare alone constituted 47% of the Z<0 deep-distress bucket,
 mostly biotech and clinical-stage pharma with negative retained
-earnings — accurate Altman distress signal mathematically, wrong
+earnings, accurate Altman distress signal mathematically, wrong
 signal for the business model.
 
 Methodology switched to Altman Z'' (1995 non-manufacturing) in
@@ -1726,7 +1726,7 @@ recommendation, the next prompt. Not three paragraphs explaining how
 the decision was reached.
 
 This is durable: it holds across sessions, not just the 14 May one.
-It does NOT mean suppressing pushback or devil's advocate — those are
+It does NOT mean suppressing pushback or devil's advocate, those are
 still expected when warranted. It means delivering conclusions, not
 derivations.
 
@@ -1805,7 +1805,7 @@ child processes reading files in protected paths.
 
 The fix: move the project tree out of ~/Documents/ entirely. We chose
 ~/signalintel. The migration was straightforward because production
-code already used relative paths or os.path.expanduser — only 5 one-off
+code already used relative paths or os.path.expanduser, only 5 one-off
 legal-risk scripts and CLAUDE.md hardcoded the old absolute path.
 
 The lesson is forward-looking: future macOS deployments should default
@@ -1831,7 +1831,7 @@ root cause.
 ### Context compaction can rewrite recently-completed work (15 May 2026 lesson)
 
 After context compaction mid-session, CC offered to "proceed with Step
-11 LaunchAgent load" — work that had already been completed an hour
+11 LaunchAgent load", work that had already been completed an hour
 earlier and verified empirically (PID 26090, exit code 0, site at 200,
 old path renamed to .OLD). CC had no memory of the intervening turns.
 Had Mark fired CC's suggested commands, the LaunchAgent would have
@@ -1844,21 +1844,21 @@ file existence checks, git log). After re-anchoring, CC was correct
 again. The lesson: after any context compaction event, both CC and
 Athena should treat subsequent CC suggestions as suspect until they're
 empirically verified against on-disk state. P22 (session date is
-empirical) extends to "session state is empirical" — verify before
+empirical) extends to "session state is empirical", verify before
 acting.
 
 ### Beta tester is a positioning audit (18 May 2026 lesson)
 
 Guy (friend, casual amateur trader, Trading212 pie-copier) shared 5
 beta-feedback points on 18 May. Athena's first reflex was to dismiss
-him as "outside the target user" — the product is for sophisticated
+him as "outside the target user", the product is for sophisticated
 independent traders, not casual pie-copiers, so his bewilderment at
 the terminology wasn't a product problem.
 
 Mark pushed back. The tagline locked on 17 May was "institutional-grade
 tools for non-institutional traders." Guy is literally a
 non-institutional trader. Dismissing his confusion as wrong-user is a
-positioning failure — the tagline promises to serve him, and the
+positioning failure, the tagline promises to serve him, and the
 surface doesn't.
 
 Lesson: when reflex is to frame a beta tester as wrong-user, check the
@@ -1929,13 +1929,13 @@ without closing parens, `except` clauses appearing immediately
 after. Athena's first instinct was that the file was syntactically
 broken. The diagnostic prompt that followed re-elicited the file
 content via `sed -n` and `cat`, plus a `py_compile` syntactic check,
-and confirmed the source on disk was intact — the chat client had
+and confirmed the source on disk was intact, the chat client had
 truncated continuation lines on render.
 
 Lesson: when paste output looks structurally impossible (orphan
 function calls, missing parens, mid-function-body except clauses),
 re-elicit via sed/cat + py_compile before alarming. This is
-symmetric with the 14 May "Diagnose before alarming" lesson —
+symmetric with the 14 May "Diagnose before alarming" lesson,
 applies to chat client render artefacts as well as git status
 surprises. The discipline is empirical: investigate origin before
 framing as a violation or a bug.
@@ -1959,25 +1959,25 @@ isolation for one workstream, sequencing prompts so only one CC writes
 at a time, or accepting the parallelism with explicit "carry the 
 other-session modifications through, never stage them" instructions 
 baked into every prompt. The risk surface is shared HEAD, shared 
-working tree, shared `git status` — not file conflicts (different 
+working tree, shared `git status`, not file conflicts (different 
 files generally don't conflict), but state-confusion during 
 multi-step operations like amend + verification walk.
 
 The hook walk completed cleanly because the resume prompt was 
 rewritten with explicit other-session handling after the STOP. That's 
-the right shape — but it's better caught at session start than at 
+the right shape, but it's better caught at session start than at 
 the first STOP.
 
 Operational rule: at the start of any session where Mark mentions 
-parallel work, Athena asks one clarifying question — "what files is 
-the other session likely to touch?" — and plans the prompt sequence 
+parallel work, Athena asks one clarifying question, "what files is 
+the other session likely to touch?", and plans the prompt sequence 
 around that surface. The answer goes into the session's mental model 
 before any CC prompt fires.
 
 ### Migration single-owner (25 May 2026 lesson)
 
-Schema column migrations for a table belong in ONE owner — the
-PRAGMA-gated block in `initialise_schema` — never duplicated into an
+Schema column migrations for a table belong in ONE owner, the
+PRAGMA-gated block in `initialise_schema`, never duplicated into an
 inline bare-except ALTER at the insert site. The v0.17.0 sub-score
 persistence work landed the same five columns in two places: a
 PRAGMA-gated ALTER in `initialise_schema` (canonical, mirrors 68d73f3),
@@ -1990,7 +1990,7 @@ diagnostic.
 
 Rule: before removing a fallback migration, prove every path to the
 insert is preceded by the canonical migration on the same DB. The
-Part 32 consolidation (commit afac3b3) followed this pattern — grep
+Part 32 consolidation (commit afac3b3) followed this pattern, grep
 every caller of `insert_signal_scores` (filtered to actual function
 calls, not docstring/comment mentions), grep every caller of
 `initialise_schema`, walk the call graph per real caller, state
@@ -2011,10 +2011,10 @@ CC self-cleared the auth-adjacent pre-commit hook with `--no-verify`
 multiple times during the v0.17.0 substrate ship: the soft-PT
 neutralisation in `database/db.py`, the sub-score persistence schema
 ALTER in the same file, the migration consolidation. Each time CC's
-reasoning was "the diff is clean — get_analyst_momentum_map only,
+reasoning was "the diff is clean, get_analyst_momentum_map only,
 no @login_required / current_user() / session / login routes
 touched." The reasoning was correct on every diff. P23 still exists
-because a human must sign off on auth-adjacent diffs — CC reasoning
+because a human must sign off on auth-adjacent diffs, CC reasoning
 its own way past the hook is the enforcement layer running backwards.
 
 Rule: `--no-verify` on a P23-path file is Mark's call, NEVER CC's,
@@ -2106,7 +2106,7 @@ registry-vs-reality question.
 
 ---
 
-## PAYWALL ENFORCEMENT + BILLING (Step 3 + Phase 2 — complete 26-27 May & 29 May 2026)
+## PAYWALL ENFORCEMENT + BILLING (Step 3 + Phase 2, complete 26-27 May & 29 May 2026)
 
 Both halves shipped end-to-end. Enforcement (Step 3) across commits
 8382004 → cafe6a3. Billing (Phase 2) across commits aa88847 →
@@ -2116,10 +2116,10 @@ with all four Stripe schema columns populated and
 `tier_effective_until` one month out.
 
 **Tier model (locked, two-tier + floor):**
-  - `free` — UNPAID FLOOR. `watchlist_limit=0`. Sees no proprietary
+  - `free`, UNPAID FLOOR. `watchlist_limit=0`. Sees no proprietary
     scoring data anywhere. Post-trial state and the hard-paywall floor.
-  - `pro` — full signals, alerts, tournaments. `watchlist_limit=5`.
-  - `elite` — Pro + API access + unlimited watchlists + penny ($1-5)
+  - `pro`, full signals, alerts, tournaments. `watchlist_limit=5`.
+  - `elite`, Pro + API access + unlimited watchlists + penny ($1-5)
     score panel.
   - `starter` is a DEAD tier; any legacy stored value coerces to `free`
     via `get_tier()`'s default branch.
@@ -2129,23 +2129,23 @@ with all four Stripe schema columns populated and
 `trial_overlay`) by USER_TIERS order. While
 `(now - trial_started_at) < 7 days`, the overlay grants `'elite'`
 regardless of stored tier. Day-8 the overlay lifts at access time
-(no cron dependency) and effective_tier falls to the stored column —
+(no cron dependency) and effective_tier falls to the stored column,
 hard paywall for unpaid trialists, paid floor for paying users.
 
 **New module: `config/entitlements.py`** (single source of truth for
 all tier-aware decisions):
-  - `effective_tier(user)` — trial overlay resolver
+  - `effective_tier(user)`, trial overlay resolver
   - `trial_active(user)`, `TRIAL_DAYS=7`
   - Capability predicates: `can_view_penny_signals(tier)`,
     `can_view_score_for_ticker(tier, price)` ($5 boundary lives
-    HERE — single-sourced), `can_use_alerts(tier)`,
+    HERE, single-sourced), `can_use_alerts(tier)`,
     `can_enter_tournament(tier)`, `can_call_api(tier)`,
     `can_create_watchlist(tier, count)` (delegates to config/tiers.py)
   - Row-strip helper: `strip_scores_for_non_elite(rows, tier,
-    price_key='price')` — nulls every field in
+    price_key='price')`, nulls every field in
     `PROPRIETARY_SCORE_FIELDS` on rows the tier can't see scores for.
   - Flag-filter helper: `filter_proprietary_flags_for_non_elite(rows,
-    tier, price_key, flag_key)` — drops proprietary flag strings from
+    tier, price_key, flag_key)`, drops proprietary flag strings from
     `flag_list` for gated rows.
   - `PROPRIETARY_SCORE_FIELDS` (10 fields: composite + 4 sub-scores +
     target_price + target_upside + rating + new_rating + old_rating).
@@ -2154,10 +2154,10 @@ all tier-aware decisions):
 **Proprietary-flag discipline (`signals/scorer.py`):** `build_flags`
 appends proprietary flag strings ONLY from named-tuple constants
 (`_PROPRIETARY_INSIDER_FLAGS`, `_PROPRIETARY_REVERSION_FLAGS`).
-`PROPRIETARY_FLAGS` is a `frozenset` derived from those same tuples —
+`PROPRIETARY_FLAGS` is a `frozenset` derived from those same tuples,
 single source, no parallel hand-maintained list. Adding a future
 proprietary flag means appending to the tuple; the gate set inherits
-automatically. Stored flag column is byte-identical to pre-Step-3 —
+automatically. Stored flag column is byte-identical to pre-Step-3,
 NO `SCORING_ENGINE_VERSION` bump. Inline-literal-regression test in
 `tests/test_scorer.py` asserts every proprietary code path emits a
 flag that's a member of `PROPRIETARY_FLAGS`.
@@ -2167,7 +2167,7 @@ flag that's a member of `PROPRIETARY_FLAGS`.
 "Upgrade to Elite" lock state across dashboard Panel 7 (migrated),
 `/penny`, `/penny/screener`, `/backtest` per-tier trades (inline
 variant), and the `/ticker` score panel. CSS partial is included
-per-page (dashboard does NOT include `_nav.html` — that was the
+per-page (dashboard does NOT include `_nav.html`, that was the
 Walk-F discovery; CSS in `_nav.html` would have missed dashboard).
 
 **Schema (added in commit 0d0b8ab, wired by the Phase 2 webhook):**
@@ -2180,10 +2180,10 @@ by the `checkout.session.completed` handler;
 `tier_effective_until` is refreshed by both checkout and
 cancellation handlers.
 
-**`get_user_by_id` filters `is_active=1`** (commit 72b55b8) —
+**`get_user_by_id` filters `is_active=1`** (commit 72b55b8),
 parity with `get_user_by_username`. A deactivated user with a live
 session loses access at the next session lookup. Note: Phase 2
-cancellation does NOT deactivate (ride-out semantics — see Billing
+cancellation does NOT deactivate (ride-out semantics, see Billing
 architecture below). The `is_active=1` filter remains the policy
 for any future explicit deactivation path (admin block, account
 delete, etc.).
@@ -2192,7 +2192,7 @@ delete, etc.).
 
 - **`subscription_events` table:** idempotency log for inbound
   Stripe events. `stripe_event_id` UNIQUE constraint is the
-  idempotency lock — duplicate Stripe deliveries fail INSERT and
+  idempotency lock, duplicate Stripe deliveries fail INSERT and
   short-circuit to 200 no-op. Three forensic indexes (user,
   customer, time). Audit columns `tier_before` / `tier_after` /
   `raw_payload` / `error_message` for post-hoc reconstruction of
@@ -2200,7 +2200,7 @@ delete, etc.).
   `initialise_user_schema` in `database/db.py`.
 - **`POST /webhooks/stripe`:** HMAC signature verification via
   `stripe.Webhook.construct_event` keyed by
-  `STRIPE_WEBHOOK_SECRET`. No `@login_required` — authenticated by
+  `STRIPE_WEBHOOK_SECRET`. No `@login_required`, authenticated by
   the signature, not Flask session. Fails soft to 200 on handler
   exceptions (`status='failed'` audit row) to prevent Stripe retry
   storms on deterministic bugs.
@@ -2215,7 +2215,7 @@ delete, etc.).
 - **Cancellation handler (`customer.subscription.deleted`):**
   RIDE-OUT semantics. Sets `tier_effective_until` to the
   subscription's period end. **Does NOT change `users.tier` or
-  `users.is_active`** — the user keeps paid access for the
+  `users.is_active`**, the user keeps paid access for the
   ridden-out period. The downgrade-to-free sweep when the period
   actually expires is **deferred** (separate design call;
   scheduled-job vs entitlement-layer check both viable).
@@ -2245,18 +2245,18 @@ delete, etc.).
   mirror the production shape (P15 lesson: matching wrongness on
   both sides of a test renders the test toothless).
 
-**PROCESS NOTE — scope leak surface by DATA, not by URL.** The
+**PROCESS NOTE, scope leak surface by DATA, not by URL.** The
 original Step-3 Phase 1 scoped "penny endpoints" and missed ~10
 routes that leaked penny scores (screener with `?price_max=5`,
 signals family, search, dividends, industry, ticker-tape,
 portfolios, backtest, news, ratings). The real surface was "any
 endpoint emitting score columns to a non-elite caller for a
-penny-band ticker." A second sweep — grepping every `@app.route`
-for `composite_score`/`momentum_score`/etc. references — found the
+penny-band ticker." A second sweep, grepping every `@app.route`
+for `composite_score`/`momentum_score`/etc. references, found the
 broader leak. Future leak/gate scoping: define the surface by the
 data that must be protected, not the routes you expect to carry it.
 
-**PROCESS NOTE — run the FULL test suite before each commit.**
+**PROCESS NOTE, run the FULL test suite before each commit.**
 `tests/test_watchlists.py` had 7 fixture-rooted failures from
 Step 0 (free=floor + `watchlist_limit=0` broke the fixture that
 created a user without setting tier). The failures went unnoticed
@@ -2319,7 +2319,7 @@ STRUCTURAL DEBT:
   inflection); (2) whether flag substrate belongs in the DB or is
   computed in-flight from signal_scores; (3) rendering surface (ticker
   page card, screener column, watchlist badge). Blocked on Yahoo data
-  volume — flag logic is only useful once enrichment tables have
+  volume, flag logic is only useful once enrichment tables have
   enough rows to produce meaningful signals.
 
 - COMPONENT METADATA CONSUMERS: the JS-only registry is the right
@@ -2342,13 +2342,13 @@ STRUCTURAL DEBT:
 
 - SCHEDULER LAUNCHAGENT (15 May 2026): Phase 2c migrated gunicorn to LaunchAgent for reboot resilience. The scheduler (currently PID after migration) is still a foreground process started via `nohup python main.py scheduler`. It survives logout (reparented to launchd PID 1) but does NOT survive reboot. Symmetric LaunchAgent treatment needed: regenerate plist via plistlib pattern, point at ~/signalintel/venv/bin/python and ~/signalintel/main.py, load to launchctl. ~30 minutes work, dependency-free from any current work in flight.
 
-- SB01 SNAPSHOT MISMATCH (15 May 2026, pre-existing): Pytest reports `SB01.composite_score_raw: expected 76.6, got 74.7` and `SB01.composite_score: expected 76.6, got 74.7` failing in test_scorer_snapshot.py. First observed in Phase 2a Gate 3 (14 May session), persisted through Phase 2c migration. Test was passing on 14 May 2026 (Phase 2b-ii commit 48fdf49 regenerated baseline). Either the snapshot baseline is stale because of a substrate change between then and now, or the SB01 fixture is producing different output due to a non-deterministic dependency. Investigate as a focused diagnostic session. Not blocking deployment because the test suite otherwise passes (231 + 4 skipped baseline plus the 2 additional passes from Yahoo data landing — see test count drift FOLLOWUP).
+- SB01 SNAPSHOT MISMATCH (15 May 2026, pre-existing): Pytest reports `SB01.composite_score_raw: expected 76.6, got 74.7` and `SB01.composite_score: expected 76.6, got 74.7` failing in test_scorer_snapshot.py. First observed in Phase 2a Gate 3 (14 May session), persisted through Phase 2c migration. Test was passing on 14 May 2026 (Phase 2b-ii commit 48fdf49 regenerated baseline). Either the snapshot baseline is stale because of a substrate change between then and now, or the SB01 fixture is producing different output due to a non-deterministic dependency. Investigate as a focused diagnostic session. Not blocking deployment because the test suite otherwise passes (231 + 4 skipped baseline plus the 2 additional passes from Yahoo data landing, see test count drift FOLLOWUP).
 
 - TEST COUNT DRIFT (15 May 2026): Phase 2c Step 6 pytest from new path reported 233 passing + 2 skipped instead of the expected 231 + 4 skipped baseline. Two tests appear to have transitioned from skip to pass, likely because Yahoo enrichment data has begun landing in production tables (institutional_holders Sunday, financial_statements Monday, earnings_history Tuesday) and freshness skip conditions no longer apply. Verify by running pytest -v on the four Yahoo freshness tests and checking which two now have data backing their assertions. Not a regression; positive signal that Yahoo pipeline is functioning.
 
 - 16:30 FINVIZ SCRAPE WINDOW (15 May 2026): The 16:30 BST FinViz scrape window coincided with the Phase 2c migration kill-and-rsync sequence (scheduler killed at ~16:39, restarted from new path at ~16:42). Last screener_snapshot row is at 11:50 today. One missing scrape window. Tomorrow's 07:00 scrape will produce fresh data; no recovery action needed. Flagged for awareness.
 
-- MOBILE RESPONSIVENESS (15 May 2026): SignalIntel UI was built for laptop/desktop viewports. On phone Chrome, horizontal scrolling required to access top nav (Dashboard, Signal Tiers, Screener, etc.); sidebar headers cut off. Login flow works on phone after cache clear. The product is usable on phone but not designed for it. Multi-session work to retrofit responsive CSS across all templates, mobile nav redesign, touch-optimised filters, mobile-friendly table behaviour for screener and watchlist. Phase 3 candidate. Defer until Guy's feedback identifies which mobile workflows matter most (alerts? watchlist checking? screener browsing?) — informs which surfaces to optimise first.
+- MOBILE RESPONSIVENESS (15 May 2026): SignalIntel UI was built for laptop/desktop viewports. On phone Chrome, horizontal scrolling required to access top nav (Dashboard, Signal Tiers, Screener, etc.); sidebar headers cut off. Login flow works on phone after cache clear. The product is usable on phone but not designed for it. Multi-session work to retrofit responsive CSS across all templates, mobile nav redesign, touch-optimised filters, mobile-friendly table behaviour for screener and watchlist. Phase 3 candidate. Defer until Guy's feedback identifies which mobile workflows matter most (alerts? watchlist checking? screener browsing?), informs which surfaces to optimise first.
 
 - PENNY SCREENER EXCHANGE FILTER (post-Yahoo): deferred from 9 May
   per Phase 1 finding that "Other" bucket is dominated by ETFs
@@ -2375,7 +2375,7 @@ STRUCTURAL DEBT:
 - SHADOWED TIER MAP CONVERGENCE (17 May 2026, P13 Fix 2): Nine templates
   currently define their own TIER_SHORT / TIER_LABELS maps inline
   (index.html, watchlist.html, screener.html, penny.html,
-  penny_screener.html, backtest.html, ticker.html, ratings.html — Jinja
+  penny_screener.html, backtest.html, ticker.html, ratings.html, Jinja
   + JS variants). signals/signal_labels.py is the canonical Python
   source. Risk: drift across templates if labels change. Approach:
   shared Jinja partial _tier_macros.html (matching existing
@@ -2388,9 +2388,9 @@ STRUCTURAL DEBT:
   but the module has zero non-test imports in production. Either
   patch with tier_short() calls and leave for potential future
   revival, or delete the module entirely. Decision shape, not
-  engineering work — pick a side and execute in <15 minutes.
+  engineering work, pick a side and execute in <15 minutes.
 
-- ALTMAN PHASE 2E — PARTIAL-RUN MIXED-VERSION WATCHLIST RISK (18 May
+- ALTMAN PHASE 2E, PARTIAL-RUN MIXED-VERSION WATCHLIST RISK (18 May
   2026, post-v0.14.0 cutover): Watchlist + ticker-detail pages use
   per-ticker `MAX(scored_at)` patterns (database/db.py:981-985,
   web/app.py:1343-1344). If a 0.14.0 scoring run crashes partway
@@ -2402,14 +2402,14 @@ STRUCTURAL DEBT:
   scoring run. Risk window is tonight's 20:00 BST first 0.14.0 run
   and any subsequent partial-completion event.
 
-- ALTMAN PHASE 2E — HISTORY CHART SILENT METHODOLOGY SHIFT (18 May
+- ALTMAN PHASE 2E, HISTORY CHART SILENT METHODOLOGY SHIFT (18 May
   2026): Ticker-detail timeline chart at web/app.py:1357-1363 renders
   Z- and Z''-derived composite scores as a continuous line. Users
   won't see the methodology cutover. Fix options: vertical dashed
   line + annotation at the cutover date, OR colour-code points by
   scoring_version. Presentation-layer only, no data integrity issue.
 
-- ALTMAN PHASE 2E — LIVE 0.14.0 DISTRIBUTION MONITORING (18 May 2026): Phase 2b analysis
+- ALTMAN PHASE 2E, LIVE 0.14.0 DISTRIBUTION MONITORING (18 May 2026): Phase 2b analysis
   projected 47.8% penalised footprint under Z'' on the read-only
   analytical universe. The first week of live 0.14.0 scoring data
   will confirm whether the projection holds against real production
@@ -2469,10 +2469,10 @@ SMALL / COSMETIC:
   7-8 May covered the rest. Going forward, new tickers added to the
   universe will need the priority scrape to catch them.
 
-- EM-DASH NULL PLACEHOLDER: '—' used in ticker.html for missing
+- EM-DASH NULL PLACEHOLDER: U+2014 used in ticker.html for missing
   exchange and (post 8 May) for State 1 Legal scorecard ("Not
   analysed"). The 11 May component registry preserved this
-  convention via getValue's `display: '—'` for wasNull. Verify other
+  convention via getValue's `display: U+2014` for wasNull. Verify other
   "no data" placeholders use the same convention.
 
 - FAVICON 404 in browser console: pre-existing, low priority,
@@ -2497,7 +2497,7 @@ SMALL / COSMETIC:
 
 NEW (21 May 2026, post-dashboard ship):
 
-- [DESIGN/STRUCTURAL] **Sitewide design-system migration** — build
+- [DESIGN/STRUCTURAL] **Sitewide design-system migration**, build
   new-design `_nav.html` + `_footer.html` partials and roll across all
   templates so the whole site matches /dashboard. Currently
   dashboard-only; visible seam (Screener etc still show old nav with
@@ -2505,30 +2505,30 @@ NEW (21 May 2026, post-dashboard ship):
   dashboard). Cheaper done AFTER Yahoo (Yahoo touches ticker-page
   render; migrate chrome once after component count settles).
 
-- [VERIFY] **/signals nav target** — confirm the /dashboard nav link
+- [VERIFY] **/signals nav target**, confirm the /dashboard nav link
   to /signals routes to /signals (not /dashboard), and that any
   content overlap is by-design (site-map specs /signals as a distinct
   extracted page). Quick address-bar check.
 
-- [COSMETIC] **Bearish panel display** — `composite>0` filter surfaces
+- [COSMETIC] **Bearish panel display**, `composite>0` filter surfaces
   real names (LVO/LODE/DAO/COE/BW on 21 May) but they render as a
   near-wall of 0/1 because they're genuine distribution-floor scores
   rounded to integers. Decide: show one decimal (0.1 vs 1.0) or accept.
 
-- [PRODUCT] **Penny Stock of the Day selection** — 21 May Elite pick
-  was SNES (STRONG_HOLD / composite ~57, "Stable") — middling for a
+- [PRODUCT] **Penny Stock of the Day selection**, 21 May Elite pick
+  was SNES (STRONG_HOLD / composite ~57, "Stable"), middling for a
   flagship daily conversion surface. Review what
   `_select_penny_stock_of_day()` optimises for; consider raising the
   bar (e.g. minimum composite ≥ 65, prefer STRONG_BUY/BUY).
 
-- [OPS/RESILIENCE] **Off-machine backup** — current nightly backup is
+- [OPS/RESILIENCE] **Off-machine backup**, current nightly backup is
   same-volume only. Protects against deletion/corruption/app-bug, NOT
   disk failure or machine loss. Add off-machine destination (Time
   Machine destination configured / iCloud Drive / rsync to NAS).
   Residual single-point-of-failure on the live product.
 
 - [OPS/MINOR] **Orphaned WAL-sidecar tidy** in `~/signalintel-backups/`
-  — integrity-check on each daily backup spawns `-shm`/`-wal` sidecars
+ , integrity-check on each daily backup spawns `-shm`/`-wal` sidecars
   (~352KB worst case across the 11-file retention window). Rotation
   pattern can't match/clean them (strict `.db` suffix). Optional
   post-rotation cleanup of orphaned sidecars.
@@ -2538,7 +2538,7 @@ NEW (21 May 2026, post-dashboard ship):
 
 - [CLEANUP] **Remove unreachable commented index() body** in
   `web/app.py` once /dashboard is confirmed stable. Left as dead code
-  by the 2A redirect ("add the redirect branch only — do not remove
+  by the 2A redirect ("add the redirect branch only, do not remove
   or rewrite the existing / route logic" was the locked decision at
   ship time; clean-up is the post-confirmation follow-up).
 
@@ -2561,7 +2561,7 @@ NEW (21 May 2026, post-dashboard ship):
   driving distribution / data-quality finding / calibration failure)
   as it's locked.
 
-  **Pilot entry: inst_own.** Ideal first write-up — full evidentiary
+  **Pilot entry: inst_own.** Ideal first write-up, full evidentiary
   trail generated this session: dead-component contribution audit
   (0% live) → root cause (pctHeld parser-key mismatch, CASE B) →
   universe distribution (p25=12.4 / p50=34.4 / p75=48.3 / p95=64.1) →
@@ -2572,7 +2572,7 @@ NEW (21 May 2026, post-dashboard ship):
 
   **Pre-launch positioning call** (deliberate, not default):
   publishing exact formulas + tuned constants makes the product
-  credible AND copyable. Likely resolution — publish theory +
+  credible AND copyable. Likely resolution, publish theory +
   validation evidence (what we measure, why, backtested proof it
   works) while keeping exact tuned constants and inter-component
   weighting as the proprietary layer. Decide consciously pre-launch;
@@ -2580,7 +2580,7 @@ NEW (21 May 2026, post-dashboard ship):
 
 NEW (1 June 2026, Part 35 diagnostic):
 
-- [UX] **Screener empty-state misrepresents staleness as filter-empty** —
+- [UX] **Screener empty-state misrepresents staleness as filter-empty**,
   when the latest `signal_scores.scored_at` is older than today (or
   older than expected for the time of day), the screener renders
   "No results match the current filters" rather than disclosing the
@@ -2594,15 +2594,15 @@ NEW (1 June 2026, Part 35 diagnostic):
   not introduced by Phase 2.
 
 - [SCHEDULING] **Monday-morning job ordering: Screener snapshot
-  precedes Signals scoring** — `main.py` registers 08:00 Screener
-  snapshot before 08:58 Signals scoring. Tue–Fri this is benign
+  precedes Signals scoring**, `main.py` registers 08:00 Screener
+  snapshot before 08:58 Signals scoring. Tue to Fri this is benign
   because the prior-day Signals run from the previous afternoon is
   the freshest reference. Monday means the 08:00 snapshot points at
-  Friday's 17:28 Signals run — stale by ~63 hours until 08:58 closes
+  Friday's 17:28 Signals run, stale by ~63 hours until 08:58 closes
   the gap. Fix: either reorder so Signals runs before Screener, or
   make the Screener job dependency-aware (refuse to snapshot if
   Signals hasn't run today). Lower priority than the empty-state
-  item above — data isn't wrong, only its freshness is misrepresented
+  item above, data isn't wrong, only its freshness is misrepresented
   by the UX gap. Pre-existing scheduling shape, surfaced by Part 35
   diagnostic.
 
@@ -2625,9 +2625,9 @@ Surfaced from `docs/data_source_map.md` (data-source research) and
 the v0.16.0 analyst_mom widening. Carry these forward as next-phase
 design constraints, not as backlog tickets.
 
-- **NEXT NET-NEW COMPONENT — FINRA SHORT-INTEREST.** Free FINRA
+- **NEXT NET-NEW COMPONENT, FINRA SHORT-INTEREST.** Free FINRA
   EquityShortInterest (bi-monthly) + regShoDaily feeds (no key, POST
-  JSON). Evidence: Boehmer/Jones/Zhang 2008 — heavily-shorted stocks
+  JSON). Evidence: Boehmer/Jones/Zhang 2008, heavily-shorted stocks
   underperform ~15.6% annualized. Compute days-to-cover, SI/float,
   SI %-change. Directly powers the named short-squeeze differentiator
   (high SI + Very Strong confluence). Provisional weight ~0.10,
@@ -2714,7 +2714,7 @@ design constraints, not as backlog tickets.
   quality, Cohen-Malloy-Pomorski insider, Womack analyst revisions,
   Bernard-Thomas PEAD, Boehmer short interest). Use these in the
   methodology-documentation workstream above as the per-component
-  evidentiary citations — each component card on /methodology gets
+  evidentiary citations, each component card on /methodology gets
   its paper, period, sample, and headline statistic.
 
 ---
