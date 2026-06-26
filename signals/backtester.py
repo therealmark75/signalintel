@@ -45,6 +45,17 @@ except ImportError:
     logger.warning("yfinance not available (unused by the backtest path).")
 
 
+# Corporate-action straddle guard thresholds (tunable, no scoring impact).
+# Same-day: a date whose intraday MAX/MIN price ratio exceeds this is a split
+# boundary or garbage print; a trade whose entry or exit lands on it is SKIPPED.
+SAME_DAY_STRADDLE_RATIO = 2.0
+# Cross-day: a surviving trade (no same-day straddle on either side, a date the
+# same-day detector cannot flag) whose entry vs exit ratio exceeds this is an
+# unadjusted overnight corporate action. Phase 2b: SKIPPED (was log-only); every
+# skip is logged for audit. Symmetric bound (collapse < 1/ratio, or jump > ratio).
+CROSS_DAY_JUMP_RATIO = 3.0
+
+
 # ── Data classes ──────────────────────────────────
 
 @dataclass
@@ -81,6 +92,28 @@ class BacktestSummary:
 
 # ── Persisted-price lookups (screener_snapshots) ──
 
+def is_straddle_date(conn: sqlite3.Connection, ticker: str, date: str,
+                     threshold: float = SAME_DAY_STRADDLE_RATIO) -> bool:
+    """True if (ticker, date) shows an intraday MAX(price)/MIN(price) ratio above
+    threshold, the signature of a same-day corporate-action split boundary (e.g.
+    KLAC 2026-06-12 carrying both ~241 and ~2411) or a garbage data print. Either
+    fabricates a return if a trade's entry or exit lands on the date, so both are
+    skipped. Rows with NULL or non-positive price are ignored; a date with no
+    priced snapshot returns False (nothing to detect)."""
+    row = conn.execute(
+        """
+        SELECT MIN(price) AS mn, MAX(price) AS mx
+        FROM screener_snapshots
+        WHERE ticker = ? AND DATE(scraped_at) = ?
+          AND price IS NOT NULL AND price > 0
+        """,
+        (ticker, date),
+    ).fetchone()
+    if not row or row[0] is None or row[0] <= 0:
+        return False
+    return (row[1] / row[0]) > threshold
+
+
 def fetch_entry_price(conn: sqlite3.Connection, ticker: str, signal_date: str) -> float | None:
     """
     Entry price for (ticker, signal_date): the latest priced screener snapshot
@@ -88,6 +121,12 @@ def fetch_entry_price(conn: sqlite3.Connection, ticker: str, signal_date: str) -
     with MAX(scraped_at) (latest spot of the day). Returns None if the ticker
     has no priced snapshot on signal_date (unpriceable entry).
     """
+    if is_straddle_date(conn, ticker, signal_date):
+        logger.warning(
+            "Straddle skip (entry): %s %s intraday ratio > %.1f",
+            ticker, signal_date, SAME_DAY_STRADDLE_RATIO,
+        )
+        return None
     row = conn.execute(
         """
         SELECT price
@@ -130,6 +169,12 @@ def fetch_exit_price(conn: sqlite3.Connection, ticker: str, signal_date: str, ho
         return None
 
     nth_date = forward_dates[hold_days - 1][0]
+    if is_straddle_date(conn, ticker, nth_date):
+        logger.warning(
+            "Straddle skip (exit): %s %s N=%d intraday ratio > %.1f",
+            ticker, nth_date, hold_days, SAME_DAY_STRADDLE_RATIO,
+        )
+        return None
     row = conn.execute(
         """
         SELECT price
@@ -224,6 +269,31 @@ def backtest_signals_from_db(
 
         return_pct = ((exit_price - entry_price) / entry_price) * 100
         win        = return_pct > 0
+
+        # Cross-day collapse/jump guard (Phase 2b: SKIPS, was log-only). A
+        # surviving trade has already passed the same-day guard on BOTH its entry
+        # and exit dates (otherwise fetch_entry_price / fetch_exit_price returned
+        # None above and we continued), so amendment condition (b), that neither
+        # date is a same-day straddle, holds by construction here. An extreme
+        # entry-vs-exit ratio at this point is therefore an unadjusted overnight
+        # corporate action the same-day detector cannot see (pre-split entry,
+        # clean post-split exit). SKIP it through the same error-tag exclusion
+        # path the same-day guard uses, and log every skip for audit.
+        _xr = exit_price / entry_price if entry_price else 0
+        if _xr > CROSS_DAY_JUMP_RATIO or (0 < _xr < 1 / CROSS_DAY_JUMP_RATIO):
+            logger.warning(
+                "Cross-day skip (overnight split): %s entry %.2f exit %.2f "
+                "N=%d ratio %.2f, no same-day straddle on either date",
+                ticker, entry_price, exit_price, hold_days, _xr,
+            )
+            results.append(TradeResult(
+                ticker=ticker, signal_date=signal_date,
+                signal_rating=rating, composite_score=sig["composite_score"],
+                entry_price=round(entry_price, 2), hold_days=hold_days,
+                exit_price=round(exit_price, 2),
+                error=f"Cross-day corporate-action collapse (ratio {_xr:.2f})",
+            ))
+            continue
 
         results.append(TradeResult(
             ticker=ticker, signal_date=signal_date,
