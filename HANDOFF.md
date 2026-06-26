@@ -1,12 +1,24 @@
 # SignalIntel Session Handoff
 
-**Last updated:** end of Part 47 (25 June 2026)
-**Engine:** SCORING_ENGINE_VERSION 0.19.0, UNCHANGED this session (no scoring change in Part 47).
-**Repo:** branch `feature/eco-screen`, one feature commit `ee21fbd` ahead of `main`, merging to `main` at this close.
-**Suite:** 446 passed, 0 skipped, exit 0. Baseline correction: Part 46 closed reporting 441 passed / 1 skipped; at Part 47 open the suite read 442 passed / 0 skipped (the lone `fmp_price_targets` skip now has data and passes). After the Values screen build: 446 passed / 0 skipped.
-**Runtime:** gunicorn restarted onto the committed feature this session, fresh pid 24056 (was 65239); scheduler untouched this session (still 61983), no scheduler-job change.
+**Last updated:** end of Part 48 (26 June 2026)
+**Engine:** SCORING_ENGINE_VERSION 0.19.0, UNCHANGED this session (no scoring change in Part 48; P18 did not trigger).
+**Repo:** HEAD `f7b617a` on `main`, pushed to origin, live. Part 48 shipped two merges: `abf7352` (janitorial A-D) and `f7b617a` (registry reconciliation).
+**Suite:** 446 passed, 0 skipped, exit 0.
+**Runtime:** gunicorn restarted onto `main` during the arc (for the app.py app.logger fix); scheduler untouched, no scheduler-job change. PIDs differ next session.
 
-## Part 47 work (this session)
+## Part 48 work (this session)
+
+Two-arc cleanup session (janitorial A-D + registry reconciliation), engine unchanged at 0.19.0.
+
+| Item | Commits | What shipped |
+|---|---|---|
+| 1. Mid-cycle skip-guard | `ab181b5` | test: scoring_run_complete fixture, skips four content gates during mid-cycle scoring window (watermark sentinel, 90-min recency bound) |
+| 2. app.logger NameError fix | `fb1ea76` | fix: app.logger on backtest-stats error path (was undefined logger, latent NameError) |
+| 3. markets_scraper dash fix | `d620e84` | chore: em-dash to comma in markets_scraper log string |
+| 4. Doc cleanup | `4cc6f50` | docs: P1-P32 citation fix, P16 sync into scoring_invariants.md, dash sweep, HANDOFF refresh |
+| 5. Registry reconciliation | `c6b6e3a` | docs: registry reconciliation (PROJECT_CONTEXT.md is canonical P1-P32 registry; scoring_invariants.md reframed as partial rationale; stale Part 47 FOLLOWUP retired) |
+
+## Part 47 work (prior session)
 
 Shipped the Values screen: an exclusion screener-preset (new `exclude_ethical` param on `/api/screener` plus a sidebar toggle) excluding 10 industry strings across 4 categories (tobacco, gambling, alcohol, fossil-fuel extraction), exact-match against `screener_snapshots.industry`, no scoring change, commit `ee21fbd`. Live-verified: 10,940 results unfiltered to 10,768 filtered.
 
@@ -31,21 +43,26 @@ Part 45 (prior session): watchlist earnings job (`ab63a0d`) + economic_calendar 
 3. **Components 15/16 (News Sentiment, Options Flow)**, deferred, dashboard-only.
 4. **Production Stripe flip** (P32), queued.
 5. **Future Path B: per-subscriber earnings delivery** (needs `users.telegram_chat_id` plus bot linking, P23).
-6. feature/eco-screen merged to main at Part 47 close (merge commit 4dbdbf5); main is live (no separate deploy step, deploy = gunicorn restart on main). Suite floor 446 passed / 0 skipped.
 
 ## Part 46 new FOLLOWUPS (banked, not urgent)
 
-- **test_data_integrity.py content tests have no mid-scoring-cycle guard:** any pytest run roughly 14:00-15:20 BST shows phantom failures because the content gates snapshot a half-written scoring run. Skip-guard when `latest_run_date` scoring is incomplete. (Surfaced at Part 46 open when a 15:23 run showed 2 false failures.)
-- **markets_scraper.py line ~100 carries a pre-existing em-dash** in a log string (the `Scrape complete` line). One-character dash-sweep when convenient.
-- **app.py ~line 2744 references a `logger` not defined at module scope:** latent NameError on the backtest-stats error path. Pre-existing, not triggered normally.
+- **test_data_integrity.py content tests have no mid-scoring-cycle guard:** any pytest run roughly 14:00-15:20 BST shows phantom failures because the content gates snapshot a half-written scoring run. Skip-guard when `latest_run_date` scoring is incomplete. (Surfaced at Part 46 open when a 15:23 run showed 2 false failures.) [RESOLVED Part 48: scoring_run_complete fixture]
+- **markets_scraper.py line ~100 carries a pre-existing em-dash** in a log string (the `Scrape complete` line). One-character dash-sweep when convenient. [RESOLVED Part 48]
+- **app.py ~line 2744 references a `logger` not defined at module scope:** latent NameError on the backtest-stats error path. Pre-existing, not triggered normally. [RESOLVED Part 48: app.logger fix]
 - **Backtester penny-name spot-price tails:** unadjusted intraday spot on thin names produces noise outliers (e.g. a +95.9 pct one-day move). Consider a price-floor or winsorization filter before trusting tail stats; separate decision, own evidence.
 - **PRODUCT: Market State tiles link to TradingView's own chart widget** (third-party surface). Works for beta, but it sends the user off our surface and ties charting to a vendor. Revisit before paid launch (own charting vs embed).
-- **PRE-BETA OPS: the running server currently serves a feature branch in production** (single-machine setup, Cloudflare tunnel to localhost:5001). Before testers land, make `main` the deployed branch so "what's live" has a clean answer (merge-then-restart as the deploy discipline). The Part 46 close merges the branch to main, which begins this.
+- **PRE-BETA OPS: the running server currently serves a feature branch in production** (single-machine setup, Cloudflare tunnel to localhost:5001). Before testers land, make `main` the deployed branch so "what's live" has a clean answer (merge-then-restart as the deploy discipline). The Part 46 close merges the branch to main, which begins this. [SATISFIED: main is the deployed branch, live]
 - **Eco/ethical screen page (product idea, post-beta):** a curated green/ethical universe (companies that do not harm environment/animals) analysed with the SAME SignalIntel scoring. Scope as a SCREENER-PRESET / filtered universe, NOT a scoring-component change (keep the composite defensible and free of contested moral judgments). The make-or-break is the ethical-data substrate (curated exclusion list vs public ESG dataset vs vendor scores vs SEC-filing signals), resolve that FIRST in a Phase 1 scope before any build. Potential USP: ethical universe + genuine signal intelligence, the intersection most ESG tools and most signal tools each miss.
 
 ## Part 47 new FOLLOWUPS (banked, not urgent)
 
 - (none outstanding; the invariant-citation cleanup shipped in Part 48.)
+
+## Part 48 new FOLLOWUPS (banked, not urgent)
+
+- Penny-name winsorization in the backtester (tail outliers). Needs its own evidence and a real filter-design decision. See the Part 46 penny-name FOLLOWUP for the same ground.
+- Eco follow-ons: curated list for defence / adult / predatory-lending exclusion categories; positive green-screen product. Parked.
+- Optional: wholesale em/en-dash sweep of docs/scoring_invariants.md body (pre-existing dashes, harmless but inconsistent now its header is glyph-clean).
 
 ## Test accounts (for tier-gated walks)
 
@@ -65,7 +82,7 @@ Part 45 (prior session): watchlist earnings job (`ab63a0d`) + economic_calendar 
 ## Known pre-existing FOLLOWUPS (unchanged this session)
 
 - Dormant `initialise_schema` gap (does not provision volume_score or scoring_version on fresh-DB init). P19-class fix when prioritised.
-- PROJECT_CONTEXT.md still carries pre-existing em/en dashes; a full sweep is the tracked task (not done this session). The Piotroski and surfacing commits added only glyph-clean content.
+- PROJECT_CONTEXT.md dash sweep DONE (Part 48; only the AUTH-token exception remains). The remaining body-dash candidate is docs/scoring_invariants.md (banked Part 49).
 - Orphan-gunicorn baseline check: assert "exactly one master with launchd-managed PPID chain bound to 5001", not "at least one gunicorn process".
 
 ## Working-style standing instruction (in effect from Part 42)
@@ -76,4 +93,4 @@ Part 45 (prior session): watchlist earnings job (`ab63a0d`) + economic_calendar 
 
 ## Branch state (for the next fresh chat)
 
-- Part 47 closes by merging feature/eco-screen into main (merge commit 4dbdbf5) and restarting gunicorn on main, so local working tree, main, and the live site (thesignalvault.io via the Cloudflare tunnel to localhost:5001) are the same state. There is no separate deploy step; a gunicorn restart on the latest code IS the live deploy. Suite floor 446 passed / 0 skipped.
+- Part 48 closed with both arcs merged to main (`abf7352` janitorial, `f7b617a` reconciliation), HEAD `f7b617a` pushed to origin and live; local working tree, main, origin, and the live site (thesignalvault.io via the Cloudflare tunnel to localhost:5001) are the same state. There is no separate deploy step; a gunicorn restart on the latest code IS the live deploy (done this arc for the app.py fix). Suite floor 446 passed / 0 skipped.
